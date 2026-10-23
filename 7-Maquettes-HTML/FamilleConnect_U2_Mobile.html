@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FamilleConnect — U2 La Vie familiale (Mobile)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: { extend: {
+    colors: {
+      'fc-bg': '#F4F1E9',
+      'fc-primary': '#2A4A3A',
+      'fc-primary-light': '#3A5A4A',
+      'fc-accent': '#C89F62',
+      'fc-accent-light': '#D8B978',
+      'fc-surface': '#FFFFFF',
+      'fc-body': '#1A1A1A',
+      'fc-secondary': '#5A5A5A',
+      'fc-muted': '#8A8A8A',
+      'fc-success': '#16A34A',
+      'fc-urgent': '#D97706',
+      'fc-happy': '#16A34A',
+      'fc-sad': '#6B7280',
+      'fc-insti': '#C89F62',
+    },
+    fontFamily: { sans: ['Inter','Segoe UI','Arial','sans-serif'] }
+  }}
+}
+</script>
+<style>
+  body { background:#E7E2D5; }
+  .screen { display:none; }
+  .screen.active { display:block; animation: fadein .18s ease; }
+  @keyframes fadein { from{opacity:0; transform:translateX(8px);} to{opacity:1; transform:none;} }
+  .tabnav-item.active .tn-icon { color:#C89F62; }
+  .tabnav-item.active .tn-label { color:#2A4A3A; font-weight:700; }
+  .scroll-hide::-webkit-scrollbar { display:none; }
+  .badge { display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; font-size:10px; font-weight:600; }
+  .chip-on { background:#2A4A3A; color:#fff; border-color:#2A4A3A; }
+</style>
+</head>
+<body class="font-sans flex items-start justify-center py-8">
+
+<!-- ============ PHONE FRAME ============ -->
+<div class="relative w-[390px] h-[844px] bg-black rounded-[48px] p-[10px] shadow-2xl flex-shrink-0">
+  <div class="w-full h-full bg-fc-bg rounded-[38px] overflow-hidden flex flex-col relative">
+
+    <!-- Status bar -->
+    <div class="h-11 bg-fc-primary flex items-center justify-between px-6 text-white text-xs font-semibold flex-shrink-0">
+      <span>9:41</span>
+      <div class="absolute left-1/2 top-2 -translate-x-1/2 w-28 h-6 bg-black rounded-full"></div>
+      <div class="flex items-center gap-1"><span>📶</span><span>🔋</span></div>
+    </div>
+
+    <!-- ============ APP CONTENT ============ -->
+    <div id="app" class="flex-1 overflow-y-auto scroll-hide pb-20">
+
+      <!-- ==================== E1 : CALENDRIER ==================== -->
+      <section id="e-calendrier" class="screen active">
+        <div class="bg-fc-primary text-white px-5 pt-3 pb-5 rounded-b-3xl">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-[10px] uppercase tracking-widest text-fc-accent font-bold">U2 — La Vie familiale</div>
+              <h1 class="text-xl font-bold mt-0.5">Octobre 2026</h1>
+            </div>
+            <div class="flex items-center gap-3">
+              <button class="relative text-lg">🔔<span class="absolute -top-1 -right-1 bg-fc-accent text-fc-primary text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">5</span></button>
+              <div class="w-9 h-9 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-xs border-2 border-white/40">JN</div>
+            </div>
+          </div>
+          <!-- Vue toggle -->
+          <div class="mt-3 bg-white/10 border border-white/20 rounded-xl p-1 flex text-[11px] font-semibold">
+            <button class="flex-1 py-1.5 rounded-lg bg-white text-fc-primary">Mensuel</button>
+            <button class="flex-1 py-1.5 rounded-lg text-white/70">Hebdo</button>
+            <button class="flex-1 py-1.5 rounded-lg text-white/70">Annuel</button>
+          </div>
+          <!-- Filtres chips -->
+          <div class="flex gap-2 mt-3 overflow-x-auto scroll-hide">
+            <button class="px-3 py-1 rounded-full text-[10px] font-semibold chip-on whitespace-nowrap border">Toutes branches</button>
+            <button class="px-3 py-1 rounded-full text-[10px] font-semibold bg-white/10 border border-white/25 whitespace-nowrap">Nord</button>
+            <button class="px-3 py-1 rounded-full text-[10px] font-semibold bg-white/10 border border-white/25 whitespace-nowrap">Sud</button>
+            <button class="px-3 py-1 rounded-full text-[10px] font-semibold bg-white/10 border border-white/25 whitespace-nowrap">😄 Heureux</button>
+            <button class="px-3 py-1 rounded-full text-[10px] font-semibold bg-white/10 border border-white/25 whitespace-nowrap">😞 Malheureux</button>
+            <button class="px-3 py-1 rounded-full text-[10px] font-semibold bg-white/10 border border-white/25 whitespace-nowrap">🏛 Institutionnels</button>
+          </div>
+        </div>
+
+        <!-- Légende -->
+        <div class="flex items-center justify-center gap-4 px-4 mt-3 text-[10px] text-fc-secondary">
+          <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-fc-happy"></span>Heureux</span>
+          <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-fc-sad"></span>Malheureux</span>
+          <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-fc-insti"></span>Institutionnel</span>
+        </div>
+
+        <!-- Grille mensuelle -->
+        <div class="px-4 mt-2">
+          <div class="bg-white rounded-2xl shadow-sm p-3">
+            <div class="grid grid-cols-7 text-center text-[10px] font-bold text-fc-muted mb-1">
+              <span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span>
+            </div>
+            <div class="grid grid-cols-7 gap-y-1 text-center text-[11px] text-fc-body">
+              <!-- semaine 1 -->
+              <div class="py-1.5 text-fc-muted">28</div><div class="py-1.5">1</div><div class="py-1.5">2</div>
+              <div class="py-1.5">3</div><div class="py-1.5">4</div>
+              <div class="py-1.5 relative">5<span class="absolute bottom-0 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-fc-insti"></span></div>
+              <div class="py-1.5">6</div>
+              <!-- semaine 2 -->
+              <div class="py-1.5">7</div><div class="py-1.5">8</div>
+              <div class="py-1.5 relative">9<span class="absolute bottom-0 left-1/2 -translate-x-1/2 flex gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-fc-happy"></span></span></div>
+              <div class="py-1.5">10</div><div class="py-1.5">11</div>
+              <div class="py-1.5 relative">12<span class="absolute bottom-0 left-1/2 -translate-x-1/2 flex gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-fc-sad"></span></span></div>
+              <div class="py-1.5">13</div>
+              <!-- semaine 3 -->
+              <div class="py-1.5">14</div><div class="py-1.5">15</div>
+              <div class="py-1.5 relative">16<span class="absolute bottom-0 left-1/2 -translate-x-1/2 flex gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-fc-insti"></span></span></div>
+              <div class="py-1.5">17</div><div class="py-1.5">18</div>
+              <div class="py-1.5">19</div>
+              <div class="py-1.5 relative bg-fc-primary text-white rounded-full w-8 h-8 mx-auto flex items-center justify-center font-bold">20</div>
+              <!-- semaine 4 -->
+              <div class="py-1.5">21</div>
+              <div class="py-1.5 relative">22<span class="absolute bottom-0 left-1/2 -translate-x-1/2 flex gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-fc-happy"></span><span class="w-1.5 h-1.5 rounded-full bg-fc-insti"></span></span></div>
+              <div class="py-1.5">23</div>
+              <div class="py-1.5 relative">24<span class="absolute bottom-0 left-1/2 -translate-x-1/2 flex gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-fc-happy"></span></span></div>
+              <div class="py-1.5">25</div><div class="py-1.5">26</div><div class="py-1.5">27</div>
+              <!-- semaine 5 -->
+              <div class="py-1.5">28</div><div class="py-1.5">29</div><div class="py-1.5">30</div><div class="py-1.5">31</div>
+              <div class="py-1.5 text-fc-muted">1</div><div class="py-1.5 text-fc-muted">2</div>
+              <div class="py-1.5 relative text-fc-muted">3<span class="absolute bottom-0 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-fc-happy"></span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Prochains événements -->
+        <div class="px-4 mt-4">
+          <div class="flex items-center justify-between mb-2">
+            <h2 class="text-sm font-bold text-fc-primary">Prochains événements</h2>
+            <button onclick="go('e-liste')" class="text-[11px] text-fc-accent font-semibold">Tout voir ›</button>
+          </div>
+          <div class="space-y-2">
+            <div onclick="go('e-dossier')" class="bg-white rounded-xl p-3 flex gap-3 shadow-sm cursor-pointer active:bg-fc-bg border-l-4 border-fc-sad">
+              <div class="w-12 bg-fc-bg rounded-lg flex flex-col items-center justify-center flex-shrink-0">
+                <div class="text-[9px] font-bold text-fc-sad uppercase">Oct</div><div class="text-base font-extrabold text-fc-primary leading-none">24</div>
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="font-semibold text-[13px] text-fc-body truncate">Funérailles Papa NDONGO <span class="badge bg-fc-sad/15 text-fc-sad">Début</span></div>
+                <div class="text-[11px] text-fc-secondary truncate">📍 Yaoundé · Inhumation 10h · Comité 7/7</div>
+                <div class="text-[10px] text-fc-urgent font-semibold mt-0.5">⚡ Tu as une tâche : accueillir la branche Sud</div>
+              </div>
+              <span class="text-fc-muted text-xs self-center">›</span>
+            </div>
+            <div onclick="go('e-nouvel')" class="bg-white rounded-xl p-3 flex gap-3 shadow-sm cursor-pointer active:bg-fc-bg border-l-4 border-fc-happy">
+              <div class="w-12 bg-fc-bg rounded-lg flex flex-col items-center justify-center flex-shrink-0">
+                <div class="text-[9px] font-bold text-fc-happy uppercase">Nov</div><div class="text-base font-extrabold text-fc-primary leading-none">08</div>
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="font-semibold text-[13px] text-fc-body truncate">Dot d'Alain & Grâce <span class="badge bg-fc-happy/15 text-fc-happy">En préparation</span></div>
+                <div class="text-[11px] text-fc-secondary truncate">📍 Douala · J-18 · Inscriptions ouvertes</div>
+              </div>
+              <span class="text-fc-muted text-xs self-center">›</span>
+            </div>
+            <div onclick="go('e-nouvel')" class="bg-white rounded-xl p-3 flex gap-3 shadow-sm cursor-pointer active:bg-fc-bg border-l-4 border-fc-insti">
+              <div class="w-12 bg-fc-bg rounded-lg flex flex-col items-center justify-center flex-shrink-0">
+                <div class="text-[9px] font-bold text-fc-insti uppercase">Nov</div><div class="text-base font-extrabold text-fc-primary leading-none">16</div>
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="font-semibold text-[13px] text-fc-body truncate">Réunion mensuelle Branche Nord <span class="badge bg-fc-insti/20 text-fc-insti">Confirme</span></div>
+                <div class="text-[11px] text-fc-secondary truncate">📍 Visio 19h · Ordre du jour publié</div>
+              </div>
+              <span class="text-fc-muted text-xs self-center">›</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rappels auto -->
+        <div class="px-4 mt-4 mb-4">
+          <div class="bg-fc-accent/15 border border-fc-accent/40 rounded-xl p-3 flex items-start gap-2">
+            <span class="text-base">⏰</span>
+            <div class="text-[11px] text-fc-body">
+              <div class="font-bold text-fc-primary">Rappels automatiques actifs</div>
+              <div class="text-fc-secondary mt-0.5">J-7 institutionnels · J-3 heureux · J-1 présence · fuseau horaire respecté (Paris 🇫🇷 pour toi).</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== E2 : LISTE DES ÉVÉNEMENTS ==================== -->
+      <section id="e-liste" class="screen">
+        <div class="bg-fc-primary text-white px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
+          <button onclick="go('e-calendrier')" class="text-lg">‹</button>
+          <h1 class="text-base font-bold flex-1">Événements</h1>
+          <button class="text-lg">🔍</button>
+        </div>
+        <!-- Segmented -->
+        <div class="px-4 pt-3">
+          <div class="bg-white rounded-xl p-1 flex text-[11px] font-semibold shadow-sm">
+            <button class="flex-1 py-1.5 rounded-lg bg-fc-primary text-white">Ouverts (4)</button>
+            <button class="flex-1 py-1.5 rounded-lg text-fc-secondary">Clôturés (12)</button>
+            <button class="flex-1 py-1.5 rounded-lg text-fc-secondary">Brouillons (1)</button>
+          </div>
+        </div>
+        <div class="px-4 mt-3 space-y-3 pb-4">
+          <!-- Décès -->
+          <div onclick="go('e-dossier')" class="bg-white rounded-xl shadow-sm overflow-hidden cursor-pointer active:bg-fc-bg">
+            <div class="p-3 flex gap-3">
+              <div class="w-11 h-11 rounded-full bg-fc-sad/15 flex items-center justify-center text-lg flex-shrink-0">🕯️</div>
+              <div class="flex-1 min-w-0">
+                <div class="font-semibold text-[13px]">Funérailles de Jean NDONGO</div>
+                <div class="text-[10px] text-fc-muted">EVT-2026-014 · Décès (M1) · 20 oct → 24 oct · Yaoundé</div>
+                <div class="text-[10px] text-fc-secondary mt-0.5">Comité 7 membres · Collecte 1 850 000 / 2 500 000 FCFA</div>
+              </div>
+              <span class="badge bg-fc-urgent/15 text-fc-urgent self-start">En cours</span>
+            </div>
+            <div class="px-3 pb-3"><div class="h-1.5 bg-gray-100 rounded-full"><div class="h-1.5 w-[62%] bg-fc-sad rounded-full"></div></div><div class="text-[9px] text-fc-muted mt-1">Workflow décès — étape 6/8 (Déroulé)</div></div>
+          </div>
+          <!-- Dot -->
+          <div onclick="go('e-dossier')" class="bg-white rounded-xl shadow-sm overflow-hidden cursor-pointer active:bg-fc-bg">
+            <div class="p-3 flex gap-3">
+              <div class="w-11 h-11 rounded-full bg-fc-happy/15 flex items-center justify-center text-lg flex-shrink-0">💍</div>
+              <div class="flex-1 min-w-0">
+                <div class="font-semibold text-[13px]">Dot d'Alain NDONGO & Grâce EKOTO</div>
+                <div class="text-[10px] text-fc-muted">EVT-2026-017 · Mariage/Dot (H4) · 8 nov · Douala</div>
+                <div class="text-[10px] text-fc-secondary mt-0.5">48 inscrits · Budget familial validé</div>
+              </div>
+              <span class="badge bg-fc-happy/15 text-fc-happy self-start">Annoncé</span>
+            </div>
+            <div class="px-3 pb-3"><div class="h-1.5 bg-gray-100 rounded-full"><div class="h-1.5 w-[33%] bg-fc-happy rounded-full"></div></div><div class="text-[9px] text-fc-muted mt-1">Workflow mariage — étape 3/9 (Budget validé)</div></div>
+          </div>
+          <!-- Congrès -->
+          <div onclick="go('e-dossier')" class="bg-white rounded-xl shadow-sm overflow-hidden cursor-pointer active:bg-fc-bg">
+            <div class="p-3 flex gap-3">
+              <div class="w-11 h-11 rounded-full bg-fc-insti/20 flex items-center justify-center text-lg flex-shrink-0">🏛️</div>
+              <div class="flex-1 min-w-0">
+                <div class="font-semibold text-[13px]">Congrès familial biennal 2026</div>
+                <div class="text-[10px] text-fc-muted">EVT-2026-011 · Institutionnel (I4) · 27 déc → 29 déc · Bafoussam</div>
+                <div class="text-[10px] text-fc-secondary mt-0.5">Sondage lieu/thème clôturé · 156 inscrits sur 235</div>
+              </div>
+              <span class="badge bg-fc-insti/20 text-fc-insti self-start">Préparation</span>
+            </div>
+            <div class="px-3 pb-3"><div class="h-1.5 bg-gray-100 rounded-full"><div class="h-1.5 w-[40%] bg-fc-insti rounded-full"></div></div><div class="text-[9px] text-fc-muted mt-1">Workflow congrès — étape 4/10 (Budget prévisionnel)</div></div>
+          </div>
+          <!-- Naissance à confirmer -->
+          <div onclick="go('e-nouvel')" class="bg-white rounded-xl shadow-sm overflow-hidden cursor-pointer active:bg-fc-bg border border-dashed border-fc-urgent/50">
+            <div class="p-3 flex gap-3">
+              <div class="w-11 h-11 rounded-full bg-fc-happy/15 flex items-center justify-center text-lg flex-shrink-0">👶</div>
+              <div class="flex-1 min-w-0">
+                <div class="font-semibold text-[13px]">Naissance — enfant de Claire TCHOUMI</div>
+                <div class="text-[10px] text-fc-muted">Brouillon · Naissance (H1) · attendu le 2 nov · Bruxelles 🇧🇪</div>
+                <div class="text-[10px] text-fc-urgent mt-0.5 font-semibold">En attente de validation du chef de branche</div>
+              </div>
+              <span class="badge bg-gray-100 text-gray-500 self-start">Brouillon</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== E3 : ASSISTANT NOUVEL ÉVÉNEMENT ==================== -->
+      <section id="e-nouvel" class="screen">
+        <div class="bg-fc-primary text-white px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
+          <button onclick="go('e-calendrier')" class="text-lg">‹</button>
+          <h1 class="text-base font-bold flex-1">Nouvel événement</h1>
+          <span class="text-[10px] bg-white/15 px-2 py-1 rounded-full font-semibold">Étape 1/4</span>
+        </div>
+        <!-- Stepper -->
+        <div class="px-4 pt-4 flex items-center">
+          <div class="flex-1 h-1 bg-fc-primary rounded-full"></div>
+          <div class="flex-1 h-1 bg-gray-200 rounded-full mx-1"></div>
+          <div class="flex-1 h-1 bg-gray-200 rounded-full mx-1"></div>
+          <div class="flex-1 h-1 bg-gray-200 rounded-full"></div>
+        </div>
+        <div class="px-4 mt-4">
+          <h2 class="text-sm font-bold text-fc-primary">1. Choisis le type d'événement</h2>
+          <p class="text-[11px] text-fc-secondary mt-1">Le moteur ouvrira automatiquement un dossier et lancera le workflow adapté.</p>
+
+          <div class="mt-3 text-[11px] font-bold text-fc-happy uppercase tracking-wide">😊 Événements heureux</div>
+          <div class="grid grid-cols-3 gap-2 mt-2">
+            <button class="bg-white rounded-xl p-2.5 text-center shadow-sm border-2 border-fc-happy"><div class="text-xl">👶</div><div class="text-[10px] font-semibold mt-1">Naissance</div></button>
+            <button class="bg-white rounded-xl p-2.5 text-center shadow-sm border-2 border-transparent"><div class="text-xl">💒</div><div class="text-[10px] font-semibold mt-1">Baptême</div></button>
+            <button class="bg-white rounded-xl p-2.5 text-center shadow-sm border-2 border-transparent"><div class="text-xl">💍</div><div class="text-[10px] font-semibold mt-1">Dot / Mariage</div></button>
+            <button class="bg-white rounded-xl p-2.5 text-center shadow-sm border-2 border-transparent"><div class="text-xl">🎂</div><div class="text-[10px] font-semibold mt-1">Anniversaire</div></button>
+            <button class="bg-white rounded-xl p-2.5 text-center shadow-sm border-2 border-transparent"><div class="text-xl">🎓</div><div class="text-[10px] font-semibold mt-1">Réussite</div></button>
+            <button class="bg-white rounded-xl p-2.5 text-center shadow-sm border-2 border-transparent"><div class="text-xl">🏆</div><div class="text-[10px] font-semibold mt-1">Promotion</div></button>
+          </div>
+
+          <div class="mt-3 text-[11px] font-bold text-fc-sad uppercase tracking-wide">😞 Événements malheureux</div>
+          <div class="grid grid-cols-3 gap-2 mt-2">
+            <button class="bg-white rounded-xl p-2.5 text-center shadow-sm border-2 border-transparent"><div class="text-xl">🕯️</div><div class="text-[10px] font-semibold mt-1">Décès</div></button>
+            <button class="bg-white rounded-xl p-2.5 text-center shadow-sm border-2 border-transparent"><div class="text-xl">🏥</div><div class="text-[10px] font-semibold mt-1">Maladie grave</div></button>
+            <button class="bg-white rounded-xl p-2.5 text-center shadow-sm border-2 border-transparent"><div class="text-xl">🚗</div><div class="text-[10px] font-semibold mt-1">Accident</div></button>
+          </div>
+
+          <div class="mt-3 text-[11px] font-bold text-fc-insti uppercase tracking-wide">🏛 Événements institutionnels</div>
+          <div class="grid grid-cols-3 gap-2 mt-2">
+            <button class="bg-white rounded-xl p-2.5 text-center shadow-sm border-2 border-transparent"><div class="text-xl">👥</div><div class="text-[10px] font-semibold mt-1">Réunion branche</div></button>
+            <button class="bg-white rounded-xl p-2.5 text-center shadow-sm border-2 border-transparent"><div class="text-xl">🗳️</div><div class="text-[10px] font-semibold mt-1">Assemblée gén.</div></button>
+            <button class="bg-white rounded-xl p-2.5 text-center shadow-sm border-2 border-transparent"><div class="text-xl">🏛️</div><div class="text-[10px] font-semibold mt-1">Congrès</div></button>
+          </div>
+        </div>
+
+        <!-- Détection conflit -->
+        <div class="px-4 mt-4">
+          <div class="bg-fc-urgent/10 border border-fc-urgent/40 rounded-xl p-3 flex items-start gap-2">
+            <span class="text-base">⚠️</span>
+            <div class="text-[11px]">
+              <div class="font-bold text-fc-urgent">Conflit de date détecté</div>
+              <div class="text-fc-secondary mt-0.5">Le 08/11 coïncide avec la réunion de la Branche Ouest. Souhaitez-vous déplacer ou maintenir ?</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="px-4 mt-4 mb-4">
+          <button onclick="go('e-workflow')" class="w-full bg-fc-primary text-white rounded-xl py-3.5 text-sm font-bold shadow-md active:bg-fc-primary-light">Continuer → Date & lieu</button>
+        </div>
+      </section>
+
+      <!-- ==================== E4 : DOSSIER DÉCÈS ==================== -->
+      <section id="e-dossier" class="screen">
+        <div class="bg-fc-sad text-white px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
+          <button onclick="go('e-liste')" class="text-lg">‹</button>
+          <div class="flex-1 min-w-0">
+            <div class="text-[9px] opacity-70 font-mono">EVT-2026-014 · Workflow Décès (M1)</div>
+            <h1 class="text-sm font-bold truncate">Funérailles Jean NDONGO</h1>
+          </div>
+          <span class="badge bg-white/20 text-white">En cours</span>
+        </div>
+
+        <!-- Méta + programme -->
+        <div class="px-4 pt-4">
+          <div class="bg-white rounded-xl shadow-sm p-3">
+            <div class="grid grid-cols-3 gap-2 text-center">
+              <div><div class="text-[9px] text-fc-muted uppercase font-bold">Dates</div><div class="text-[11px] font-semibold text-fc-body mt-0.5">20→24 oct</div></div>
+              <div><div class="text-[9px] text-fc-muted uppercase font-bold">Lieu</div><div class="text-[11px] font-semibold text-fc-body mt-0.5">Yaoundé 🇨🇲</div></div>
+              <div><div class="text-[9px] text-fc-muted uppercase font-bold">Branche</div><div class="text-[11px] font-semibold text-fc-body mt-0.5">Nord</div></div>
+            </div>
+            <div class="border-t border-gray-100 mt-3 pt-2 text-[11px] text-fc-secondary">
+              <span class="font-bold text-fc-primary">Responsables :</span> Chef de branche Nord (coordinateur) · Bernard N. (trésorier) · Comité de 7 membres
+            </div>
+          </div>
+        </div>
+
+        <!-- Onglets sections du dossier -->
+        <div class="px-4 mt-3 flex gap-1.5 overflow-x-auto scroll-hide text-[10px] font-semibold">
+          <button class="px-3 py-1.5 rounded-full bg-fc-primary text-white whitespace-nowrap">✅ Programme</button>
+          <button class="px-3 py-1.5 rounded-full bg-white text-fc-primary whitespace-nowrap border border-fc-primary/20">👥 198 participants</button>
+          <button class="px-3 py-1.5 rounded-full bg-white text-fc-primary whitespace-nowrap border border-fc-primary/20">💰 Contributions</button>
+          <button class="px-3 py-1.5 rounded-full bg-white text-fc-primary whitespace-nowrap border border-fc-primary/20">🚚 Logistique</button>
+          <button class="px-3 py-1.5 rounded-full bg-white text-fc-primary whitespace-nowrap border border-fc-primary/20">🖼 Mémoire</button>
+        </div>
+
+        <!-- Timeline workflow -->
+        <div class="px-4 mt-4">
+          <h2 class="text-sm font-bold text-fc-primary mb-2">Workflow automatisé — 6/8 étapes</h2>
+          <div class="space-y-0">
+            <div class="flex gap-3">
+              <div class="flex flex-col items-center"><div class="w-6 h-6 rounded-full bg-fc-success text-white flex items-center justify-center text-[11px]">✓</div><div class="w-0.5 flex-1 bg-fc-success/40"></div></div>
+              <div class="pb-3 flex-1"><div class="text-[12px] font-semibold">1. Annonce familiale validée</div><div class="text-[10px] text-fc-muted">Envoyée à 235 membres + conseil · canal SMS pour les aînés</div></div>
+            </div>
+            <div class="flex gap-3">
+              <div class="flex flex-col items-center"><div class="w-6 h-6 rounded-full bg-fc-success text-white flex items-center justify-center text-[11px]">✓</div><div class="w-0.5 flex-1 bg-fc-success/40"></div></div>
+              <div class="pb-3 flex-1"><div class="text-[12px] font-semibold">2. Comité d'organisation désigné</div><div class="text-[10px] text-fc-muted">7 membres nommés par le chef de branche (J+1)</div></div>
+            </div>
+            <div class="flex gap-3">
+              <div class="flex flex-col items-center"><div class="w-6 h-6 rounded-full bg-fc-success text-white flex items-center justify-center text-[11px]">✓</div><div class="w-0.5 flex-1 bg-fc-success/40"></div></div>
+              <div class="pb-3 flex-1"><div class="text-[12px] font-semibold">3. Collecte de solidarité ouverte <span class="badge bg-fc-primary/10 text-fc-primary ml-1">→ U3/U4</span></div><div class="text-[10px] text-fc-muted">1 850 000 / 2 500 000 FCFA · 112 contributeurs</div></div>
+            </div>
+            <div class="flex gap-3">
+              <div class="flex flex-col items-center"><div class="w-6 h-6 rounded-full bg-fc-success text-white flex items-center justify-center text-[11px]">✓</div><div class="w-0.5 flex-1 bg-fc-success/40"></div></div>
+              <div class="pb-3 flex-1"><div class="text-[12px] font-semibold">4. Programme funéraire validé</div><div class="text-[10px] text-fc-muted">Veillée 22/10 · Messe 24/10 08h · Inhumation 10h · Repas</div></div>
+            </div>
+            <div class="flex gap-3">
+              <div class="flex flex-col items-center"><div class="w-6 h-6 rounded-full bg-fc-success text-white flex items-center justify-center text-[11px]">✓</div><div class="w-0.5 flex-1 bg-fc-urgent/50"></div></div>
+              <div class="pb-3 flex-1"><div class="text-[12px] font-semibold">5. Logistique confirmée</div><div class="text-[10px] text-fc-muted">Hébergement 42 pers. · 3 cars · Traiteur OK</div></div>
+            </div>
+            <div class="flex gap-3">
+              <div class="flex flex-col items-center"><div class="w-6 h-6 rounded-full bg-fc-urgent text-white flex items-center justify-center text-[11px] animate-pulse">●</div><div class="w-0.5 flex-1 bg-gray-200"></div></div>
+              <div class="pb-3 flex-1"><div class="text-[12px] font-bold text-fc-urgent">6. Déroulé en temps réel ⬅</div><div class="text-[10px] text-fc-secondary">Tâche qui te concerne : <b>accueillir la branche Sud à l'aéroport (J-1)</b></div>
+                <div class="flex gap-2 mt-1.5"><button class="px-2.5 py-1 rounded-lg bg-fc-primary text-white text-[10px] font-bold">Marquer fait</button><button class="px-2.5 py-1 rounded-lg bg-white border border-fc-primary/20 text-fc-primary text-[10px] font-semibold">Détail</button></div>
+              </div>
+            </div>
+            <div class="flex gap-3">
+              <div class="flex flex-col items-center"><div class="w-6 h-6 rounded-full bg-gray-200 text-gray-400 flex items-center justify-center text-[11px]">7</div><div class="w-0.5 flex-1 bg-gray-200"></div></div>
+              <div class="pb-3 flex-1"><div class="text-[12px] font-semibold text-gray-400">7. Album & témoignages</div><div class="text-[10px] text-fc-muted">Collecte photos et condoléances jusqu'à J+15</div></div>
+            </div>
+            <div class="flex gap-3">
+              <div class="flex flex-col items-center"><div class="w-6 h-6 rounded-full bg-gray-200 text-gray-400 flex items-center justify-center text-[11px]">8</div></div>
+              <div class="flex-1"><div class="text-[12px] font-semibold text-gray-400">8. Bilan & clôture → archivage U6</div><div class="text-[10px] text-fc-muted">Bilan financier + remerciements (J+15 → J+30)</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Participants résumé -->
+        <div class="px-4 mt-4 mb-4">
+          <div class="bg-white rounded-xl shadow-sm p-3">
+            <div class="flex items-center justify-between">
+              <div class="text-[12px] font-bold text-fc-primary">Participants annoncés</div>
+              <div class="text-[10px] text-fc-muted">MAJ il y a 2 h</div>
+            </div>
+            <div class="grid grid-cols-4 gap-2 mt-2 text-center">
+              <div class="bg-fc-success/10 rounded-lg py-1.5"><div class="text-sm font-bold text-fc-success">142</div><div class="text-[9px] text-fc-secondary">Confirmés</div></div>
+              <div class="bg-fc-urgent/10 rounded-lg py-1.5"><div class="text-sm font-bold text-fc-urgent">31</div><div class="text-[9px] text-fc-secondary">À confirmer</div></div>
+              <div class="bg-gray-100 rounded-lg py-1.5"><div class="text-sm font-bold text-fc-muted">18</div><div class="text-[9px] text-fc-secondary">Excusés</div></div>
+              <div class="bg-gray-100 rounded-lg py-1.5"><div class="text-sm font-bold text-gray-400">7</div><div class="text-[9px] text-fc-secondary">Absents</div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== E5 : WORKFLOW MARIAGE ==================== -->
+      <section id="e-workflow" class="screen">
+        <div class="bg-fc-happy text-white px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
+          <button onclick="go('e-nouvel')" class="text-lg">‹</button>
+          <div class="flex-1 min-w-0">
+            <div class="text-[9px] opacity-70 font-mono">EVT-2026-017 · Workflow Mariage (H4)</div>
+            <h1 class="text-sm font-bold truncate">Dot d'Alain & Grâce — Prévisualisation</h1>
+          </div>
+          <span class="badge bg-white/20 text-white">Annoncé</span>
+        </div>
+
+        <div class="px-4 pt-4">
+          <div class="bg-white rounded-xl shadow-sm p-3 flex items-center gap-3">
+            <div class="w-12 h-12 rounded-full bg-fc-happy/15 flex items-center justify-center text-2xl">💍</div>
+            <div class="flex-1">
+              <div class="text-[13px] font-bold">Workflow généré automatiquement</div>
+              <div class="text-[10px] text-fc-muted">9 étapes · déclencheurs J+N · responsables assignés · configurable par la famille</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="px-4 mt-4">
+          <h2 class="text-sm font-bold text-fc-primary mb-2">Séquence du protocole</h2>
+          <div class="space-y-2">
+            <div class="bg-white rounded-xl p-3 shadow-sm flex gap-3 items-center border-l-4 border-fc-happy">
+              <div class="w-7 h-7 rounded-full bg-fc-success text-white flex items-center justify-center text-[11px] font-bold flex-shrink-0">✓</div>
+              <div class="flex-1"><div class="text-[12px] font-semibold">1. Annonce officielle</div><div class="text-[10px] text-fc-muted">Chef de branche · envoyée à toute la famille</div></div>
+              <span class="text-[9px] text-fc-muted">fait</span>
+            </div>
+            <div class="bg-white rounded-xl p-3 shadow-sm flex gap-3 items-center border-l-4 border-fc-happy">
+              <div class="w-7 h-7 rounded-full bg-fc-success text-white flex items-center justify-center text-[11px] font-bold flex-shrink-0">✓</div>
+              <div class="flex-1"><div class="text-[12px] font-semibold">2. Comité de soutien</div><div class="text-[10px] text-fc-muted">5 membres désignés (J+7)</div></div>
+              <span class="text-[9px] text-fc-muted">fait</span>
+            </div>
+            <div class="bg-white rounded-xl p-3 shadow-sm flex gap-3 items-center border-l-4 border-fc-urgent ring-2 ring-fc-urgent/30">
+              <div class="w-7 h-7 rounded-full bg-fc-urgent text-white flex items-center justify-center text-[11px] font-bold flex-shrink-0 animate-pulse">3</div>
+              <div class="flex-1"><div class="text-[12px] font-bold text-fc-urgent">Budget & contributions familiales</div><div class="text-[10px] text-fc-muted">Trésorier + mariés · en attente de validation</div></div>
+              <button class="px-2.5 py-1 rounded-lg bg-fc-primary text-white text-[10px] font-bold">Valider</button>
+            </div>
+            <div class="bg-white rounded-xl p-3 shadow-sm flex gap-3 items-center border-l-4 border-gray-200">
+              <div class="w-7 h-7 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center text-[11px] font-bold flex-shrink-0">4</div>
+              <div class="flex-1"><div class="text-[12px] font-semibold text-gray-500">Inscriptions en ligne</div><div class="text-[10px] text-fc-muted">J+30 · lien public + QR code</div></div>
+              <span class="text-[9px] text-fc-muted">J+12</span>
+            </div>
+            <div class="bg-white rounded-xl p-3 shadow-sm flex gap-3 items-center border-l-4 border-gray-200">
+              <div class="w-7 h-7 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center text-[11px] font-bold flex-shrink-0">5</div>
+              <div class="flex-1"><div class="text-[12px] font-semibold text-gray-500">Logistique (hébergement, transport)</div><div class="text-[10px] text-fc-muted">Comité · tâches assignées</div></div>
+              <span class="text-[9px] text-fc-muted">J+42</span>
+            </div>
+            <div class="bg-white rounded-xl p-3 shadow-sm flex gap-3 items-center border-l-4 border-gray-200">
+              <div class="w-7 h-7 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center text-[11px] font-bold flex-shrink-0">6</div>
+              <div class="flex-1"><div class="text-[12px] font-semibold text-gray-500">Programme détaillé</div><div class="text-[10px] text-fc-muted">Validé par le patriarche · J-15</div></div>
+              <span class="text-[9px] text-fc-muted">—</span>
+            </div>
+            <div class="bg-white rounded-xl p-3 shadow-sm flex gap-3 items-center border-l-4 border-gray-200">
+              <div class="w-7 h-7 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center text-[11px] font-bold flex-shrink-0">7</div>
+              <div class="flex-1"><div class="text-[12px] font-semibold text-gray-500">Déroulé Jour J</div><div class="text-[10px] text-fc-muted">Coordination temps réel</div></div>
+              <span class="text-[9px] text-fc-muted">8 nov</span>
+            </div>
+            <div class="bg-white rounded-xl p-3 shadow-sm flex gap-3 items-center border-l-4 border-gray-200">
+              <div class="w-7 h-7 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center text-[11px] font-bold flex-shrink-0">8</div>
+              <div class="flex-1"><div class="text-[12px] font-semibold text-gray-500">Album & témoignages</div><div class="text-[10px] text-fc-muted">J+1 → J+30</div></div>
+              <span class="text-[9px] text-fc-muted">—</span>
+            </div>
+            <div class="bg-white rounded-xl p-3 shadow-sm flex gap-3 items-center border-l-4 border-gray-200">
+              <div class="w-7 h-7 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center text-[11px] font-bold flex-shrink-0">9</div>
+              <div class="flex-1"><div class="text-[12px] font-semibold text-gray-500">Remerciements</div><div class="text-[10px] text-fc-muted">Mariés + comité · puis clôture & archive U6</div></div>
+              <span class="text-[9px] text-fc-muted">—</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="px-4 mt-4 mb-4">
+          <div class="bg-fc-accent/15 border border-fc-accent/40 rounded-xl p-3 flex items-center justify-between">
+            <div class="text-[11px] text-fc-body"><b class="text-fc-primary">Adapter ce protocole ?</b> Ajouter « levée de deuil », réordonner, changer un responsable…</div>
+            <button class="px-3 py-1.5 rounded-lg bg-white border border-fc-primary/20 text-fc-primary text-[10px] font-bold whitespace-nowrap">⚙ Configurer</button>
+          </div>
+          <button onclick="go('e-albums')" class="w-full mt-3 bg-fc-primary text-white rounded-xl py-3.5 text-sm font-bold shadow-md">Créer le dossier & lancer le workflow</button>
+        </div>
+      </section>
+
+      <!-- ==================== E6 : ALBUMS / MÉMOIRE ==================== -->
+      <section id="e-albums" class="screen">
+        <div class="bg-fc-primary text-white px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
+          <button onclick="go('e-calendrier')" class="text-lg">‹</button>
+          <h1 class="text-base font-bold flex-1">Albums des événements</h1>
+          <button class="text-lg">🔍</button>
+        </div>
+
+        <div class="px-4 mt-4">
+          <div class="flex gap-2 overflow-x-auto scroll-hide text-[10px] font-semibold">
+            <button class="px-3 py-1.5 rounded-full bg-fc-primary text-white whitespace-nowrap">Tous (24)</button>
+            <button class="px-3 py-1.5 rounded-full bg-white text-fc-primary border border-fc-primary/20 whitespace-nowrap">😊 Heureux</button>
+            <button class="px-3 py-1.5 rounded-full bg-white text-fc-primary border border-fc-primary/20 whitespace-nowrap">🕯 Hommages</button>
+            <button class="px-3 py-1.5 rounded-full bg-white text-fc-primary border border-fc-primary/20 whitespace-nowrap">🏛 Congrès</button>
+          </div>
+        </div>
+
+        <div class="px-4 mt-3 grid grid-cols-2 gap-3 pb-4">
+          <div class="bg-white rounded-xl shadow-sm overflow-hidden cursor-pointer">
+            <div class="h-24 bg-gradient-to-br from-fc-sad/60 to-fc-primary flex items-center justify-center text-3xl">🕯️</div>
+            <div class="p-2.5">
+              <div class="text-[12px] font-bold truncate">Enterrement Tante Marguerite</div>
+              <div class="text-[9px] text-fc-muted mt-0.5">Août 2026 · 214 photos · 12 témoignages</div>
+              <div class="text-[9px] font-mono text-fc-muted">EVT-2026-009 · archivé U6</div>
+            </div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm overflow-hidden cursor-pointer">
+            <div class="h-24 bg-gradient-to-br from-fc-happy/60 to-fc-primary flex items-center justify-center text-3xl">💒</div>
+            <div class="p-2.5">
+              <div class="text-[12px] font-bold truncate">Baptême de Petit Joseph</div>
+              <div class="text-[9px] text-fc-muted mt-0.5">Juillet 2026 · 87 photos · 4 vidéos</div>
+              <div class="text-[9px] font-mono text-fc-muted">EVT-2026-006 · archivé U6</div>
+            </div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm overflow-hidden cursor-pointer">
+            <div class="h-24 bg-gradient-to-br from-fc-insti/70 to-fc-primary flex items-center justify-center text-3xl">🏛️</div>
+            <div class="p-2.5">
+              <div class="text-[12px] font-bold truncate">Congrès 2024 — Bafoussam</div>
+              <div class="text-[9px] text-fc-muted mt-0.5">Déc 2024 · 340 photos · PV & motions</div>
+              <div class="text-[9px] font-mono text-fc-muted">EVT-2024-021 · archivé U6</div>
+            </div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm overflow-hidden cursor-pointer">
+            <div class="h-24 bg-gradient-to-br from-fc-happy/60 to-fc-accent flex items-center justify-center text-3xl">🎂</div>
+            <div class="p-2.5">
+              <div class="text-[12px] font-bold truncate">80 ans du Patriarche</div>
+              <div class="text-[9px] text-fc-muted mt-0.5">Mars 2026 · 156 photos · fresque souvenirs</div>
+              <div class="text-[9px] font-mono text-fc-muted">EVT-2026-003 · archivé U6</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="px-4 pb-4">
+          <div class="bg-fc-primary/5 border border-fc-primary/15 rounded-xl p-3 flex items-center gap-2">
+            <span class="text-base">🧭</span>
+            <div class="text-[11px] text-fc-secondary">Chaque album clôturé est automatiquement archivé dans <b class="text-fc-primary">U6 — Mémoire familiale</b> avec ses documents et témoignages.</div>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /app -->
+
+    <!-- ============ TAB NAV ============ -->
+    <div class="absolute bottom-0 left-0 right-0 h-16 bg-white border-t border-gray-200 flex items-start pt-1 px-2 pb-2">
+      <button data-tab="e-calendrier" class="tabnav-item flex-1 flex flex-col items-center gap-0.5 pt-1 text-fc-muted">
+        <span class="tn-icon text-lg">📅</span><span class="tn-label text-[9px] font-medium">Calendrier</span>
+      </button>
+      <button data-tab="e-liste" class="tabnav-item flex-1 flex flex-col items-center gap-0.5 pt-1 text-fc-muted">
+        <span class="tn-icon text-lg">🗂</span><span class="tn-label text-[9px] font-medium">Événements</span>
+      </button>
+      <button data-tab="e-nouvel" class="tabnav-item flex-1 flex flex-col items-center gap-0.5 pt-1 text-fc-muted">
+        <span class="tn-icon -mt-5 w-11 h-11 bg-fc-accent text-fc-primary rounded-full flex items-center justify-center text-xl shadow-lg border-4 border-fc-bg">＋</span>
+        <span class="tn-label text-[9px] font-medium">Nouvel</span>
+      </button>
+      <button data-tab="e-dossier" class="tabnav-item flex-1 flex flex-col items-center gap-0.5 pt-1 text-fc-muted">
+        <span class="tn-icon text-lg">📋</span><span class="tn-label text-[9px] font-medium">Dossier</span>
+      </button>
+      <button data-tab="e-albums" class="tabnav-item flex-1 flex flex-col items-center gap-0.5 pt-1 text-fc-muted">
+        <span class="tn-icon text-lg">🖼</span><span class="tn-label text-[9px] font-medium">Albums</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+function go(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  const el=document.getElementById(id); if(el) el.classList.add('active');
+  document.getElementById('app').scrollTop=0;
+  document.querySelectorAll('.tabnav-item').forEach(t=>{
+    t.classList.toggle('active', t.dataset.tab===id);
+  });
+}
+document.querySelectorAll('.tabnav-item').forEach(t=> t.addEventListener('click', ()=>go(t.dataset.tab)));
+go('e-calendrier');
+</script>
+</body>
+</html>

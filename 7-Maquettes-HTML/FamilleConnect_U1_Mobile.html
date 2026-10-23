@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FamilleConnect — U1 La Famille (Mobile)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: { extend: {
+    colors: {
+      'fc-bg': '#F4F1E9',
+      'fc-primary': '#2A4A3A',
+      'fc-primary-light': '#3A5A4A',
+      'fc-accent': '#C89F62',
+      'fc-accent-light': '#D8B978',
+      'fc-surface': '#FFFFFF',
+      'fc-body': '#1A1A1A',
+      'fc-secondary': '#5A5A5A',
+      'fc-muted': '#8A8A8A',
+      'fc-success': '#16A34A',
+      'fc-urgent': '#D97706',
+    },
+    fontFamily: { sans: ['Inter','Segoe UI','Arial','sans-serif'] }
+  }}
+}
+</script>
+<style>
+  body { background:#E7E2D5; }
+  .screen { display:none; }
+  .screen.active { display:block; animation: fadein .18s ease; }
+  @keyframes fadein { from{opacity:0; transform:translateX(8px);} to{opacity:1; transform:none;} }
+  .tabnav-item.active .tn-icon { color:#C89F62; }
+  .tabnav-item.active .tn-label { color:#2A4A3A; font-weight:700; }
+  .scroll-hide::-webkit-scrollbar { display:none; }
+  .badge { display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; font-size:10px; font-weight:600; }
+  .tree-line { position:absolute; background:#C89F62; }
+</style>
+</head>
+<body class="font-sans flex items-start justify-center py-8">
+
+<!-- ============ PHONE FRAME ============ -->
+<div class="relative w-[390px] h-[844px] bg-black rounded-[48px] p-[10px] shadow-2xl flex-shrink-0">
+  <div class="w-full h-full bg-fc-bg rounded-[38px] overflow-hidden flex flex-col relative">
+
+    <!-- Status bar -->
+    <div class="h-11 bg-fc-primary flex items-center justify-between px-6 text-white text-xs font-semibold flex-shrink-0">
+      <span>9:41</span>
+      <div class="absolute left-1/2 top-2 -translate-x-1/2 w-28 h-6 bg-black rounded-full"></div>
+      <div class="flex items-center gap-1">
+        <span>🛜</span><span>📶</span><span>🔋</span>
+      </div>
+    </div>
+
+    <!-- ============ APP CONTENT ============ -->
+    <div id="app" class="flex-1 overflow-y-auto scroll-hide pb-20">
+
+      <!-- ==================== E1 : REGISTRE / ACCUEIL U1 ==================== -->
+      <section id="e-registre" class="screen active">
+        <!-- Header -->
+        <div class="bg-fc-primary text-white px-5 pt-3 pb-6 rounded-b-3xl">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-[10px] uppercase tracking-widest text-fc-accent font-bold">U1 — La Famille</div>
+              <h1 class="text-xl font-bold mt-0.5">Registre familial</h1>
+            </div>
+            <div class="flex items-center gap-3">
+              <button class="relative text-lg">🔔<span class="absolute -top-1 -right-1 bg-fc-accent text-fc-primary text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">3</span></button>
+              <div class="w-9 h-9 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-xs border-2 border-white/40">JN</div>
+            </div>
+          </div>
+          <!-- Search -->
+          <div class="mt-4 bg-white/10 border border-white/20 rounded-xl flex items-center gap-2 px-4 py-2.5">
+            <span class="text-white/60 text-sm">🔍</span>
+            <input type="text" placeholder="Nom, branche, profession…" class="bg-transparent flex-1 text-sm text-white placeholder-white/50 focus:outline-none">
+            <span class="text-fc-accent text-sm">⚙️</span>
+          </div>
+        </div>
+
+        <!-- KPI stats -->
+        <div class="grid grid-cols-5 gap-2 px-4 -mt-4">
+          <div class="bg-fc-surface rounded-xl py-2.5 text-center shadow-sm"><div class="text-base font-bold text-fc-primary">247</div><div class="text-[9px] text-fc-secondary">Membres</div></div>
+          <div class="bg-fc-surface rounded-xl py-2.5 text-center shadow-sm"><div class="text-base font-bold text-fc-primary">235</div><div class="text-[9px] text-fc-secondary">Vivants</div></div>
+          <div class="bg-fc-surface rounded-xl py-2.5 text-center shadow-sm"><div class="text-base font-bold text-fc-muted">12</div><div class="text-[9px] text-fc-secondary">Décédés</div></div>
+          <div class="bg-fc-surface rounded-xl py-2.5 text-center shadow-sm"><div class="text-base font-bold text-fc-primary">6</div><div class="text-[9px] text-fc-secondary">Branches</div></div>
+          <div class="bg-fc-surface rounded-xl py-2.5 text-center shadow-sm"><div class="text-base font-bold text-fc-urgent">9</div><div class="text-[9px] text-fc-secondary">Pays</div></div>
+        </div>
+
+        <!-- Branch filter chips -->
+        <div class="flex gap-2 px-4 mt-4 overflow-x-auto scroll-hide">
+          <button class="px-3.5 py-1.5 rounded-full text-xs font-semibold bg-fc-primary text-white whitespace-nowrap">Tous</button>
+          <button class="px-3.5 py-1.5 rounded-full text-xs font-semibold bg-white text-fc-primary whitespace-nowrap border border-fc-primary/20">Nord</button>
+          <button class="px-3.5 py-1.5 rounded-full text-xs font-semibold bg-white text-fc-primary whitespace-nowrap border border-fc-primary/20">Sud</button>
+          <button class="px-3.5 py-1.5 rounded-full text-xs font-semibold bg-white text-fc-primary whitespace-nowrap border border-fc-primary/20">Est</button>
+          <button class="px-3.5 py-1.5 rounded-full text-xs font-semibold bg-white text-fc-primary whitespace-nowrap border border-fc-primary/20">Ouest</button>
+          <button class="px-3.5 py-1.5 rounded-full text-xs font-semibold bg-fc-accent/25 text-fc-primary whitespace-nowrap border border-fc-accent">🌍 Diaspora</button>
+        </div>
+
+        <!-- Membres récents -->
+        <div class="px-4 mt-5">
+          <div class="flex items-center justify-between mb-2">
+            <h2 class="text-sm font-bold text-fc-primary">Membres récents</h2>
+            <button onclick="go('e-liste')" class="text-[11px] text-fc-accent font-semibold">Tout voir ›</button>
+          </div>
+          <div class="space-y-2">
+            <!-- member row template -->
+            <div onclick="go('e-fiche')" class="bg-white rounded-xl p-3 flex items-center gap-3 shadow-sm active:bg-fc-bg cursor-pointer">
+              <div class="w-11 h-11 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-sm">JN</div>
+              <div class="flex-1 min-w-0">
+                <div class="font-semibold text-[13px] text-fc-body">Jean NDONGO <span class="badge bg-fc-primary text-white ml-1">Patriarche</span></div>
+                <div class="text-[11px] text-fc-secondary truncate">Branche Nord · Génération 3 · Yaoundé 🇨🇲</div>
+              </div>
+              <span class="text-fc-muted text-xs">›</span>
+            </div>
+            <div onclick="go('e-fiche')" class="bg-white rounded-xl p-3 flex items-center gap-3 shadow-sm active:bg-fc-bg cursor-pointer">
+              <div class="w-11 h-11 bg-fc-primary rounded-full flex items-center justify-center text-white font-bold text-sm">BN</div>
+              <div class="flex-1 min-w-0">
+                <div class="font-semibold text-[13px] text-fc-body">Bernard NDONGO</div>
+                <div class="text-[11px] text-fc-secondary truncate">Trésorier · Branche Nord · Douala 🇨🇲</div>
+              </div>
+              <span class="text-fc-muted text-xs">›</span>
+            </div>
+            <div onclick="go('e-fiche')" class="bg-white rounded-xl p-3 flex items-center gap-3 shadow-sm active:bg-fc-bg cursor-pointer">
+              <div class="w-11 h-11 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-sm">MN</div>
+              <div class="flex-1 min-w-0">
+                <div class="font-semibold text-[13px] text-fc-body">Marie NDONGO <span class="badge bg-fc-accent/30 text-fc-primary ml-1">Conseil</span></div>
+                <div class="text-[11px] text-fc-secondary truncate">Avocate · Branche Nord · Paris 🇫🇷</div>
+              </div>
+              <span class="text-fc-muted text-xs">›</span>
+            </div>
+            <div onclick="go('e-fiche')" class="bg-white rounded-xl p-3 flex items-center gap-3 shadow-sm active:bg-fc-bg cursor-pointer">
+              <div class="w-11 h-11 bg-fc-primary rounded-full flex items-center justify-center text-white font-bold text-sm">HN</div>
+              <div class="flex-1 min-w-0">
+                <div class="font-semibold text-[13px] text-fc-body">Hélène NDONGO</div>
+                <div class="text-[11px] text-fc-secondary truncate">Cardiologue · Branche Sud · Montréal 🇨🇦</div>
+              </div>
+              <span class="text-fc-muted text-xs">›</span>
+            </div>
+            <div onclick="go('e-fiche')" class="bg-white rounded-xl p-3 flex items-center gap-3 shadow-sm active:bg-fc-bg cursor-pointer">
+              <div class="w-11 h-11 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-sm">JO</div>
+              <div class="flex-1 min-w-0">
+                <div class="font-semibold text-[13px] text-fc-body">Joseph NDONGO <span class="badge bg-fc-urgent/15 text-fc-urgent ml-1">En attente validation</span></div>
+                <div class="text-[11px] text-fc-secondary truncate">Développeur · Diaspora France · Lyon 🇫🇷</div>
+              </div>
+              <span class="text-fc-muted text-xs">›</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Branches -->
+        <div class="px-4 mt-5">
+          <h2 class="text-sm font-bold text-fc-primary mb-2">Branches familiales</h2>
+          <div class="grid grid-cols-2 gap-2">
+            <div onclick="go('e-arbre')" class="bg-white rounded-xl p-3 shadow-sm cursor-pointer active:bg-fc-bg">
+              <div class="flex justify-between items-center"><span class="text-[13px] font-bold text-fc-primary">Branche Nord</span><span class="text-[10px] text-fc-muted">G1–G5</span></div>
+              <div class="text-[11px] text-fc-secondary mt-1">98 membres · Patriarche : Jean N.</div>
+              <div class="h-1.5 bg-fc-bg rounded-full mt-2"><div class="h-1.5 bg-fc-primary rounded-full" style="width:40%"></div></div>
+            </div>
+            <div onclick="go('e-arbre')" class="bg-white rounded-xl p-3 shadow-sm cursor-pointer active:bg-fc-bg">
+              <div class="flex justify-between items-center"><span class="text-[13px] font-bold text-fc-primary">Branche Sud</span><span class="text-[10px] text-fc-muted">G1–G5</span></div>
+              <div class="text-[11px] text-fc-secondary mt-1">72 membres · Aînée : Hélène N.</div>
+              <div class="h-1.5 bg-fc-bg rounded-full mt-2"><div class="h-1.5 bg-fc-accent rounded-full" style="width:29%"></div></div>
+            </div>
+            <div onclick="go('e-arbre')" class="bg-white rounded-xl p-3 shadow-sm cursor-pointer active:bg-fc-bg">
+              <div class="flex justify-between items-center"><span class="text-[13px] font-bold text-fc-primary">Branche Est</span><span class="text-[10px] text-fc-muted">G2–G5</span></div>
+              <div class="text-[11px] text-fc-secondary mt-1">45 membres · Alliances BIYA</div>
+              <div class="h-1.5 bg-fc-bg rounded-full mt-2"><div class="h-1.5 bg-fc-primary rounded-full" style="width:18%"></div></div>
+            </div>
+            <div onclick="go('e-carte')" class="bg-white rounded-xl p-3 shadow-sm cursor-pointer active:bg-fc-bg border border-fc-accent/40">
+              <div class="flex justify-between items-center"><span class="text-[13px] font-bold text-fc-primary">🌍 Diaspora</span><span class="text-[10px] text-fc-muted">6 pays</span></div>
+              <div class="text-[11px] text-fc-secondary mt-1">32 membres hors Cameroun</div>
+              <div class="text-[10px] text-fc-accent font-semibold mt-2">Voir la carte ›</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Actions rapides -->
+        <div class="px-4 mt-5 mb-4">
+          <h2 class="text-sm font-bold text-fc-primary mb-2">Actions rapides</h2>
+          <div class="grid grid-cols-3 gap-2">
+            <button class="bg-fc-primary text-white rounded-xl py-3 text-[11px] font-semibold shadow-sm">＋ Nouveau<br>membre</button>
+            <button onclick="go('e-arbre')" class="bg-white border border-fc-primary/20 text-fc-primary rounded-xl py-3 text-[11px] font-semibold shadow-sm">🌳 Voir<br>l'arbre</button>
+            <button class="bg-white border border-fc-primary/20 text-fc-primary rounded-xl py-3 text-[11px] font-semibold shadow-sm">✏️ Modifier<br>ma fiche</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== E2 : LISTE COMPLÈTE ==================== -->
+      <section id="e-liste" class="screen">
+        <div class="bg-fc-primary text-white px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
+          <button onclick="go('e-registre')" class="text-lg">‹</button>
+          <div class="flex-1">
+            <div class="font-bold text-sm">Tous les membres</div>
+            <div class="text-[10px] text-white/60">247 membres · triés par branche</div>
+          </div>
+          <button class="text-xs bg-fc-accent text-fc-primary font-bold px-3 py-1.5 rounded-lg">+ Ajouter</button>
+        </div>
+        <div class="px-4 py-3 flex gap-2">
+          <div class="flex-1 bg-white rounded-lg px-3 py-2 text-[11px] text-fc-muted border border-fc-primary/10">🔍 Rechercher…</div>
+          <button class="bg-white rounded-lg px-3 py-2 text-[11px] text-fc-primary border border-fc-primary/10">Branche ▾</button>
+          <button class="bg-white rounded-lg px-3 py-2 text-[11px] text-fc-primary border border-fc-primary/10">Âge ▾</button>
+        </div>
+        <!-- Grouped list -->
+        <div class="px-4 space-y-4 pb-4">
+          <div>
+            <div class="text-[10px] font-bold uppercase tracking-wide text-fc-accent mb-1.5">Branche Nord — 98</div>
+            <div class="bg-white rounded-xl shadow-sm divide-y divide-fc-bg">
+              <div onclick="go('e-fiche')" class="p-3 flex items-center gap-3 active:bg-fc-bg"><div class="w-10 h-10 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-xs">JN</div><div class="flex-1"><div class="text-[13px] font-semibold">Jean NDONGO</div><div class="text-[10px] text-fc-secondary">85 ans · Patriarche</div></div><span class="text-fc-muted text-xs">›</span></div>
+              <div onclick="go('e-fiche')" class="p-3 flex items-center gap-3 active:bg-fc-bg"><div class="w-10 h-10 bg-fc-primary rounded-full flex items-center justify-center text-white font-bold text-xs">BN</div><div class="flex-1"><div class="text-[13px] font-semibold">Bernard NDONGO</div><div class="text-[10px] text-fc-secondary">58 ans · Trésorier</div></div><span class="text-fc-muted text-xs">›</span></div>
+              <div onclick="go('e-fiche')" class="p-3 flex items-center gap-3 active:bg-fc-bg"><div class="w-10 h-10 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-xs">MN</div><div class="flex-1"><div class="text-[13px] font-semibold">Marie NDONGO</div><div class="text-[10px] text-fc-secondary">54 ans · Avocate, Conseil</div></div><span class="text-fc-muted text-xs">›</span></div>
+              <div onclick="go('e-fiche')" class="p-3 flex items-center gap-3 active:bg-fc-bg"><div class="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-gray-500 font-bold text-xs">PB</div><div class="flex-1"><div class="text-[13px] font-semibold">Paul BIYA <span class="badge bg-gray-100 text-gray-500">Allié</span></div><div class="text-[10px] text-fc-secondary">60 ans · Enseignant</div></div><span class="text-fc-muted text-xs">›</span></div>
+            </div>
+          </div>
+          <div>
+            <div class="text-[10px] font-bold uppercase tracking-wide text-fc-accent mb-1.5">Branche Sud — 72</div>
+            <div class="bg-white rounded-xl shadow-sm divide-y divide-fc-bg">
+              <div onclick="go('e-fiche')" class="p-3 flex items-center gap-3 active:bg-fc-bg"><div class="w-10 h-10 bg-fc-primary rounded-full flex items-center justify-center text-white font-bold text-xs">HN</div><div class="flex-1"><div class="text-[13px] font-semibold">Hélène NDONGO</div><div class="text-[10px] text-fc-secondary">51 ans · Cardiologue</div></div><span class="text-fc-muted text-xs">›</span></div>
+              <div onclick="go('e-fiche')" class="p-3 flex items-center gap-3 active:bg-fc-bg"><div class="w-10 h-10 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-xs">AN</div><div class="flex-1"><div class="text-[13px] font-semibold">Alain NDONGO</div><div class="text-[10px] text-fc-secondary">47 ans · Ingénieur, Abidjan 🇨🇮</div></div><span class="text-fc-muted text-xs">›</span></div>
+            </div>
+          </div>
+          <div>
+            <div class="text-[10px] font-bold uppercase tracking-wide text-fc-accent mb-1.5">Diaspora — 32</div>
+            <div class="bg-white rounded-xl shadow-sm divide-y divide-fc-bg">
+              <div onclick="go('e-fiche')" class="p-3 flex items-center gap-3 active:bg-fc-bg"><div class="w-10 h-10 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-xs">JO</div><div class="flex-1"><div class="text-[13px] font-semibold">Joseph NDONGO</div><div class="text-[10px] text-fc-secondary">29 ans · Développeur, Lyon 🇫🇷</div></div><span class="badge bg-fc-urgent/15 text-fc-urgent">Validation</span></div>
+              <div onclick="go('e-fiche')" class="p-3 flex items-center gap-3 active:bg-fc-bg"><div class="w-10 h-10 bg-fc-primary rounded-full flex items-center justify-center text-white font-bold text-xs">CN</div><div class="flex-1"><div class="text-[13px] font-semibold">Claire NDONGO-TCHOUMI</div><div class="text-[10px] text-fc-secondary">42 ans · Médecin, Bruxelles 🇧🇪</div></div><span class="text-fc-muted text-xs">›</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== E3 : FICHE MEMBRE ==================== -->
+      <section id="e-fiche" class="screen">
+        <div class="bg-fc-primary text-white px-4 py-3 flex items-center gap-3">
+          <button onclick="go('e-registre')" class="text-lg">‹</button>
+          <div class="flex-1 font-bold text-sm">Fiche membre</div>
+          <button class="text-sm">✏️</button>
+          <button class="text-sm">⋯</button>
+        </div>
+        <div class="bg-fc-primary px-4 pb-6 flex flex-col items-center text-white">
+          <div class="w-20 h-20 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-2xl border-4 border-white/30">JN</div>
+          <div class="font-bold text-lg mt-2">Jean NDONGO</div>
+          <div class="text-[11px] text-white/70">Branche Nord · Génération 3 · Yaoundé, Cameroun</div>
+          <div class="flex gap-1.5 mt-2 flex-wrap justify-center">
+            <span class="badge bg-fc-accent text-fc-primary">✓ Patriarche</span>
+            <span class="badge bg-white/15 text-white">85 ans</span>
+            <span class="badge bg-white/15 text-white">🎂 14 mars 1941</span>
+          </div>
+        </div>
+        <div class="px-4 -mt-3 space-y-3 pb-4">
+          <!-- Identité -->
+          <div class="bg-white rounded-xl p-4 shadow-sm">
+            <div class="text-[10px] uppercase font-bold text-fc-accent mb-2">Identité</div>
+            <div class="text-[12px] space-y-1.5 text-fc-body">
+              <div class="flex justify-between"><span class="text-fc-secondary">Né le</span><span class="font-semibold">14 mars 1941, Bafoussam</span></div>
+              <div class="flex justify-between"><span class="text-fc-secondary">Profession</span><span class="font-semibold">Avocat (retraité)</span></div>
+              <div class="flex justify-between"><span class="text-fc-secondary">État civil</span><span class="font-semibold">Veuf de Marguerite</span></div>
+              <div class="flex justify-between"><span class="text-fc-secondary">Rôle</span><span class="font-semibold text-fc-primary">Patriarche de la famille</span></div>
+            </div>
+          </div>
+          <!-- Filiation -->
+          <div class="bg-white rounded-xl p-4 shadow-sm">
+            <div class="flex justify-between items-center mb-2">
+              <div class="text-[10px] uppercase font-bold text-fc-accent">Filiation</div>
+              <button onclick="go('e-arbre')" class="text-[10px] font-semibold text-fc-primary underline">Dans l'arbre ›</button>
+            </div>
+            <div class="text-[12px] space-y-1.5">
+              <div class="flex items-center gap-2"><span class="text-fc-secondary w-14">Père</span><span class="font-semibold">Paul NDONGO</span><span class="badge bg-gray-100 text-gray-500">✝ 2018</span></div>
+              <div class="flex items-center gap-2"><span class="text-fc-secondary w-14">Mère</span><span class="font-semibold">Marguerite NDONGO</span><span class="badge bg-gray-100 text-gray-500">✝ 2020</span></div>
+              <div class="flex items-center gap-2"><span class="text-fc-secondary w-14">Épouse</span><span class="font-semibold">Marguerite (décédée)</span></div>
+              <div class="flex items-center gap-2"><span class="text-fc-secondary w-14">Enfants</span><span class="font-semibold">5 enfants · 14 petits-enfants</span></div>
+            </div>
+            <div class="flex -space-x-2 mt-3">
+              <div class="w-8 h-8 bg-fc-primary rounded-full border-2 border-white flex items-center justify-center text-white text-[9px] font-bold">BN</div>
+              <div class="w-8 h-8 bg-fc-accent rounded-full border-2 border-white flex items-center justify-center text-fc-primary text-[9px] font-bold">MN</div>
+              <div class="w-8 h-8 bg-fc-primary rounded-full border-2 border-white flex items-center justify-center text-white text-[9px] font-bold">FN</div>
+              <div class="w-8 h-8 bg-fc-accent rounded-full border-2 border-white flex items-center justify-center text-fc-primary text-[9px] font-bold">DN</div>
+              <div class="w-8 h-8 bg-fc-bg rounded-full border-2 border-white flex items-center justify-center text-fc-secondary text-[9px] font-bold">+1</div>
+            </div>
+          </div>
+          <!-- Contact -->
+          <div class="bg-white rounded-xl p-4 shadow-sm">
+            <div class="text-[10px] uppercase font-bold text-fc-accent mb-2">Contact</div>
+            <div class="text-[12px] space-y-1.5">
+              <div>📞 +237 6 99 12 34 56</div>
+              <div>✉️ jean.ndongo@email.cm</div>
+              <div>📍 Quartier Bastos, Yaoundé</div>
+            </div>
+            <div class="grid grid-cols-3 gap-2 mt-3">
+              <button class="bg-fc-primary text-white rounded-lg py-2 text-[11px] font-semibold">📞 Appeler</button>
+              <button class="bg-fc-primary text-white rounded-lg py-2 text-[11px] font-semibold">💬 Message</button>
+            <button class="bg-white border border-fc-primary/20 text-fc-primary rounded-lg py-2 text-[11px] font-semibold">📍 Itinéraire</button>
+            </div>
+          </div>
+          <!-- Confidentialité -->
+          <div class="bg-fc-accent/15 border border-fc-accent/40 rounded-xl p-3 flex items-start gap-2">
+            <span>🔒</span>
+            <div class="text-[10px] text-fc-secondary leading-snug">Coordonnées visibles par les <b>membres validés</b> uniquement (règles de confidentialité U1). Dernière vérification : 03/09/2026 par le Conseil.</div>
+          </div>
+          <!-- Biographie teaser -->
+          <div class="bg-white rounded-xl p-4 shadow-sm">
+            <div class="text-[10px] uppercase font-bold text-fc-accent mb-1.5">Biographie</div>
+            <p class="text-[11px] text-fc-secondary italic leading-relaxed">« Fondateur du conseil familial en 1998, Me Jean NDONGO a consacré sa vie au barreau et à l'unité de la famille… »</p>
+            <button class="text-[11px] font-semibold text-fc-primary mt-2">Lire la biographie complète ›</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== E4 : ARBRE GÉNÉALOGIQUE ==================== -->
+      <section id="e-arbre" class="screen">
+        <div class="bg-fc-primary text-white px-4 py-3 flex items-center gap-3">
+          <button onclick="go('e-registre')" class="text-lg">‹</button>
+          <div class="flex-1">
+            <div class="font-bold text-sm">Arbre généalogique</div>
+            <div class="text-[10px] text-white/60">Famille NDONGO · 5 générations</div>
+          </div>
+          <button class="text-sm">⤢</button>
+        </div>
+        <!-- Controls -->
+        <div class="px-4 py-3 flex gap-2 items-center">
+          <div class="flex bg-white rounded-lg border border-fc-primary/10 overflow-hidden text-[11px] font-semibold">
+            <button class="px-3 py-1.5 bg-fc-primary text-white">Vertical</button>
+            <button class="px-3 py-1.5 text-fc-primary">Horizontal</button>
+          </div>
+          <select class="bg-white rounded-lg border border-fc-primary/10 px-2 py-1.5 text-[11px] text-fc-primary font-semibold flex-1 focus:outline-none">
+            <option>Toutes branches</option><option>Branche Nord</option><option>Branche Sud</option>
+          </select>
+          <button class="bg-fc-accent text-fc-primary rounded-lg px-2.5 py-1.5 text-[11px] font-bold">Gén. ▾</button>
+        </div>
+        <!-- Tree canvas -->
+        <div class="px-2 pb-4 overflow-x-auto scroll-hide">
+          <div class="relative w-[720px] mx-auto h-[430px]">
+            <!-- connector lines -->
+            <svg class="absolute inset-0 w-full h-full" style="pointer-events:none">
+              <g stroke="#C89F62" stroke-width="1.5" fill="none">
+                <path d="M360,58 V90 M200,90 H520 M200,90 V120 M360,90 V120 M520,90 V120"/>
+                <path d="M200,178 V210 M120,210 H280 M120,210 V240 M280,210 V240"/>
+                <path d="M360,178 V210 M360,210 V240"/>
+                <path d="M520,178 V210 M450,210 H590 M450,210 V240 M590,210 V240"/>
+                <path d="M120,298 V325 M120,325 H185 M185,325 V345"/>
+              </g>
+            </svg>
+            <!-- Gen labels -->
+            <div class="absolute left-0 top-[30px] text-[9px] font-bold text-fc-muted rotate-0">G1</div>
+            <div class="absolute left-0 top-[130px] text-[9px] font-bold text-fc-muted">G2</div>
+            <div class="absolute left-0 top-[250px] text-[9px] font-bold text-fc-muted">G3</div>
+            <div class="absolute left-0 top-[360px] text-[9px] font-bold text-fc-muted">G4</div>
+            <!-- G1 -->
+            <div class="absolute left-1/2 -translate-x-1/2 top-[10px] flex gap-1.5">
+              <div onclick="go('e-fiche')" class="bg-fc-primary text-white rounded-xl px-3 py-2 text-center shadow cursor-pointer"><div class="text-[11px] font-bold">Paul NDONGO</div><div class="text-[9px] text-white/60">G1 · ✝ 2018</div></div>
+              <div class="bg-fc-primary text-white rounded-xl px-3 py-2 text-center shadow opacity-80"><div class="text-[11px] font-bold">Marguerite</div><div class="text-[9px] text-white/60">G1 · ✝ 2020</div></div>
+            </div>
+            <!-- G2 -->
+            <div class="absolute top-[120px] left-[150px] w-[100px] bg-fc-accent text-fc-primary rounded-xl px-2 py-2 text-center shadow cursor-pointer" onclick="go('e-fiche')"><div class="text-[11px] font-bold">Jean NDONGO</div><div class="text-[9px] opacity-70">G2 · 85 ans ★</div></div>
+            <div class="absolute top-[120px] left-[310px] w-[100px] bg-white border border-fc-primary/20 rounded-xl px-2 py-2 text-center shadow cursor-pointer" onclick="go('e-fiche')"><div class="text-[11px] font-bold text-fc-primary">Thérèse NKAM</div><div class="text-[9px] text-fc-muted">G2 · ✝ 2015</div></div>
+            <div class="absolute top-[120px] left-[470px] w-[100px] bg-white border border-fc-primary/20 rounded-xl px-2 py-2 text-center shadow cursor-pointer" onclick="go('e-fiche')"><div class="text-[11px] font-bold text-fc-primary">Simon NDONGO</div><div class="text-[9px] text-fc-muted">G2 · Branche Sud</div></div>
+            <!-- G3 -->
+            <div class="absolute top-[240px] left-[70px] w-[100px] bg-white border border-fc-primary/20 rounded-xl px-2 py-2 text-center shadow cursor-pointer" onclick="go('e-fiche')"><div class="text-[11px] font-bold text-fc-primary">Bernard N.</div><div class="text-[9px] text-fc-muted">G3 · Trésorier</div></div>
+            <div class="absolute top-[240px] left-[230px] w-[100px] bg-fc-accent text-fc-primary rounded-xl px-2 py-2 text-center shadow ring-2 ring-fc-primary cursor-pointer" onclick="go('e-fiche')"><div class="text-[11px] font-bold">Marie N.</div><div class="text-[9px] opacity-70">G3 · Sélectionné</div></div>
+            <div class="absolute top-[240px] left-[390px] w-[100px] bg-white border border-fc-primary/20 rounded-xl px-2 py-2 text-center shadow cursor-pointer" onclick="go('e-fiche')"><div class="text-[11px] font-bold text-fc-primary">Hélène N.</div><div class="text-[9px] text-fc-muted">G3 · Cardiologue</div></div>
+            <div class="absolute top-[240px] left-[540px] w-[100px] bg-white border border-fc-primary/20 rounded-xl px-2 py-2 text-center shadow cursor-pointer" onclick="go('e-fiche')"><div class="text-[11px] font-bold text-fc-primary">Alain N.</div><div class="text-[9px] text-fc-muted">G3 · Abidjan 🇨🇮</div></div>
+            <!-- G4 -->
+            <div class="absolute top-[345px] left-[150px] w-[95px] bg-fc-bg border border-fc-accent rounded-xl px-2 py-2 text-center shadow cursor-pointer" onclick="go('e-fiche')"><div class="text-[11px] font-bold text-fc-primary">Joseph N.</div><div class="text-[9px] text-fc-urgent font-semibold">G4 · À valider</div></div>
+            <div class="absolute top-[345px] left-[40px] w-[95px] bg-fc-bg border border-fc-accent rounded-xl px-2 py-2 text-center shadow cursor-pointer" onclick="go('e-fiche')"><div class="text-[11px] font-bold text-fc-primary">Claire T.</div><div class="text-[9px] text-fc-muted">G4 · Bruxelles 🇧🇪</div></div>
+          </div>
+        <!-- Legend & selected panel -->
+          <div class="px-2 mt-2">
+            <div class="bg-white rounded-xl p-3 shadow-sm">
+              <div class="flex items-center justify-between mb-1">
+                <div class="text-[11px] font-bold text-fc-primary">Marie NDONGO <span class="badge bg-fc-accent/30 text-fc-primary ml-1">G3</span></div>
+                <button onclick="go('e-fiche')" class="text-[10px] font-semibold text-fc-accent">Ouvrir la fiche ›</button>
+              </div>
+              <div class="text-[10px] text-fc-secondary">Avocate · Branche Nord · Paris 🇫🇷 — Membre du Conseil familial</div>
+              <div class="flex gap-2 mt-2 text-[10px] text-fc-muted">
+                <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 bg-fc-accent rounded-sm"></span>Rôle dirigeant</span>
+                <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 bg-white border border-fc-primary/30 rounded-sm"></span>Membre</span>
+                <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 bg-fc-bg border border-fc-accent rounded-sm"></span>Diaspora</span>
+                <span class="flex items-center gap-1">✝ Décédé</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== E5 : CARTE DIASPORA ==================== -->
+      <section id="e-carte" class="screen">
+        <div class="bg-fc-primary text-white px-4 py-3 flex items-center gap-3">
+          <button onclick="go('e-registre')" class="text-lg">‹</button>
+          <div class="flex-1">
+            <div class="font-bold text-sm">Carte de la diaspora</div>
+            <div class="text-[10px] text-white/60">32 membres · 9 pays</div>
+          </div>
+          <button class="text-[10px] bg-fc-accent text-fc-primary font-bold px-2.5 py-1 rounded-lg">Liste ▾</button>
+        </div>
+        <!-- Map mock -->
+        <div class="px-4 py-3">
+          <div class="bg-[#DCE8DF] rounded-2xl h-[300px] relative overflow-hidden border border-fc-primary/15 shadow-inner">
+            <!-- abstract continents -->
+            <div class="absolute inset-0 opacity-60" style="background:
+              radial-gradient(ellipse 120px 90px at 30% 35%, #BFD3C2 0%, transparent 70%),
+              radial-gradient(ellipse 90px 140px at 48% 60%, #BFD3C2 0%, transparent 70%),
+              radial-gradient(ellipse 140px 80px at 72% 40%, #BFD3C2 0%, transparent 70%),
+              radial-gradient(ellipse 60px 50px at 20% 75%, #BFD3C2 0%, transparent 70%);"></div>
+            <!-- pins -->
+            <div class="absolute" style="left:46%;top:52%"><div class="w-3.5 h-3.5 bg-fc-primary rounded-full border-2 border-white shadow relative"><span class="absolute -top-1 -right-1 w-3 h-3 bg-fc-accent text-fc-primary text-[7px] font-bold rounded-full flex items-center justify-center border border-white">98</span></div></div>
+            <div class="absolute" style="left:33%;top:30%"><div class="w-3 h-3 bg-fc-urgent rounded-full border-2 border-white shadow"><span class="absolute -top-4 left-1/2 -translate-x-1/2 bg-white text-[8px] font-bold px-1.5 py-0.5 rounded shadow whitespace-nowrap">Paris · 12</span></div></div>
+            <div class="absolute" style="left:31%;top:36%"><div class="w-2.5 h-2.5 bg-fc-urgent rounded-full border-2 border-white shadow"></div></div>
+            <div class="absolute" style="left:26%;top:27%"><div class="w-2.5 h-2.5 bg-fc-urgent rounded-full border-2 border-white shadow"><span class="absolute -top-4 left-1/2 -translate-x-1/2 bg-white text-[8px] font-bold px-1.5 py-0.5 rounded shadow whitespace-nowrap">Lyon · 5</span></div></div>
+            <div class="absolute" style="left:29%;top:24%"><div class="w-2.5 h-2.5 bg-fc-urgent rounded-full border-2 border-white shadow"><span class="absolute -top-4 left-1/2 -translate-x-1/2 bg-white text-[8px] font-bold px-1.5 py-0.5 rounded shadow whitespace-nowrap">Bruxelles · 4</span></div></div>
+            <div class="absolute" style="left:18%;top:38%"><div class="w-2.5 h-2.5 bg-fc-urgent rounded-full border-2 border-white shadow"><span class="absolute -top-4 left-1/2 -translate-x-1/2 bg-white text-[8px] font-bold px-1.5 py-0.5 rounded shadow whitespace-nowrap">Montréal · 6</span></div></div>
+            <div class="absolute" style="left:70%;top:35%"><div class="w-2.5 h-2.5 bg-fc-urgent rounded-full border-2 border-white shadow"><span class="absolute -top-4 left-1/2 -translate-x-1/2 bg-white text-[8px] font-bold px-1.5 py-0.5 rounded shadow whitespace-nowrap">Doubaï · 2</span></div></div>
+            <div class="absolute bottom-2 left-2 right-2 bg-white/90 backdrop-blur rounded-lg px-3 py-1.5 flex items-center justify-between text-[9px] text-fc-secondary">
+              <span>🟠 Diaspora &nbsp; ● 🟢 Afrique centrale</span><span class="font-bold text-fc-primary">Zoom : Monde</span>
+            </div>
+          </div>
+          <!-- Country cards -->
+          <div class="grid grid-cols-2 gap-2 mt-3">
+            <div class="bg-white rounded-xl p-3 shadow-sm flex items-center gap-2"><span class="text-lg">🇫🇷</span><div><div class="text-[12px] font-bold text-fc-primary">France</div><div class="text-[10px] text-fc-secondary">17 membres · Paris, Lyon</div></div></div>
+            <div class="bg-white rounded-xl p-3 shadow-sm flex items-center gap-2"><span class="text-lg">🇨🇦</span><div><div class="text-[12px] font-bold text-fc-primary">Canada</div><div class="text-[10px] text-fc-secondary">6 membres · Montréal</div></div></div>
+            <div class="bg-white rounded-xl p-3 shadow-sm flex items-center gap-2"><span class="text-lg">🇧🇪</span><div><div class="text-[12px] font-bold text-fc-primary">Belgique</div><div class="text-[10px] text-fc-secondary">4 membres · Bruxelles</div></div></div>
+            <div class="bg-white rounded-xl p-3 shadow-sm flex items-center gap-2"><span class="text-lg">🇨🇮</span><div><div class="text-[12px] font-bold text-fc-primary">Côte d'Ivoire</div><div class="text-[10px] text-fc-secondary">3 membres · Abidjan</div></div></div>
+          </div>
+          <button class="w-full mt-3 bg-fc-primary text-white rounded-xl py-3 text-[12px] font-bold shadow-sm">🌍 Organiser un relais diaspora (U7) ›</button>
+        </div>
+      </section>
+
+      <!-- ==================== E6 : MON PROFIL / CONFIDENTIALITÉ ==================== -->
+      <section id="e-profil" class="screen">
+        <div class="bg-fc-primary text-white px-4 py-3 flex items-center gap-3">
+          <button onclick="go('e-registre')" class="text-lg">‹</button>
+          <div class="flex-1 font-bold text-sm">Ma fiche & confidentialité</div>
+          <button class="text-sm">💾</button>
+        </div>
+        <div class="px-4 py-4 space-y-3">
+          <div class="bg-white rounded-xl p-4 shadow-sm flex items-center gap-3">
+            <div class="w-14 h-14 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold">JO</div>
+            <div class="flex-1">
+              <div class="text-sm font-bold text-fc-primary">Joseph NDONGO</div>
+              <div class="text-[10px] text-fc-secondary">G4 · Diaspora France · Lyon</div>
+              <span class="badge bg-fc-urgent/15 text-fc-urgent mt-1">En attente de validation par le Conseil</span>
+            </div>
+            <button class="text-[11px] font-semibold text-fc-primary">✏️ Éditer</button>
+          </div>
+          <div class="bg-white rounded-xl p-4 shadow-sm">
+            <div class="text-[10px] uppercase font-bold text-fc-accent mb-2">Visibilité de mes informations</div>
+            <div class="divide-y divide-fc-bg text-[12px]">
+              <div class="flex items-center justify-between py-2"><span>Nom & photo</span><span class="badge bg-fc-success/15 text-fc-success">Toute la famille</span></div>
+              <div class="flex items-center justify-between py-2"><span>Numéro de téléphone</span><span class="badge bg-fc-primary/10 text-fc-primary">Membres validés</span></div>
+              <div class="flex items-center justify-between py-2"><span>Adresse e-mail</span><span class="badge bg-fc-primary/10 text-fc-primary">Membres validés</span></div>
+              <div class="flex items-center justify-between py-2"><span>Adresse postale</span><span class="badge bg-fc-urgent/15 text-fc-urgent">Conseil uniquement</span></div>
+              <div class="flex items-center justify-between py-2"><span>Profession & compétences</span><span class="badge bg-fc-success/15 text-fc-success">Toute la famille</span></div>
+            </div>
+            <button class="w-full mt-2 text-[11px] font-semibold text-fc-primary border border-fc-primary/20 rounded-lg py-2">Personnaliser ces réglages 🔒</button>
+          </div>
+          <div class="bg-white rounded-xl p-4 shadow-sm">
+            <div class="text-[10px] uppercase font-bold text-fc-accent mb-2">Mes rôles & accès</div>
+            <div class="flex flex-wrap gap-1.5">
+              <span class="badge bg-fc-accent/30 text-fc-primary">Membre (U1–U6)</span>
+              <span class="badge bg-fc-primary/10 text-fc-primary">Réseau U7 ✓</span>
+              <span class="badge bg-gray-100 text-gray-400">Finances ✗</span>
+              <span class="badge bg-gray-100 text-gray-400">Administration ✗</span>
+            </div>
+          </div>
+          <div class="bg-white rounded-xl p-4 shadow-sm space-y-2">
+            <div class="text-[10px] uppercase font-bold text-fc-accent">Paramètres</div>
+            <div class="flex justify-between text-[12px] py-1"><span>Notifications (SMS + Push)</span><span class="text-fc-success font-bold">Activées</span></div>
+            <div class="flex justify-between text-[12px] py-1"><span>Langue</span><span class="font-semibold">Français</span></div>
+            <div class="flex justify-between text-[12px] py-1"><span>Mode hors-ligne synchronisé</span><span class="text-fc-success font-bold">Il y a 2 h</span></div>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /app -->
+
+    <!-- ============ BOTTOM TAB BAR ============ -->
+    <div class="absolute bottom-0 left-0 right-0 h-[72px] bg-white border-t border-fc-primary/10 flex items-end pb-2 px-2 rounded-b-[38px]">
+      <button data-tab="e-registre" class="tabnav-item flex-1 flex flex-col items-center gap-0.5 pt-1 text-fc-muted">
+        <span class="tn-icon text-lg">👥</span><span class="tn-label text-[9px]">Registre</span>
+      </button>
+      <button data-tab="e-arbre" class="tabnav-item flex-1 flex flex-col items-center gap-0.5 pt-1 text-fc-muted">
+        <span class="tn-icon text-lg">🌳</span><span class="tn-label text-[9px]">Arbre</span>
+      </button>
+      <button class="flex flex-col items-center -mt-6">
+        <div class="w-12 h-12 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary text-2xl font-bold shadow-lg border-4 border-white">＋</div>
+        <span class="text-[8px] text-fc-secondary font-semibold mt-0.5">Membre</span>
+      </button>
+      <button data-tab="e-carte" class="tabnav-item flex-1 flex flex-col items-center gap-0.5 pt-1 text-fc-muted">
+        <span class="tn-icon text-lg">🌍</span><span class="tn-label text-[9px]">Diaspora</span>
+      </button>
+      <button data-tab="e-profil" class="tabnav-item flex-1 flex flex-col items-center gap-0.5 pt-1 text-fc-muted">
+        <span class="tn-icon text-lg">👤</span><span class="tn-label text-[9px]">Profil</span>
+      </button>
+    </div>
+
+    <!-- Home indicator -->
+    <div class="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-32 h-1 bg-black/20 rounded-full"></div>
+  </div>
+</div>
+
+<!-- ============ SIDE LEGEND (desktop only) ============ -->
+<div class="hidden xl:block ml-10 max-w-xs">
+  <h2 class="text-2xl font-bold text-fc-primary">FamilleConnect — U1 « La Famille »</h2>
+  <p class="text-sm text-fc-secondary mt-2">Prototype mobile interactif (iPhone 390×844). Cliquez sur les éléments pour naviguer entre les 6 écrans :</p>
+  <ul class="text-sm text-fc-body mt-4 space-y-2">
+    <li>📋 <b>E1</b> — Registre / Accueil U1 (KPI, recherche, filtres branches)</li>
+    <li>👥 <b>E2</b> — Liste complète des membres groupés par branche</li>
+    <li>🪪 <b>E3</b> — Fiche membre détaillée (identité, filiation, contact, confidentialité)</li>
+    <li>🌳 <b>E4</b> — Arbre généalogique interactif (5 générations)</li>
+    <li>🌍 <b>E5</b> — Carte de la diaspora</li>
+    <li>👤 <b>E6</b> — Mon profil & paramètres de confidentialité</li>
+  </ul>
+  <p class="text-xs text-fc-muted mt-4">Palette conforme à la charte : vert #2A4A3A · or #C89F62 · fond crème #F4F1E9</p>
+</div>
+
+<script>
+function go(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.getElementById('app').scrollTop = 0;
+  const tabs = { 'e-registre':'e-registre','e-liste':'e-registre','e-fiche':'e-registre','e-arbre':'e-arbre','e-carte':'e-carte','e-profil':'e-profil' };
+  document.querySelectorAll('.tabnav-item').forEach(t=>{
+    t.classList.toggle('active', t.dataset.tab === tabs[id]);
+    t.classList.toggle('text-fc-muted', t.dataset.tab !== tabs[id]);
+  });
+}
+document.querySelectorAll('.tabnav-item').forEach(t=> t.addEventListener('click', ()=>go(t.dataset.tab)));
+go('e-registre');
+</script>
+</body>
+</html>
