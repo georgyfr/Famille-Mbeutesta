@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FamilleConnect — U3 La Solidarité (Mobile)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: { extend: {
+    colors: {
+      'fc-bg': '#F4F1E9',
+      'fc-primary': '#2A4A3A',
+      'fc-primary-light': '#3A5A4A',
+      'fc-accent': '#C89F62',
+      'fc-accent-light': '#D8B978',
+      'fc-surface': '#FFFFFF',
+      'fc-body': '#1A1A1A',
+      'fc-secondary': '#5A5A5A',
+      'fc-muted': '#8A8A8A',
+      'fc-success': '#16A34A',
+      'fc-urgent': '#D97706',
+      'fc-danger': '#DC2626',
+      'fc-info': '#2563EB',
+    },
+    fontFamily: { sans: ['Inter','Segoe UI','Arial','sans-serif'] }
+  }}
+}
+</script>
+<style>
+  body { background:#E7E2D5; }
+  .screen { display:none; }
+  .screen.active { display:block; animation: fadein .18s ease; }
+  @keyframes fadein { from{opacity:0; transform:translateX(8px);} to{opacity:1; transform:none;} }
+  .tabnav-item.active .tn-icon { color:#C89F62; }
+  .tabnav-item.active .tn-label { color:#2A4A3A; font-weight:700; }
+  .scroll-hide::-webkit-scrollbar { display:none; }
+  .badge { display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; font-size:10px; font-weight:600; }
+  .chip-on { background:#2A4A3A; color:#fff; border-color:#2A4A3A; }
+</style>
+</head>
+<body class="font-sans flex items-start justify-center gap-10 py-8 flex-wrap">
+
+<!-- ============ PHONE FRAME ============ -->
+<div class="relative w-[390px] h-[844px] bg-black rounded-[48px] p-[10px] shadow-2xl flex-shrink-0">
+  <div class="w-full h-full bg-fc-bg rounded-[38px] overflow-hidden flex flex-col relative">
+
+    <!-- Status bar -->
+    <div class="h-11 bg-fc-primary flex items-center justify-between px-6 text-white text-xs font-semibold flex-shrink-0">
+      <span>9:41</span>
+      <div class="absolute left-1/2 top-2 -translate-x-1/2 w-28 h-6 bg-black rounded-full"></div>
+      <div class="flex items-center gap-1"><span>📶</span><span>🔋</span></div>
+    </div>
+
+    <!-- ============ APP CONTENT ============ -->
+    <div id="app" class="flex-1 overflow-y-auto scroll-hide pb-20">
+
+      <!-- ==================== E1 : TABLEAU DE BORD SOLIDARITÉ ==================== -->
+      <section id="e-tb" class="screen active">
+        <div class="bg-fc-primary text-white px-5 pt-3 pb-5 rounded-b-3xl">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-[10px] uppercase tracking-widest text-fc-accent font-bold">U3 — La Solidarité</div>
+              <h1 class="text-xl font-bold mt-0.5">Le cœur battant de la famille</h1>
+            </div>
+            <div class="flex items-center gap-3">
+              <button class="relative text-lg">🔔<span class="absolute -top-1 -right-1 bg-fc-accent text-fc-primary text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">3</span></button>
+              <div class="w-9 h-9 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-xs border-2 border-white/40">JN</div>
+            </div>
+          </div>
+          <!-- KPIs -->
+          <div class="grid grid-cols-3 gap-2 mt-4">
+            <div class="bg-white/10 border border-white/20 rounded-xl p-2.5 text-center">
+              <div class="text-lg font-bold">2</div>
+              <div class="text-[9px] text-white/70 leading-tight">Solidarités<br>en cours</div>
+            </div>
+            <div class="bg-white/10 border border-white/20 rounded-xl p-2.5 text-center">
+              <div class="text-lg font-bold text-fc-accent">1 245 000</div>
+              <div class="text-[9px] text-white/70 leading-tight">FC collectés<br>cet mois</div>
+            </div>
+            <div class="bg-white/10 border border-white/20 rounded-xl p-2.5 text-center">
+              <div class="text-lg font-bold">78%</div>
+              <div class="text-[9px] text-white/70 leading-tight">Taux de parti&shy;cipation</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="px-4 mt-4 space-y-4">
+          <!-- Alerte déclenchement auto -->
+          <div class="bg-fc-urgent/10 border border-fc-urgent/30 rounded-2xl p-3 flex items-start gap-3">
+            <span class="text-xl">⚡</span>
+            <div class="flex-1">
+              <div class="text-[11px] font-bold text-fc-urgent">Déclenchement automatique — 14:32</div>
+              <div class="text-[11px] text-fc-secondary mt-0.5">Dossier <b>SOL-2026-018</b> ouvert suite au décès saisi dans U2 (événement EVT-2026-014). Délai : <b>1 h 40</b> ≤ cible 4 h.</div>
+              <button onclick="go('e-dossier')" class="mt-2 text-[10px] font-bold text-fc-urgent underline">Ouvrir le dossier →</button>
+            </div>
+          </div>
+
+          <!-- Solidarités en cours -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <h2 class="text-sm font-bold text-fc-body">Solidarités en cours</h2>
+              <button onclick="go('e-cours')" class="text-[10px] font-semibold text-fc-primary">Tout voir →</button>
+            </div>
+            <div class="space-y-2.5">
+              <div onclick="go('e-dossier')" class="bg-white rounded-2xl shadow-sm p-3.5 cursor-pointer">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2.5">
+                    <div class="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-lg">😞</div>
+                    <div>
+                      <div class="text-[12px] font-bold">Décès — Grand-papa Mballa</div>
+                      <div class="text-[10px] text-fc-muted">SOL-2026-018 · Branche Nord · Public familial</div>
+                    </div>
+                  </div>
+                  <span class="badge bg-fc-urgent/10 text-fc-urgent">Collecte</span>
+                </div>
+                <div class="mt-2.5">
+                  <div class="flex justify-between text-[10px] font-semibold mb-1"><span class="text-fc-secondary">1 450 000 / 2 000 000 FC</span><span class="text-fc-urgent">72%</span></div>
+                  <div class="h-2 bg-gray-100 rounded-full"><div class="h-2 w-[72%] bg-fc-urgent rounded-full"></div></div>
+                </div>
+              </div>
+              <div onclick="go('e-maladie')" class="bg-white rounded-2xl shadow-sm p-3.5 cursor-pointer">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2.5">
+                    <div class="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-lg">🏥</div>
+                    <div>
+                      <div class="text-[12px] font-bold">Maladie grave — Tantine Esther</div>
+                      <div class="text-[10px] text-fc-muted">SOL-2026-015 · Branche Sud · 🔒 Restreint</div>
+                    </div>
+                  </div>
+                  <span class="badge bg-fc-info/10 text-fc-info">Suivi</span>
+                </div>
+                <div class="mt-2.5">
+                  <div class="flex justify-between text-[10px] font-semibold mb-1"><span class="text-fc-secondary">890 000 / 1 500 000 FC</span><span class="text-fc-info">59%</span></div>
+                  <div class="h-2 bg-gray-100 rounded-full"><div class="h-2 w-[59%] bg-fc-info rounded-full"></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Ma contribution -->
+          <div class="bg-white rounded-2xl shadow-sm p-3.5">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-[10px] font-bold uppercase tracking-wide text-fc-muted">Ma contribution ce mois</div>
+                <div class="text-lg font-bold text-fc-primary mt-0.5">25 000 FC <span class="text-[10px] font-medium text-fc-muted">via MTN MoMo</span></div>
+              </div>
+              <span class="badge bg-fc-success/10 text-fc-success">✓ À jour</span>
+            </div>
+            <div class="mt-2 text-[10px] text-fc-secondary">💧 Un membre exonéré n'apparaît dans aucune liste de relance — dignité préservée.</div>
+          </div>
+
+          <!-- Aides sociales récurrentes synthèse -->
+          <div class="bg-white rounded-2xl shadow-sm p-3.5">
+            <div class="flex items-center justify-between mb-1.5">
+              <h3 class="text-[12px] font-bold">Aides sociales récurrentes</h3>
+              <button onclick="go('e-aides')" class="text-[10px] font-semibold text-fc-primary">Gérer →</button>
+            </div>
+            <div class="flex items-center justify-between text-[11px] py-1.5 border-b border-dashed border-gray-100"><span>🎓 3 bourses scolaires</span><span class="badge bg-fc-success/10 text-fc-success">Versées à temps 97%</span></div>
+            <div class="flex items-center justify-between text-[11px] py-1.5"><span>👵 2 soutiens veuves</span><span class="text-fc-muted">Prochaine : 01/11</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== E2 : SOLIDARITÉS EN COURS ==================== -->
+      <section id="e-cours" class="screen">
+        <div class="bg-fc-primary text-white px-5 pt-3 pb-4 rounded-b-3xl">
+          <div class="text-[10px] uppercase tracking-widest text-fc-accent font-bold">U3 — La Solidarité</div>
+          <h1 class="text-xl font-bold mt-0.5">Solidarités en cours</h1>
+          <div class="flex gap-2 mt-3 overflow-x-auto scroll-hide">
+            <button class="px-3 py-1 rounded-full text-[10px] font-semibold chip-on whitespace-nowrap border">Toutes</button>
+            <button class="px-3 py-1 rounded-full text-[10px] font-semibold bg-white/10 border border-white/25 whitespace-nowrap">😞 Décès</button>
+            <button class="px-3 py-1 rounded-full text-[10px] font-semibold bg-white/10 border border-white/25 whitespace-nowrap">🏥 Maladie</button>
+            <button class="px-3 py-1 rounded-full text-[10px] font-semibold bg-white/10 border border-white/25 whitespace-nowrap">🔥 Sinistre</button>
+            <button class="px-3 py-1 rounded-full text-[10px] font-semibold bg-white/10 border border-white/25 whitespace-nowrap">🔒 Confidentiel</button>
+          </div>
+        </div>
+        <div class="px-4 mt-4 space-y-3">
+          <!-- Dossier 1 -->
+          <div onclick="go('e-dossier')" class="bg-white rounded-2xl shadow-sm p-4 cursor-pointer">
+            <div class="flex items-start justify-between">
+              <div>
+                <div class="text-[13px] font-bold">Décès — Grand-papa Mballa (82 ans)</div>
+                <div class="text-[10px] text-fc-muted mt-0.5">SOL-2026-018 · Lié à EVT-2026-014 (U2) · Ouvert il y a 2 j</div>
+              </div>
+              <span class="badge bg-fc-urgent/10 text-fc-urgent">● Collecte en cours</span>
+            </div>
+            <div class="grid grid-cols-3 gap-2 mt-3 text-center">
+              <div class="bg-fc-bg rounded-lg py-1.5"><div class="text-[12px] font-bold text-fc-primary">1 450 000</div><div class="text-[9px] text-fc-muted">Collecté (72%)</div></div>
+              <div class="bg-fc-bg rounded-lg py-1.5"><div class="text-[12px] font-bold text-fc-primary">94</div><div class="text-[9px] text-fc-muted">Contributeurs</div></div>
+              <div class="bg-fc-bg rounded-lg py-1.5"><div class="text-[12px] font-bold text-fc-primary">J-4</div><div class="text-[9px] text-fc-muted">Avant inhumation</div></div>
+            </div>
+            <div class="h-1.5 bg-gray-100 rounded-full mt-3"><div class="h-1.5 w-[72%] bg-fc-urgent rounded-full"></div></div>
+          </div>
+          <!-- Dossier 2 -->
+          <div onclick="go('e-maladie')" class="bg-white rounded-2xl shadow-sm p-4 cursor-pointer">
+            <div class="flex items-start justify-between">
+              <div>
+                <div class="text-[13px] font-bold">Maladie grave — Tantine Esther</div>
+                <div class="text-[10px] text-fc-muted mt-0.5">SOL-2026-015 · Validation chef de branche ✓ · 🔒 Branche + conseil</div>
+              </div>
+              <span class="badge bg-fc-info/10 text-fc-info">● Suivi long</span>
+            </div>
+            <div class="grid grid-cols-3 gap-2 mt-3 text-center">
+              <div class="bg-fc-bg rounded-lg py-1.5"><div class="text-[12px] font-bold text-fc-primary">890 000</div><div class="text-[9px] text-fc-muted">Collecté (59%)</div></div>
+              <div class="bg-fc-bg rounded-lg py-1.5"><div class="text-[12px] font-bold text-fc-primary">Semaine 6</div><div class="text-[9px] text-fc-muted">Journal évolution</div></div>
+              <div class="bg-fc-bg rounded-lg py-1.5"><div class="text-[12px] font-bold text-fc-primary">8</div><div class="text-[9px] text-fc-muted">Visites planifiées</div></div>
+            </div>
+            <div class="h-1.5 bg-gray-100 rounded-full mt-3"><div class="h-1.5 w-[59%] bg-fc-info rounded-full"></div></div>
+          </div>
+          <!-- Clôture proposée -->
+          <div class="bg-white rounded-2xl shadow-sm p-4 opacity-90">
+            <div class="flex items-start justify-between">
+              <div>
+                <div class="text-[13px] font-bold">Sinistre incendie — Famille Ndongo</div>
+                <div class="text-[10px] text-fc-muted mt-0.5">SOL-2026-011 · Bilan transmis au conseil le 12/10</div>
+              </div>
+              <span class="badge bg-fc-accent/15 text-fc-urgent">Clôture proposée</span>
+            </div>
+            <div class="mt-2 text-[10px] text-fc-secondary">Excédent 120 000 FC → affectation proposée : caisse familiale (règle configurée).</div>
+          </div>
+          <!-- Exonération info -->
+          <div class="bg-fc-primary/5 border border-fc-primary/15 rounded-2xl p-3 text-[10px] text-fc-secondary flex gap-2">
+            <span>🛡</span>
+            <span><b>Équité & dignité :</b> 6 membres exonérés (comité médiation) sont masqués des listes de relance. Motifs confidentiels.</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== E3 : DOSSIER DÉCÈS ==================== -->
+      <section id="e-dossier" class="screen">
+        <div class="bg-fc-primary text-white px-5 pt-3 pb-4 rounded-b-3xl">
+          <div class="flex items-center gap-2">
+            <button onclick="go('e-cours')" class="text-white/80 text-lg">←</button>
+            <div>
+              <div class="text-[10px] uppercase tracking-widest text-fc-accent font-bold">Dossier SOL-2026-018</div>
+              <h1 class="text-base font-bold leading-tight">Décès — Grand-papa Mballa</h1>
+            </div>
+          </div>
+          <div class="flex gap-2 mt-3">
+            <span class="badge bg-white/15 text-white">Nature : Décès (M1)</span>
+            <span class="badge bg-white/15 text-white">Gravité : Haute</span>
+            <span class="badge bg-white/15 text-fc-accent">Public familial</span>
+          </div>
+          <!-- Cycle de vie 5 états -->
+          <div class="mt-4">
+            <div class="flex items-center">
+              <div class="flex flex-col items-center flex-1"><div class="w-6 h-6 rounded-full bg-fc-success text-white flex items-center justify-center text-[10px]">✓</div><div class="text-[8px] mt-1 text-center">Ouvert</div></div>
+              <div class="h-0.5 flex-1 bg-fc-urgent -mt-4"></div>
+              <div class="flex flex-col items-center flex-1"><div class="w-6 h-6 rounded-full bg-fc-urgent text-white flex items-center justify-center text-[10px] ring-4 ring-fc-urgent/25">2</div><div class="text-[8px] mt-1 font-bold text-fc-accent">Collecte</div></div>
+              <div class="h-0.5 flex-1 bg-white/25 -mt-4"></div>
+              <div class="flex flex-col items-center flex-1"><div class="w-6 h-6 rounded-full bg-white/15 border border-white/30 text-white/60 flex items-center justify-center text-[10px]">3</div><div class="text-[8px] mt-1 text-white/60">Utilisation</div></div>
+              <div class="h-0.5 flex-1 bg-white/25 -mt-4"></div>
+              <div class="flex flex-col items-center flex-1"><div class="w-6 h-6 rounded-full bg-white/15 border border-white/30 text-white/60 flex items-center justify-center text-[10px]">4</div><div class="text-[8px] mt-1 text-white/60">Clôture prop.</div></div>
+              <div class="h-0.5 flex-1 bg-white/25 -mt-4"></div>
+              <div class="flex flex-col items-center flex-1"><div class="w-6 h-6 rounded-full bg-white/15 border border-white/30 text-white/60 flex items-center justify-center text-[10px]">5</div><div class="text-[8px] mt-1 text-white/60">Clôturé → U6</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="px-4 mt-4 space-y-3">
+          <!-- 1 Métadonnées -->
+          <div class="bg-white rounded-2xl shadow-sm p-3.5">
+            <div class="text-[10px] font-bold uppercase tracking-wide text-fc-muted mb-1.5">1 · Métadonnées</div>
+            <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+              <span class="text-fc-muted">Bénéficiaire</span><span class="font-semibold text-right">Famille Mballa (veuve + 3 enfants)</span>
+              <span class="text-fc-muted">Branche</span><span class="font-semibold text-right">Nord</span>
+              <span class="text-fc-muted">Ouverture</span><span class="font-semibold text-right">Auto · 21/10 14:32</span>
+              <span class="text-fc-muted">Échéance</span><span class="font-semibold text-right">Inhumation 26/10</span>
+            </div>
+          </div>
+          <!-- 2 Comité de soutien -->
+          <div class="bg-white rounded-2xl shadow-sm p-3.5">
+            <div class="text-[10px] font-bold uppercase tracking-wide text-fc-muted mb-1.5">2 · Comité de soutien</div>
+            <div class="flex items-center gap-2 text-[11px] py-1"><div class="w-7 h-7 rounded-full bg-fc-accent text-fc-primary flex items-center justify-center font-bold text-[9px]">PN</div><div class="flex-1"><b>Papa Njoher</b> — Référent</div><span class="badge bg-fc-success/10 text-fc-success">Actif</span></div>
+            <div class="flex items-center gap-2 text-[11px] py-1"><div class="w-7 h-7 rounded-full bg-gray-100 text-fc-secondary flex items-center justify-center font-bold text-[9px]">MB</div><div class="flex-1">Maman Béatrice — Logistique</div></div>
+            <div class="flex items-center gap-2 text-[11px] py-1"><div class="w-7 h-7 rounded-full bg-gray-100 text-fc-secondary flex items-center justify-center font-bold text-[9px]">CB</div><div class="flex-1">Chef de branche Nord — Validateur</div><span class="badge bg-fc-primary/10 text-fc-primary">✓ Validé</span></div>
+          </div>
+          <!-- 3 Collecte -->
+          <div class="bg-white rounded-2xl shadow-sm p-3.5">
+            <div class="flex items-center justify-between">
+              <div class="text-[10px] font-bold uppercase tracking-wide text-fc-muted">3 · Collecte (lien U4)</div>
+              <button onclick="go('e-collecte')" class="text-[10px] font-bold text-fc-primary">Détails →</button>
+            </div>
+            <div class="flex items-end justify-between mt-1">
+              <div><div class="text-xl font-bold text-fc-primary">1 450 000 FC</div><div class="text-[10px] text-fc-muted">sur cible 2 000 000 FC · 94 contributeurs (78%)</div></div>
+              <div class="text-[10px] text-right text-fc-muted">Moyenne 15 425 FC<br>Médiane 10 000 FC</div>
+            </div>
+            <div class="h-2 bg-gray-100 rounded-full mt-2"><div class="h-2 w-[72%] bg-fc-urgent rounded-full"></div></div>
+            <div class="flex gap-2 mt-2.5">
+              <span class="badge bg-fc-bg text-fc-secondary">📱 MoMo ×61</span>
+              <span class="badge bg-fc-bg text-fc-secondary">🏦 Virement ×22</span>
+              <span class="badge bg-fc-bg text-fc-secondary">💵 Espèces ×9</span>
+              <span class="badge bg-fc-bg text-fc-secondary">💳 Carte ×2</span>
+            </div>
+          </div>
+          <!-- 4 Suivi -->
+          <div class="bg-white rounded-2xl shadow-sm p-3.5">
+            <div class="text-[10px] font-bold uppercase tracking-wide text-fc-muted mb-1.5">4 · Suivi</div>
+            <div class="space-y-1.5 text-[11px]">
+              <div class="flex gap-2"><span class="text-fc-success">●</span><span>21/10 — Annonce familiale transmise (U2)</span></div>
+              <div class="flex gap-2"><span class="text-fc-success">●</span><span>22/10 — Visites condoléances semaine 1 planifiées</span></div>
+              <div class="flex gap-2"><span class="text-fc-urgent">◐</span><span>26/10 — Inhumation (logistique comité)</span></div>
+              <div class="flex gap-2"><span class="text-fc-muted">○</span><span>+1 an — Messe anniversaire (rappel auto)</span></div>
+              <div class="flex gap-2"><span class="text-fc-muted">○</span><span>Levée de deuil — date selon tradition (configurée 1 an)</span></div>
+            </div>
+          </div>
+          <!-- 5 Répartition / 6 Justificatifs / 7 Clôture -->
+          <div class="grid grid-cols-2 gap-3">
+            <div class="bg-white rounded-2xl shadow-sm p-3">
+              <div class="text-[10px] font-bold uppercase tracking-wide text-fc-muted">5 · Répartition</div>
+              <div class="text-[11px] mt-1">3 bénéficiaires finaux désignés par le comité. <b>Mode : montant libre</b>.</div>
+            </div>
+            <div class="bg-white rounded-2xl shadow-sm p-3">
+              <div class="text-[10px] font-bold uppercase tracking-wide text-fc-muted">6 · Justificatifs</div>
+              <div class="text-[11px] mt-1">📄 Facture pompes funèbres · Reçu chambre mortuaire <span class="badge bg-fc-success/10 text-fc-success ml-1">100%</span></div>
+            </div>
+          </div>
+          <div class="bg-fc-accent/10 border border-fc-accent/30 rounded-2xl p-3 text-[11px] text-fc-secondary">
+            <b>7 · Clôture</b> — Le bilan sera transmis automatiquement à tous les contributeurs et au conseil, puis archivage dans U6 (Mémoire) avec témoignages.
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== E4 : SUIVI DE MALADIE ==================== -->
+      <section id="e-maladie" class="screen">
+        <div class="bg-fc-primary text-white px-5 pt-3 pb-4 rounded-b-3xl">
+          <div class="flex items-center gap-2">
+            <button onclick="go('e-cours')" class="text-white/80 text-lg">←</button>
+            <div>
+              <div class="text-[10px] uppercase tracking-widest text-fc-accent font-bold">Dossier SOL-2026-015 · 🔒 Restreint</div>
+              <h1 class="text-base font-bold leading-tight">Maladie grave — Tantine Esther</h1>
+            </div>
+          </div>
+          <div class="flex gap-2 mt-3">
+            <span class="badge bg-white/15 text-white">Maladie (M2)</span>
+            <span class="badge bg-white/15 text-white">Validé chef branche Sud ✓</span>
+            <span class="badge bg-white/15 text-fc-accent">Semaine 6</span>
+          </div>
+        </div>
+        <div class="px-4 mt-4 space-y-3">
+          <!-- Journal d'évolution -->
+          <div class="bg-white rounded-2xl shadow-sm p-3.5">
+            <div class="flex items-center justify-between mb-2">
+              <div class="text-[10px] font-bold uppercase tracking-wide text-fc-muted">Journal d'évolution</div>
+              <button class="text-[10px] font-bold text-fc-primary">＋ Mise à jour</button>
+            </div>
+            <div class="border-l-2 border-fc-info pl-3 space-y-2.5">
+              <div>
+                <div class="text-[10px] text-fc-muted">22/10 · par Référent Jean-Paul</div>
+                <div class="text-[11px]">Sortie d'hospitalisation prévue vendredi. Poursuite chimiothérapie en ambulatoire.</div>
+              </div>
+              <div>
+                <div class="text-[10px] text-fc-muted">18/10 · par Référent Jean-Paul</div>
+                <div class="text-[11px]">Admission hôpital Central — traitement intensif. 📄 Compte-rendu médical joint (confidentiel).</div>
+              </div>
+              <div>
+                <div class="text-[10px] text-fc-muted">12/09 · par Tantine Esther</div>
+                <div class="text-[11px]">« Merci à toute la famille pour votre soutien, je me bats 💪 »</div>
+              </div>
+            </div>
+          </div>
+          <!-- Planning visites -->
+          <div class="bg-white rounded-2xl shadow-sm p-3.5">
+            <div class="text-[10px] font-bold uppercase tracking-wide text-fc-muted mb-1.5">Planning des visites</div>
+            <div class="text-[10px] text-fc-secondary mb-2">Répartir pour éviter surcharge d'un côté et abandon de l'autre.</div>
+            <div class="flex items-center justify-between text-[11px] py-1.5 border-b border-dashed border-gray-100"><span>Sam. 25/10 — Maman Béatrice + 2</span><span class="badge bg-fc-success/10 text-fc-success">Confirmé</span></div>
+            <div class="flex items-center justify-between text-[11px] py-1.5 border-b border-dashed border-gray-100"><span>Mar. 28/10 — Branche Sud (rotation)</span><span class="badge bg-fc-urgent/10 text-fc-urgent">À boucler</span></div>
+            <div class="flex items-center justify-between text-[11px] py-1.5"><span>Jeu. 30/10 — Diaspora (visio)</span><span class="badge bg-fc-bg text-fc-muted">Proposé</span></div>
+          </div>
+          <!-- Jalons financiers -->
+          <div class="bg-white rounded-2xl shadow-sm p-3.5">
+            <div class="text-[10px] font-bold uppercase tracking-wide text-fc-muted mb-1.5">Jalons financiers</div>
+            <div class="flex justify-between text-[11px] py-1"><span>💰 Collecte initiale</span><span class="font-bold text-fc-primary">890 000 / 1 500 000 FC</span></div>
+            <div class="h-1.5 bg-gray-100 rounded-full my-1.5"><div class="h-1.5 w-[59%] bg-fc-info rounded-full"></div></div>
+            <div class="flex justify-between text-[11px] py-1 border-t border-dashed border-gray-100 mt-1"><span>⚠️ Besoin complémentaire : transfert à l'étranger</span><span class="badge bg-fc-urgent/10 text-fc-urgent">Collecte complément. ouverte</span></div>
+            <div class="flex justify-between text-[11px] py-1"><span>Dépenses justifiées à ce jour</span><span class="font-semibold">612 000 FC · 100% 📄</span></div>
+          </div>
+          <!-- Clôture -->
+          <div class="bg-fc-info/5 border border-fc-info/25 rounded-2xl p-3 text-[11px] text-fc-secondary flex gap-2">
+            <span>ℹ️</span>
+            <span>Clôture lorsque : guérison, stabilisation… ou décès (nouveau dossier U3 déclenché automatiquement via U2). Suivi de rétablissement proposé : 1 à 3 mois après sortie.</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== E5 : COLLECTE EN COURS ==================== -->
+      <section id="e-collecte" class="screen">
+        <div class="bg-fc-primary text-white px-5 pt-3 pb-4 rounded-b-3xl">
+          <div class="flex items-center gap-2">
+            <button onclick="go('e-dossier')" class="text-white/80 text-lg">←</button>
+            <div>
+              <div class="text-[10px] uppercase tracking-widest text-fc-accent font-bold">SOL-2026-018 · Collecte</div>
+              <h1 class="text-base font-bold">Décès — Grand-papa Mballa</h1>
+            </div>
+          </div>
+          <div class="mt-3 text-center">
+            <div class="text-3xl font-extrabold">1 450 000 <span class="text-sm font-semibold text-fc-accent">FC</span></div>
+            <div class="text-[10px] text-white/70 mt-0.5">Cible 2 000 000 FC · Échéance J-4 (inhumation 26/10)</div>
+            <div class="h-2.5 bg-white/15 rounded-full mt-2.5"><div class="h-2.5 w-[72%] bg-fc-accent rounded-full"></div></div>
+          </div>
+        </div>
+        <div class="px-4 mt-4 space-y-3">
+          <!-- Contribuer -->
+          <div class="bg-white rounded-2xl shadow-sm p-3.5">
+            <div class="text-[10px] font-bold uppercase tracking-wide text-fc-muted mb-2">Je contribue</div>
+            <div class="flex gap-2 mb-2.5">
+              <button class="flex-1 py-2 rounded-xl border-2 border-fc-primary bg-fc-primary/5 text-[11px] font-bold text-fc-primary">MTN MoMo</button>
+              <button class="flex-1 py-2 rounded-xl border border-gray-200 text-[11px] font-semibold text-fc-secondary">Orange Money</button>
+              <button class="flex-1 py-2 rounded-xl border border-gray-200 text-[11px] font-semibold text-fc-secondary">Virement</button>
+              <button class="flex-1 py-2 rounded-xl border border-gray-200 text-[11px] font-semibold text-fc-secondary">Carte</button>
+            </div>
+            <div class="flex gap-2">
+              <button class="px-3 py-1.5 rounded-full bg-fc-bg text-[11px] font-semibold">5 000</button>
+              <button class="px-3 py-1.5 rounded-full bg-fc-bg text-[11px] font-semibold">10 000</button>
+              <button class="px-3 py-1.5 rounded-full bg-fc-accent text-fc-primary text-[11px] font-bold">25 000</button>
+              <button class="px-3 py-1.5 rounded-full bg-fc-bg text-[11px] font-semibold">Autre…</button>
+            </div>
+            <div class="text-[9px] text-fc-muted mt-2">Mode : montant libre · Rattaché automatiquement à mon compte U1</div>
+          </div>
+          <!-- Stats -->
+          <div class="grid grid-cols-3 gap-2 text-center">
+            <div class="bg-white rounded-xl shadow-sm py-2"><div class="text-[13px] font-bold text-fc-primary">94</div><div class="text-[9px] text-fc-muted">Contributeurs</div></div>
+            <div class="bg-white rounded-xl shadow-sm py-2"><div class="text-[13px] font-bold text-fc-primary">78%</div><div class="text-[9px] text-fc-muted">Participation</div></div>
+            <div class="bg-white rounded-xl shadow-sm py-2"><div class="text-[13px] font-bold text-fc-primary">15 425</div><div class="text-[9px] text-fc-muted">Moyenne FC</div></div>
+          </div>
+          <!-- Liste contributeurs -->
+          <div class="bg-white rounded-2xl shadow-sm p-3.5">
+            <div class="flex items-center justify-between mb-1.5">
+              <div class="text-[10px] font-bold uppercase tracking-wide text-fc-muted">Contributeurs récents</div>
+              <span class="text-[9px] text-fc-muted">Affichage avec accord explicite</span>
+            </div>
+            <div class="flex items-center justify-between text-[11px] py-1.5 border-b border-dashed border-gray-100"><span class="flex items-center gap-2"><span class="w-6 h-6 rounded-full bg-fc-accent/20 text-fc-primary flex items-center justify-center text-[8px] font-bold">AB</span>Abena B.</span><span class="font-semibold">50 000 FC · MoMo</span></div>
+            <div class="flex items-center justify-between text-[11px] py-1.5 border-b border-dashed border-gray-100"><span class="flex items-center gap-2"><span class="w-6 h-6 rounded-full bg-gray-100 text-fc-muted flex items-center justify-center text-[8px] font-bold">?</span>Anonyme</span><span class="font-semibold">25 000 FC · Virement</span></div>
+            <div class="flex items-center justify-between text-[11px] py-1.5"><span class="flex items-center gap-2"><span class="w-6 h-6 rounded-full bg-gray-100 text-fc-secondary flex items-center justify-center text-[8px] font-bold">DK</span>Daniel K. (diaspora Paris)</span><span class="font-semibold">100 000 FC · Carte</span></div>
+          </div>
+          <!-- Non-contributeurs + relances -->
+          <div class="bg-white rounded-2xl shadow-sm p-3.5">
+            <div class="flex items-center justify-between mb-1.5">
+              <div class="text-[10px] font-bold uppercase tracking-wide text-fc-muted">Pas encore contribué (26)</div>
+              <button class="text-[10px] font-bold text-fc-urgent">📨 Relancer (J+3 auto)</button>
+            </div>
+            <div class="text-[10px] text-fc-secondary leading-relaxed">Relances mesurées : rappel poli J+3, relance échéance J+7, plus rien ensuite (relance personnelle du référent). Fuseaux horaires respectés — diaspora jamais relancée à 3 h du matin. <b>6 exonérés masqués</b> 🛡</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== E6 : AIDES SOCIALES ==================== -->
+      <section id="e-aides" class="screen">
+        <div class="bg-fc-primary text-white px-5 pt-3 pb-4 rounded-b-3xl">
+          <div class="text-[10px] uppercase tracking-widest text-fc-accent font-bold">U3 — Module 4.4</div>
+          <h1 class="text-xl font-bold mt-0.5">Aides sociales & prêts</h1>
+          <div class="grid grid-cols-3 gap-2 mt-3">
+            <div class="bg-white/10 border border-white/20 rounded-xl p-2 text-center"><div class="text-[13px] font-bold">7</div><div class="text-[8px] text-white/70">Aides actives</div></div>
+            <div class="bg-white/10 border border-white/20 rounded-xl p-2 text-center"><div class="text-[13px] font-bold text-fc-accent">97%</div><div class="text-[8px] text-white/70">Versées à temps</div></div>
+            <div class="bg-white/10 border border-white/20 rounded-xl p-2 text-center"><div class="text-[13px] font-bold">2</div><div class="text-[8px] text-white/70">Prêts suivis</div></div>
+          </div>
+        </div>
+        <div class="px-4 mt-4 space-y-3">
+          <div class="bg-white rounded-2xl shadow-sm p-3.5">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5"><span class="text-lg">🎓</span><div><div class="text-[12px] font-bold">Bourse scolaire — Orphelins Mballa (×3)</div><div class="text-[10px] text-fc-muted">Annuelle · 450 000 FC/an · Prochaine : 15/11</div></div></div>
+              <span class="badge bg-fc-success/10 text-fc-success">OK</span>
+            </div>
+          </div>
+          <div class="bg-white rounded-2xl shadow-sm p-3.5">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5"><span class="text-lg">👵</span><div><div class="text-[12px] font-bold">Soutien veuves (×2)</div><div class="text-[10px] text-fc-muted">Mensuel · 30 000 FC · Ordre de virement généré → trésorier</div></div></div>
+              <span class="badge bg-fc-success/10 text-fc-success">OK</span>
+            </div>
+          </div>
+          <div class="bg-white rounded-2xl shadow-sm p-3.5">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5"><span class="text-lg">💊</span><div><div class="text-[12px] font-bold">Aide médicale chronique (×1)</div><div class="text-[10px] text-fc-muted">Mensuel · 🔒 Bénéficiaire non publiquement désigné</div></div></div>
+              <span class="badge bg-fc-urgent/10 text-fc-urgent">Révision sem. 01/12</span>
+            </div>
+          </div>
+          <div class="bg-white rounded-2xl shadow-sm p-3.5">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5"><span class="text-lg">♿</span><div><div class="text-[12px] font-bold">Aide handicap (×1)</div><div class="text-[10px] text-fc-muted">Mensuel · Éligibilité validée conseil ✓</div></div></div>
+              <span class="badge bg-fc-success/10 text-fc-success">OK</span>
+            </div>
+          </div>
+          <!-- Prêt -->
+          <div class="bg-white rounded-2xl shadow-sm p-3.5">
+            <div class="text-[10px] font-bold uppercase tracking-wide text-fc-muted mb-1.5">Prêt familial — PF-2026-004</div>
+            <div class="text-[11px]">Emprunteur : Serge M. · 300 000 FC · Taux 0 % · 12 mois</div>
+            <div class="flex justify-between text-[10px] font-semibold mt-2 mb-1"><span class="text-fc-secondary">Remboursé 187 500 FC (75%)</span><span class="text-fc-muted">Échéance n°10 : 05/11</span></div>
+            <div class="h-1.5 bg-gray-100 rounded-full"><div class="h-1.5 w-[75%] bg-fc-primary rounded-full"></div></div>
+            <div class="text-[9px] text-fc-muted mt-1.5">Validation conseil ✓ · Traçabilité complète · Impayés → comité médiation</div>
+          </div>
+          <div class="bg-fc-primary/5 border border-fc-primary/15 rounded-2xl p-3 text-[10px] text-fc-secondary flex gap-2">
+            <span>🔒</span>
+            <span><b>Confidentialité :</b> dossiers d'éligibilité examinés par le comité médiation, validés par le conseil. Les bénéficiaires ne sont jamais publiquement désignés. Clôture d'une aide annoncée avec préavis de 3 mois.</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== E7 : NOUVELLE SOLIDARITÉ ==================== -->
+      <section id="e-nouvelle" class="screen">
+        <div class="bg-fc-primary text-white px-5 pt-3 pb-4 rounded-b-3xl">
+          <div class="flex items-center gap-2">
+            <button onclick="go('e-tb')" class="text-white/80 text-lg">←</button>
+            <div>
+              <div class="text-[10px] uppercase tracking-widest text-fc-accent font-bold">Ouverture manuelle</div>
+              <h1 class="text-base font-bold">Nouvelle solidarité</h1>
+            </div>
+          </div>
+          <div class="flex items-center gap-1 mt-3 text-[9px] font-semibold">
+            <div class="flex-1 text-center"><div class="h-1 rounded-full bg-fc-accent mb-1"></div><span class="text-fc-accent">1 Nature</span></div>
+            <div class="flex-1 text-center"><div class="h-1 rounded-full bg-white/25 mb-1"></div><span class="text-white/60">2 Cible</span></div>
+            <div class="flex-1 text-center"><div class="h-1 rounded-full bg-white/25 mb-1"></div><span class="text-white/60">3 Collecte</span></div>
+            <div class="flex-1 text-center"><div class="h-1 rounded-full bg-white/25 mb-1"></div><span class="text-white/60">4 Validation</span></div>
+          </div>
+        </div>
+        <div class="px-4 mt-4 space-y-3">
+          <div class="text-[11px] font-bold text-fc-secondary">Quelle est la situation ?</div>
+          <div class="grid grid-cols-2 gap-2.5">
+            <div class="bg-white rounded-2xl shadow-sm p-3 border-2 border-transparent"><div class="text-lg">😞</div><div class="text-[11px] font-bold mt-1">Décès</div><div class="text-[9px] text-fc-muted">Auto via U2 · public</div></div>
+            <div class="bg-white rounded-2xl shadow-sm p-3 border-2 border-transparent"><div class="text-lg">🏥</div><div class="text-[11px] font-bold mt-1">Maladie grave</div><div class="text-[9px] text-fc-muted">Validation chef branche</div></div>
+            <div class="bg-white rounded-2xl shadow-sm p-3 border-2 border-transparent"><div class="text-lg">🚗</div><div class="text-[11px] font-bold mt-1">Accident</div><div class="text-[9px] text-fc-muted">Validation chef branche</div></div>
+            <div class="bg-white rounded-2xl shadow-sm p-3 border-2 border-transparent"><div class="text-lg">🔥</div><div class="text-[11px] font-bold mt-1">Sinistre</div><div class="text-[9px] text-fc-muted">Auto · public familial</div></div>
+            <div class="bg-fc-accent/15 border-2 border-fc-accent rounded-2xl p-3 col-span-2 flex items-center gap-3">
+              <div class="text-lg">🤝</div>
+              <div class="flex-1"><div class="text-[11px] font-bold">Difficultés particulières</div><div class="text-[9px] text-fc-muted">Manuel uniquement · 🔒 Confidentiel (médiation + conseil)</div></div>
+              <span class="text-fc-accent font-bold">✓</span>
+            </div>
+          </div>
+          <div class="bg-white rounded-2xl shadow-sm p-3.5">
+            <div class="text-[11px] font-bold mb-2">Bénéficiaire</div>
+            <div class="flex items-center gap-2 bg-fc-bg rounded-xl px-3 py-2.5 text-[11px] text-fc-muted">🔍 Rechercher un membre (registre U1)…</div>
+            <div class="flex items-center gap-2 mt-2 bg-fc-primary/5 rounded-xl px-3 py-2 text-[11px]"><span class="w-6 h-6 rounded-full bg-fc-accent/20 text-fc-primary flex items-center justify-center text-[8px] font-bold">SM</span><b>Sœur Marie-Claire</b><span class="text-[9px] text-fc-muted ml-auto">Branche Est · Membre direct</span></div>
+          </div>
+          <div class="bg-white rounded-2xl shadow-sm p-3.5">
+            <div class="text-[11px] font-bold mb-2">Paramètres de collecte</div>
+            <div class="flex justify-between text-[11px] py-1.5 border-b border-dashed border-gray-100"><span>Cible estimée</span><span class="font-bold text-fc-primary">350 000 FC</span></div>
+            <div class="flex justify-between text-[11px] py-1.5 border-b border-dashed border-gray-100"><span>Périmètre</span><span class="font-semibold">Branche Est</span></div>
+            <div class="flex justify-between text-[11px] py-1.5 border-b border-dashed border-gray-100"><span>Répartition</span><span class="font-semibold">Montant libre</span></div>
+            <div class="flex justify-between text-[11px] py-1.5"><span>Échéance</span><span class="font-semibold">30/11/2026</span></div>
+          </div>
+          <button class="w-full bg-fc-primary text-white rounded-2xl py-3.5 text-[12px] font-bold shadow-lg">Soumettre au comité médiation → Conseil</button>
+          <div class="text-[9px] text-fc-muted text-center leading-relaxed">Un dossier « difficultés particulières » reste confidentiel : visibilité limitée au comité médiation et au conseil. Déclenchement manuel = exception (règle : auto via U2).</div>
+        </div>
+      </section>
+
+      <!-- ==================== E8 : TRANSPARENCE & BILAN ==================== -->
+      <section id="e-bilan" class="screen">
+        <div class="bg-fc-primary text-white px-5 pt-3 pb-4 rounded-b-3xl">
+          <div class="text-[10px] uppercase tracking-widest text-fc-accent font-bold">Modules 4.5–4.6</div>
+          <h1 class="text-xl font-bold mt-0.5">Transparence & bilan</h1>
+          <div class="flex gap-2 mt-3">
+            <button class="px-3 py-1 rounded-full text-[10px] font-semibold chip-on border">Journal</button>
+            <button class="px-3 py-1 rounded-full text-[10px] font-semibold bg-white/10 border border-white/25">Équité</button>
+            <button class="px-3 py-1 rounded-full text-[10px] font-semibold bg-white/10 border border-white/25">Bilan annuel</button>
+          </div>
+        </div>
+        <div class="px-4 mt-4 space-y-3">
+          <!-- KPIs transparence -->
+          <div class="grid grid-cols-2 gap-2.5">
+            <div class="bg-white rounded-2xl shadow-sm p-3 text-center"><div class="text-lg font-bold text-fc-success">100%</div><div class="text-[9px] text-fc-muted">Dépenses justifiées 📄</div></div>
+            <div class="bg-white rounded-2xl shadow-sm p-3 text-center"><div class="text-lg font-bold text-fc-success">0</div><div class="text-[9px] text-fc-muted">Contestations 2026</div></div>
+          </div>
+          <!-- Journal immutable -->
+          <div class="bg-white rounded-2xl shadow-sm p-3.5">
+            <div class="flex items-center justify-between mb-1.5">
+              <div class="text-[10px] font-bold uppercase tracking-wide text-fc-muted">Journal immutable des transactions</div>
+              <span class="badge bg-fc-primary/10 text-fc-primary">🔗 Non modifiable</span>
+            </div>
+            <div class="space-y-1.5 text-[11px] font-mono">
+              <div class="flex justify-between py-1 border-b border-dashed border-gray-100"><span class="text-fc-success">+ 50 000</span><span class="text-fc-muted">#T-0412 · Abena B. · MoMo</span></div>
+              <div class="flex justify-between py-1 border-b border-dashed border-gray-100"><span class="text-fc-success">+ 100 000</span><span class="text-fc-muted">#T-0413 · D. K. · Carte</span></div>
+              <div class="flex justify-between py-1 border-b border-dashed border-gray-100"><span class="text-fc-danger">− 180 000</span><span class="text-fc-muted">#T-0414 · Pompes funèbres 📄</span></div>
+              <div class="flex justify-between py-1"><span class="text-fc-danger">− 45 000</span><span class="text-fc-muted">#T-0415 · Chambre mortuaire 📄</span></div>
+            </div>
+            <div class="text-[9px] text-fc-muted mt-2">Corrections uniquement par écriture compensatoire — jamais d'effacement. Consultation : conseil (complet), membres (leur périmètre).</div>
+          </div>
+          <!-- Équité par branche -->
+          <div class="bg-white rounded-2xl shadow-sm p-3.5">
+            <div class="text-[10px] font-bold uppercase tracking-wide text-fc-muted mb-2">Vue agrégée d'équité 🔒 (conseil + médiation)</div>
+            <div class="space-y-2 text-[10px]">
+              <div><div class="flex justify-between mb-0.5"><span>Nord (48 ad.)</span><span class="font-semibold">82% participation</span></div><div class="h-1.5 bg-gray-100 rounded-full"><div class="h-1.5 w-[82%] bg-fc-primary rounded-full"></div></div></div>
+              <div><div class="flex justify-between mb-0.5"><span>Sud (35 ad.)</span><span class="font-semibold">74%</span></div><div class="h-1.5 bg-gray-100 rounded-full"><div class="h-1.5 w-[74%] bg-fc-primary rounded-full"></div></div></div>
+              <div><div class="flex justify-between mb-0.5"><span>Est (22 ad.)</span><span class="font-semibold">69%</span></div><div class="h-1.5 bg-gray-100 rounded-full"><div class="h-1.5 w-[69%] bg-fc-primary rounded-full"></div></div></div>
+              <div><div class="flex justify-between mb-0.5"><span>Ouest (14 ad.) ⚠️</span><span class="font-semibold text-fc-urgent">41% · signal</span></div><div class="h-1.5 bg-gray-100 rounded-full"><div class="h-1.5 w-[41%] bg-fc-urgent rounded-full"></div></div></div>
+            </div>
+            <div class="text-[9px] text-fc-muted mt-2">Branche Ouest sous-contributive : proposition conseil → médiation avec chef de branche + plan de rattrapage étalé (jamais de stigmatisation).</div>
+          </div>
+          <!-- Barème gradué -->
+          <div class="bg-white rounded-2xl shadow-sm p-3.5">
+            <div class="text-[10px] font-bold uppercase tracking-wide text-fc-muted mb-1.5">Barème gradué — facteurs d'ajustement</div>
+            <div class="flex flex-wrap gap-1.5 text-[9px]">
+              <span class="badge bg-fc-bg text-fc-secondary">Génération active ×1,0</span>
+              <span class="badge bg-fc-bg text-fc-secondary">Jeunes actifs ×0,7</span>
+              <span class="badge bg-fc-bg text-fc-secondary">Retraités ×0,5</span>
+              <span class="badge bg-fc-bg text-fc-secondary">Diaspora ×1,5</span>
+              <span class="badge bg-fc-bg text-fc-secondary">Allié ×0,7</span>
+              <span class="badge bg-fc-success/10 text-fc-success">Exonérations ×0 🛡</span>
+            </div>
+          </div>
+          <!-- Bilan annuel -->
+          <div class="bg-fc-accent/10 border border-fc-accent/30 rounded-2xl p-3.5">
+            <div class="text-[11px] font-bold text-fc-body mb-1">📊 Bilan annuel 2026 (provisoire)</div>
+            <div class="grid grid-cols-3 gap-2 text-center text-[10px]">
+              <div class="bg-white rounded-xl py-2 shadow-sm"><div class="font-bold text-fc-primary text-[12px]">8 420 000</div>FC collectés</div>
+              <div class="bg-white rounded-xl py-2 shadow-sm"><div class="font-bold text-fc-primary text-[12px]">6 980 000</div>FC dépensés</div>
+              <div class="bg-white rounded-xl py-2 shadow-sm"><div class="font-bold text-fc-primary text-[12px]">9</div>dossiers traités</div>
+            </div>
+            <div class="text-[9px] text-fc-muted mt-2">Archivage vers U6 (Mémoire) : bilans, justificatifs, témoignages — transmission aux générations futures.</div>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /app -->
+
+    <!-- ============ BOTTOM TAB NAV ============ -->
+    <div class="absolute bottom-0 left-0 right-0 h-[72px] bg-white border-t border-gray-200 flex items-start pt-1.5 px-2 rounded-b-[38px]">
+      <button data-tab="e-tb" class="tabnav-item active flex-1 flex flex-col items-center gap-0.5 pt-1 text-fc-muted">
+        <span class="tn-icon text-lg">❤️</span><span class="tn-label text-[9px] font-medium">Accueil</span>
+      </button>
+      <button data-tab="e-cours" class="tabnav-item flex-1 flex flex-col items-center gap-0.5 pt-1 text-fc-muted">
+        <span class="tn-icon text-lg">🔥</span><span class="tn-label text-[9px] font-medium">En cours</span>
+      </button>
+      <button data-tab="e-aides" class="tabnav-item flex-1 flex flex-col items-center gap-0.5 pt-1 text-fc-muted">
+        <span class="tn-icon text-lg">🤲</span><span class="tn-label text-[9px] font-medium">Aides</span>
+      </button>
+      <button data-tab="e-bilan" class="tabnav-item flex-1 flex flex-col items-center gap-0.5 pt-1 text-fc-muted">
+        <span class="tn-icon text-lg">📊</span><span class="tn-label text-[9px] font-medium">Bilan</span>
+      </button>
+      <button data-tab="e-nouvelle" class="tabnav-item flex-1 flex flex-col items-center gap-0.5 pt-1 text-fc-muted">
+        <span class="tn-icon -mt-5 w-11 h-11 bg-fc-accent text-fc-primary rounded-full flex items-center justify-center text-xl shadow-lg border-4 border-fc-bg">＋</span>
+        <span class="tn-label text-[9px] font-medium">Nouvelle</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SIDE NAV (hors téléphone, pour le prototype) ============ -->
+<div class="hidden xl:flex flex-col gap-2 w-56">
+  <div class="text-[11px] font-bold uppercase tracking-widest text-fc-secondary mb-1">Écrans U3</div>
+  <button data-tab="e-tb" onclick="go('e-tb')" class="text-left px-3 py-2 rounded-xl bg-white shadow-sm text-[12px] font-semibold hover:bg-fc-accent/10">E1 · Tableau de bord ❤️</button>
+  <button data-tab="e-cours" onclick="go('e-cours')" class="text-left px-3 py-2 rounded-xl bg-white shadow-sm text-[12px] font-semibold hover:bg-fc-accent/10">E2 · Solidarités en cours 🔥</button>
+  <button data-tab="e-dossier" onclick="go('e-dossier')" class="text-left px-3 py-2 rounded-xl bg-white shadow-sm text-[12px] font-semibold hover:bg-fc-accent/10">E3 · Dossier décès 📁</button>
+  <button data-tab="e-maladie" onclick="go('e-maladie')" class="text-left px-3 py-2 rounded-xl bg-white shadow-sm text-[12px] font-semibold hover:bg-fc-accent/10">E4 · Suivi maladie 🏥</button>
+  <button data-tab="e-collecte" onclick="go('e-collecte')" class="text-left px-3 py-2 rounded-xl bg-white shadow-sm text-[12px] font-semibold hover:bg-fc-accent/10">E5 · Collecte en cours 💰</button>
+  <button data-tab="e-aides" onclick="go('e-aides')" class="text-left px-3 py-2 rounded-xl bg-white shadow-sm text-[12px] font-semibold hover:bg-fc-accent/10">E6 · Aides sociales 🤲</button>
+  <button data-tab="e-nouvelle" onclick="go('e-nouvelle')" class="text-left px-3 py-2 rounded-xl bg-white shadow-sm text-[12px] font-semibold hover:bg-fc-accent/10">E7 · Nouvelle solidarité ＋</button>
+  <button data-tab="e-bilan" onclick="go('e-bilan')" class="text-left px-3 py-2 rounded-xl bg-white shadow-sm text-[12px] font-semibold hover:bg-fc-accent/10">E8 · Transparence & bilan 📊</button>
+</div>
+
+<script>
+function go(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  const el=document.getElementById(id); if(el) el.classList.add('active');
+  document.getElementById('app').scrollTop=0;
+  document.querySelectorAll('.tabnav-item').forEach(t=>{
+    t.classList.toggle('active', t.dataset.tab===id);
+  });
+}
+document.querySelectorAll('.tabnav-item').forEach(t=> t.addEventListener('click', ()=>go(t.dataset.tab)));
+go('e-tb');
+</script>
+</body>
+</html>
