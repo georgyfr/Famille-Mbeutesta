@@ -738,3 +738,30 @@ Stage Summary:
 - Session permanente (60 j, cookie httpOnly) : l'app s'ouvre directement à chaque retour ; déconnexion volontaire seulement (Sécurité → Quitter) ; téléphone changé → même numéro → compte retrouvé
 - Anciens flux (code FC, OTP claim, PIN, biométrie, récupération) retirés du parcours ; les API correspondantes restent en place côté serveur pour une éventuelle réintégration
 - Build démo reproductible : bash scripts/build-cloudflare.sh puis wrangler pages deploy .next-demo
+
+---
+Task ID: 11
+Agent: Z.ai Code (orchestrateur)
+Task: Conception de l'application mobile (PWA installable + splash natif + invite d'installation) avec compatibilité navigateurs 2015 (Android 5/6, iOS 9, Chrome < 80)
+
+Work Log:
+- Constat : le bundle Next.js 16 / React 19 ne s'exécute pas sur iOS 9 / Android 5 (pas de modules ES, pas d'optional chaining, Proxy absent des vieux moteurs) → architecture « progressive enhancement » sur l'URL unique /
+- Browser gate ES5 (layout.tsx, 1er script du body) : détecte fetch/Promise/Symbol/Map/WeakMap/Proxy/globalThis/pushState + parse test optional chaining (new Function('a?.b')) et nullish (new Function('0??1')) → classe fc-modern/fc-legacy sur <html> + décision persistée en sessionStorage('fc_gate') ; hooks de test #fc-force-legacy / #fc-force-modern ; injecte /fc-lite.js via DOM (createElement+appendChild) uniquement en legacy (hors arbre React → zéro mismatch d'hydratation)
+- src/components/fc/legacy-app.tsx (nouveau, server component) : application « Lite » complète en HTML statique — header logo, 3 écrans d'inscription (numéro +237 formaté, notification simulée + 3 étapes de vérif appareil, prénom/nom), dashboard (accueil stats/raccourcis/annonce, alertes, sécurité/session), nav basse 3 onglets, toasts, badges ; CSS 2015-safe inline (pas de variables/grid/gap/sticky, flexbox -webkit-, box-sizing, fallback env(safe-area-inset), emojis comme icônes)
+- public/fc-lite.js (nouveau, ES5 strict) : session persistante fc_lite_session (auto-ouverture façon WhatsApp), séquence de vérification chronométrée (bulle push 0,5 s → étapes 1,2/1,7/2,7 s → profile 3,5 s), secours code manuel (comparaison exacte), centre d'alertes localStorage (bienvenue + session permanente + connexion appareil, badge, lecture auto à l'ouverture), toasts, déconnexion avec confirm(), chien de garde 800 ms (attribut data-lite-bound → ré-attachement si le sous-arbre #fc-legacy est recréé)
+- src/components/fc/main-app.tsx (nouveau, client) : Splash natif (logo pulsant + marque + spinner, min 700 ms), retrait de #fc-legacy quand gate=modern, effacement de React (style inline sur son propre nœud via rootRef) quand gate=legacy, bannière d'installation PWA (beforeinstallprompt → bouton Installer natif ; iOS → instructions « Partager → Sur l'écran d'accueil » ; dismiss mémorisé fc_install_dismissed)
+- src/app/page.tsx : converti en server component = <LegacyApp/> + <div class="fc-root"><MainApp/></div> + footer (fc-footer masqué en legacy) ; html.fc-modern #fc-legacy{display:none} / html.fc-legacy .fc-root,.fc-footer{display:none} dans le CSS inline du LegacyApp
+- Corrections en cours de vérification : (1) React 19 réinitialise le className de <html> à l'hydratation → décision gate dupliquée en sessionStorage ; (2) <script src> dans le JSX créait un mismatch d'hydratation → injection déplacée dans le gate ; (3) chien de garde ajouté contre la recréation DOM par re-render
+- Vérifié Agent Browser mobile 390×844 : MODERNE = splash → inscription Blaise Mbeutetsa (677110022) → dashboard + nav basse + bannière Installer + toast bienvenue ; reload → dashboard direct ; numéro connu → « Content de vous revoir » sans re-saisie du nom ; LEGACY (#fc-force-legacy) = inscription Sylvie Mbeutetsa puis Jean Pivot (691000999) → dashboard Lite + toast + badge 3 ; onglets/raccourcis/toasts/centre d'alertes OK ; déconnexion confirmée → réinscription ; reload → session auto-ouverte ; retour moderne propre
+- Captures : shots/modern-mobile-dashboard.png, modern-mobile-alertes.png, modern-desktop-auth.png, modern-desktop-dashboard.png, legacy-mobile-dashboard.png, legacy-mobile-inscription.png, legacy-mobile-accueil.png, legacy-mobile-session.png
+- Lint : 0 erreur dans src/ (seuls les artefacts minifiés préexistants .next-demo/ remontent) ; fc-lite.js contrôlé ES5 (regex interdits : flèches, let/const, backticks, class, for-of, spread, async, find/includes, Object.assign, closest — seuls les commentaires mentionnent ces mots)
+- dev.log : aucune erreur serveur, API 200, compilation propre ; chargement moderne final : 0 erreur console, 0 mismatch
+
+Stage Summary:
+- L'application mobile Famille.Mbeutetsa est opérationnelle sur TOUS les téléphones de 2015 à aujourd'hui, sur une seule URL /
+  * Téléphones modernes : PWA installable (manifest + icônes + SW push déjà en place) avec splash natif, invite d'installation Android/iOS, nav basse, notifications
+  * Téléphones 2015 (Android 5/6 · Chrome 40-79 · iOS 9) : bascule automatique vers la version Lite ES5 (même design vert/or/crème, même parcours WhatsApp : numéro → notification → vérif appareil → nom → tableau de bord, session permanente, déconnexion volontaire uniquement)
+- La détection est transparente : le gate ES5 tranche avant le premier rendu (aucun flash), décision persistée en sessionStorage, hooks #fc-force-legacy/#fc-force-modern pour la QA
+- Changement de téléphone : réinsérer le même numéro → compte retrouvé (vérifié) ; nouveau numéro pour un même accès : reporté (décision utilisateur antérieure)
+- Limites connues : en mode Lite l'inscription est simulée localement (pas d'API sur les vieux navigateurs) ; artefact console bénin si l'on navigue du hash legacy vers moderne sans reload (QA uniquement, impossible en usage réel)
+- Prochaines étapes possibles : U1 registre + U4 finances sur le design system, déploiement de la version fonctionnelle (Workers + D1), test réel sur un téléphone Android 5/iOS 9 physique
