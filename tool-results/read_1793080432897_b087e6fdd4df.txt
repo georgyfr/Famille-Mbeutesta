@@ -1,0 +1,452 @@
+     1→# FamilleConnect — Architecture Technique Appliquée
+     2→
+     3→**Front-end, Back-end, API, Base de données, Hébergement**
+     4→
+     5→| Document | Architecture technique appliquée de la plateforme FamilleConnect |
+     6→|---|---|
+     7→| Version | 1.0 |
+     8→| Date | Septembre 2026 |
+     9→| Statut | Pour validation |
+    10→| Audience | Équipe technique, CTO, comité de pilotage, partenaires techniques |
+    11→| Prérequis | Spécifications fonctionnelles des 7 univers, Document de synthèse global |
+    12→
+    13→---
+    14→
+    15→## Synthèse exécutive
+    16→
+    17→Ce document définit l'architecture technique appliquée de la plateforme FamilleConnect, couvrant les cinq piliers fondamentaux : front-end mobile, front-end web, back-end, API et base de données, hébergement. Il traduit les spécifications fonctionnelles des 7 univers en choix techniques concrets, adaptés aux réalités camerounaises et africaines, et fournit une feuille de route d'implémentation claire.
+    18→
+    19→L'architecture proposée repose sur cinq principes directeurs qui répondent aux contraintes du contexte : **offline-first** (connectivité intermittente en zones rurales), **security by design** (données sensibles familiales), **scalabilité maîtrisée** (de 5 familles pilotes à plusieurs milliers), **coût optimisé** (modèle économique accessible), et **interopérabilité native** (Mobile Money, calendriers externes, multi-appareils). Ces principes guident tous les choix techniques, depuis le framework front-end jusqu'à la stratégie d'hébergement.
+    20→
+    21→La stack technique recommandée privilégie la maturité, la communauté, et la maintenabilité : React Native pour le mobile (code partagé iOS/Android, écosystème riche), Next.js 16 pour le web (SSR/SSG, performance, SEO), NestJS pour le back-end (architecture modulaire, TypeScript natif), PostgreSQL pour la base principale (ACID, immutabilité, maturité), et un hébergement cloud multi-zones avec CDN pour la diaspora. Les coûts d'infrastructure sont estimés à 2-3 millions FCFA par mois en régime de croisière (1 000 familles), intégrables au modèle économique.
+    22→
+    23→---
+    24→
+    25→## 1. Vue d'ensemble de l'architecture
+    26→
+    27→### 1.1 Principes directeurs
+    28→
+    29→L'architecture technique de FamilleConnect est guidée par cinq principes directeurs, qui découlent directement des contraintes du contexte camerounais et des exigences fonctionnelles des 7 univers.
+    30→
+    31→**Offline-first.** La connectivité Internet n'est pas garantie au Cameroun, notamment en zones rurales (villages d'origine, congrès en brousse). L'application doit fonctionner en mode hors-ligne pour les opérations critiques (consultation du registre, saisie d'un paiement en espèces, consultation des soldes) et synchroniser automatiquement au retour de la connexion. Ce principe influence tous les choix techniques : base de données locale sur mobile, synchronisation différée, gestion des conflits.
+    32→
+    33→**Security by design.** FamilleConnect gère des données sensibles : santé, précarité, conflits familiaux, testaments, finances. La sécurité n'est pas une couche ajoutée, mais un principe structurant : chiffrement au repos et en transit, authentification à deux facteurs, journalisation immuable, principe du moindre privilège, audits réguliers. Ce principe est non-négociable, car une faille pourrait discréditer définitivement la plateforme.
+    34→
+    35→**Scalabilité maîtrisée.** La plateforme doit passer de 5 familles pilotes (1 500 membres) à plusieurs milliers de familles (plusieurs centaines de milliers de membres) sans rupture architecturale. L'approche retenue est la scalabilité horizontale (microservices modérés, base de données avec réplica en lecture, cache distribué) plutôt que verticale (serveur plus gros). Cette approche permet une croissance progressive des coûts, alignée sur les revenus.
+    36→
+    37→**Coût optimisé.** Le modèle économique repose sur des abonnements familiaux modiques (10 000 à 25 000 FCFA/an). L'infrastructure ne peut pas être luxueuse. Les choix techniques privilégient les solutions open-source, les services managés économiques, et l'optimisation continue des coûts. Un membre coûte moins de 500 FCFA par mois en infrastructure à maturité.
+    38→
+    39→**Interopérabilité native.** FamilleConnect ne vit pas en isolation : elle s'intègre avec MTN MoMo, Orange Money, Google Calendar, Apple Calendar, Outlook, des services de visioconférence, des passerelles SMS, des services de push. Ces intégrations sont des facteurs critiques d'adoption, et l'architecture les facilite par des interfaces claires, des webhooks, et des adapters dédiés.
+    40→
+    41→### 1.2 Schéma global de l'architecture
+    42→
+    43→```
+    44→┌──────────────────────────────────────────────────────────────────┐
+    45→│                    FAMILLECONNECT — ARCHITECTURE                  │
+    46→├──────────────────────────────────────────────────────────────────┤
+    47→│                                                                    │
+    48→│  ┌─────────────────────────────────────────────────────────────┐  │
+    49→│  │  CLIENTS (multi-appareils)                                   │  │
+    50→│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │  │
+    51→│  │  │ Mobile iOS   │  │ Mobile And.  │  │ Web (PWA)    │      │  │
+    52→│  │  │ React Native │  │ React Native │  │ Next.js 16   │      │  │
+    53→│  │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘      │  │
+    54→│  │         │  SQLite local    │                 │                │  │
+    55→│  │         │  (offline-first) │                 │                │  │
+    56→│  │         └─────────┬────────┘                 │                │  │
+    57→│  └───────────────────┼──────────────────────────┼───────────────┘  │
+    58→│                      │                            │                  │
+    59→│                      ▼                            ▼                  │
+    60→│  ┌─────────────────────────────────────────────────────────────┐  │
+    61→│  │  COUCHE API (gateway + auth + rate limiting)                 │  │
+    62→│  │  ┌────────┐  ┌──────────┐  ┌────────────┐  ┌──────────┐    │  │
+    63→│  │  │ REST   │  │ GraphQL  │  │ WebSocket  │  │ Webhooks │    │  │
+    64→│  │  │ (CRUD) │  │ (queries)│  │ (real-time)│  │ (MM API) │    │  │
+    65→│  │  └────────┘  └──────────┘  └────────────┘  └──────────┘    │  │
+    66→│  └─────────────────────────────────────────────────────────────┘  │
+    67→│                      │                                              │
+    68→│                      ▼                                              │
+    69→│  ┌─────────────────────────────────────────────────────────────┐  │
+    70→│  │  BACK-END (NestJS microservices modérés)                     │  │
+    71→│  │  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐    │  │
+    72→│  │  │ U1   │ │ U2   │ │ U3   │ │ U4   │ │ U5   │ │ U6   │    │  │
+    73→│  │  │Famille│ │Vie   │ │Solid.│ │Finan.│ │Gouvn.│ │Mémoire│   │  │
+    74→│  │  └──────┘ └──────┘ └──────┘ └──────┘ └──────┘ └──────┘    │  │
+    75→│  │  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐              │  │
+    76→│  │  │ U7   │ │Auth  │ │Notif.│ │Audit │ │Workfl│              │  │
+    77→│  │  │Réseau│ │Svc   │ │Engine│ │Svc   │ │Engine│              │  │
+    78→│  │  └──────┘ └──────┘ └──────┘ └──────┘ └──────┘              │  │
+    79→│  └─────────────────────────────────────────────────────────────┘  │
+    80→│                      │                                              │
+    81→│                      ▼                                              │
+    82→│  ┌─────────────────────────────────────────────────────────────┐  │
+    83→│  │  DONNÉES                                                      │  │
+    84→│  │  ┌─────────────┐ ┌───────┐ ┌────────────┐ ┌──────────────┐  │  │
+    85→│  │  │ PostgreSQL  │ │ Redis │ │ Elastic.   │ │ Stockage S3  │  │  │
+    86→│  │  │ (principal) │ │(cache)│ │ (search)   │ │ (fichiers)   │  │  │
+    87→│  │  └─────────────┘ └───────┘ └────────────┘ └──────────────┘  │  │
+    88→│  └─────────────────────────────────────────────────────────────┘  │
+    89→│                                                                    │
+    90→│  ┌─────────────────────────────────────────────────────────────┐  │
+    91→│  │  INTÉGRATIONS EXTERNES                                       │  │
+    92→│  │  MTN MoMo · Orange Money · Google/Apple/Outlook · SMS · Push│  │
+    93→│  └─────────────────────────────────────────────────────────────┘  │
+    94→└──────────────────────────────────────────────────────────────────┘
+    95→```
+    96→
+    97→### 1.3 Flux principaux
+    98→
+    99→Trois flux principaux structurent l'architecture :
+   100→
+   101→- **Flux synchrone** (REST/GraphQL) — pour les opérations CRUD classiques (consultation du registre, mise à jour d'une fiche, soumission d'un vote). Le client appelle l'API, qui interroge le back-end, qui lit ou écrit dans PostgreSQL. Latence cible : < 500 ms pour 95 % des requêtes.
+   102→- **Flux temps réel** (WebSocket) — pour les interactions en direct (chat U7, votes en session U5, suivi temps réel d'une collecte U3). Le client ouvre une connexion WebSocket persistante, le serveur pousse les mises à jour. Latence cible : < 2 secondes pour 95 % des messages.
+   103→- **Flux asynchrone** (queues + webhooks) — pour les opérations longues ou externes (paiement Mobile Money, envoi de notifications push, génération de rapports, archivage U6). Le client déclenche, le back-end traite en arrière-plan, et notifie le client à la fin. Latence variable selon l'opération.
+   104→
+   105→---
+   106→
+   107→## 2. Contraintes techniques du contexte camerounais
+   108→
+   109→### 2.1 Connectivité intermittente
+   110→
+   111→La connectivité Internet au Cameroun est inégale : excellente à Yaoundé et Douala, intermittente en zones rurales, quasi inexistante dans certains villages. Les opérateurs (Orange, MTN, Camtel) offrent une couverture 3G/4G variable, et les coupures ne sont pas rares. Pour FamilleConnect, cela signifie :
+   112→
+   113→- L'application mobile doit fonctionner hors-ligne pour les opérations critiques (consultation du registre, saisie d'un paiement en espèces, consultation des soldes).
+   114→- La synchronisation doit être automatique et tolérante aux coupures (reprise là où elle s'est arrêtée).
+   115→- Les conflits de synchronisation doivent être gérés (par exemple, deux modifications concurrentes sur la même fiche).
+   116→- Les congrès en zone rurale doivent pouvoir utiliser l'application en réseau local, avec synchronisation différée.
+   117→
+   118→### 2.2 Mobile Money dominant
+   119→
+   120→Au Cameroun, le Mobile Money (MTN MoMo, Orange Money) est le canal de paiement dominant pour les transactions de la vie courante. Les cartes bancaires sont rares, les virements bancaires réservés aux entreprises et aux montants importants. Pour FamilleConnect, cela signifie :
+   121→
+   122→- L'intégration des API MTN MoMo et Orange Money est critique, pas optionnelle.
+   123→- L'UX de paiement doit intégrer nativement le parcours Mobile Money (USSD, popup opérateur, confirmation).
+   124→- Le rapprochement automatique entre paiements Mobile Money et écritures comptables est essentiel pour la transparence U4.
+   125→- Le mode espèces doit être prévu pour les membres sans Mobile Money, avec saisie manuelle par le trésorier.
+   126→
+   127→### 2.3 Multi-fuseaux diaspora
+   128→
+   129→Les grandes familles camerounaises ont une diaspora répartie sur plusieurs fuseaux horaires : Europe (UTC+1/+2), Amérique du Nord (UTC-5 à -8), Asie (UTC+7 à +9). Pour FamilleConnect, cela signifie :
+   130→
+   131→- Toutes les horaires stockées en UTC, converties en heure locale à l'affichage.
+   132→- Le moteur de notifications doit calculer l'heure locale de chaque destinataire à partir de son profil U1.
+   133→- Les heures de repos sont personnalisables par membre (par défaut 22h-7h en heure locale).
+   134→- Les votes en session (U5) et les congrès hybrides (U2) doivent gérer des participants dans des fuseaux différents, avec une fenêtre de vote synchronisée.
+   135→
+   136→### 2.4 Coût et pouvoir d'achat
+   137→
+   138→Le modèle économique de FamilleConnect repose sur des abonnements familiaux modiques (10 000 à 25 000 FCFA/an). L'infrastructure ne peut pas représenter un coût élevé par membre. Pour FamilleConnect, cela signifie :
+   139→
+   140→- Privilégier les solutions open-source (PostgreSQL, Redis, NestJS) aux solutions propriétaires payantes.
+   141→- Utiliser des services managés économiques (Amazon RDS, DigitalOcean, Hetzner) plutôt que des infrastructures premium.
+   142→- Optimiser en continu les coûts de stockage (compression, lifecycle, archive froide).
+   143→- Viser un coût d'infrastructure < 500 FCFA par membre et par mois à maturité.
+   144→
+   145→### 2.5 Données sensibles et réglementation
+   146→
+   147→FamilleConnect gère des données particulièrement sensibles : santé, précarité, conflits familiaux, testaments, finances. La réglementation camerounaise (loi n° 2010/012 sur la cybercriminalité) et les évolutions réglementaires OHADA/CEMAC imposent des obligations. Pour FamilleConnect, cela signifie :
+   148→
+   149→- Chiffrement au repos et en transit pour toutes les données.
+   150→- Journalisation immuable des actions sensibles (consultation de dossiers sensibles, validation de dépenses, modifications de rôles).
+   151→- Conservation longue durée des archives (U6) avec traçabilité.
+   152→- Hébergement envisageable au Cameroun ou en zone CEMAC pour la souveraineté des données, à étudier en Phase 2.
+   153→- Conformité aux principes RGPD-like (droit d'accès, rectification, effacement partiel, portabilité).
+   154→
+   155→---
+   156→
+   157→## 3. Front-end mobile
+   158→
+   159→### 3.1 Choix du framework : React Native
+   160→
+   161→Le front-end mobile est développé en **React Native**, le framework cross-platform de Meta. Ce choix se justifie par plusieurs facteurs :
+   162→
+   163→- **Code partagé iOS/Android** — un seul codebase pour les deux plateformes, ce qui réduit les coûts de développement et de maintenance de moitié par rapport à un développement natif double.
+   164→- **Écosystème mature** — React Native est utilisé par Instagram, Facebook, Shopify, Discord, et de nombreuses applications de production. La communauté est vaste, les bibliothèques nombreuses, les retours d'expérience documentés.
+   165→- **TypeScript natif** — React Native supporte TypeScript de première classe, ce qui permet un typage strict et une détection des erreurs à la compilation.
+   166→- **Hot reload** — le développement est rapide grâce au hot reload, qui affiche les modifications instantanément sans recompilation.
+   167→- **Performance suffisante** — pour une application de gestion comme FamilleConnect (pas de jeux, pas de calculs intensifs), la performance de React Native est largement suffisante.
+   168→- **Recrutement local** — la communauté React Native est présente au Cameroun, ce qui facilite le recrutement de développeurs.
+   169→
+   170→Les alternatives envisagées (Flutter, native iOS+Android, Ionic) ont été écartées : Flutter pour la taille de l'écosystème encore en croissance, natif pour le coût double, Ionic pour la performance en mode hors-ligne.
+   171→
+   172→### 3.2 Architecture offline-first
+   173→
+   174→L'architecture offline-first est le pilier du front-end mobile. Elle repose sur quatre composants :
+   175→
+   176→- **Base de données locale SQLite** — chaque appareil dispose d'une base SQLite locale qui réplique un sous-ensemble des données du serveur (registre familial, soldes, prochains événements, conversations en cours). Cette base permet la consultation et la saisie hors-ligne.
+   177→- **Moteur de synchronisation** — un moteur dédié gère la synchronisation entre la base locale et le serveur. Il détecte les modifications locales, les envoie au serveur dès que la connexion est disponible, et récupère les modifications distantes. Il gère les conflits (dernière modification gagne, ou résolution manuelle pour les cas complexes).
+   178→- **File d'attente des actions** — les actions sensibles (paiement, vote, validation) sont placées dans une file d'attente persistante, et exécutées dès que la connexion est disponible. Le membre reçoit une confirmation visuelle (« En attente de synchronisation ») puis une confirmation définitive (« Synchronisé »).
+   179→- **Cache stratégique** — les données fréquemment consultées (sa propre fiche, ses cotisations, ses notifications) sont mises en cache de manière agressive, pour une consultation instantanée même hors-ligne.
+   180→
+   181→### 3.3 Gestion des notifications push
+   182→
+   183→Les notifications push sont gérées par les services natifs : **Firebase Cloud Messaging (FCM)** pour Android, **Apple Push Notification service (APNs)** pour iOS. React Native s'interface avec ces services via des bibliothèques dédiées (react-native-firebase, react-native-push-notification).
+   184→
+   185→Le flux de notification push est le suivant :
+   186→
+   187→1. Le back-end déclenche une notification via le moteur de notifications.
+   188→2. Le moteur appelle FCM/APNs avec le jeton de l'appareil destinataire.
+   189→3. FCM/APNs délivre la notification à l'appareil.
+   190→4. Si l'application est en arrière-plan, la notification s'affiche dans le centre de notifications.
+   191→5. Si l'application est au premier plan, la notification est traitée en interne et affichée dans l'UI.
+   192→
+   193→Les notifications silencieuses (pour réveiller l'application et déclencher une synchronisation) sont également utilisées, avec parcimonie pour préserver la batterie.
+   194→
+   195→### 3.4 Accessibilité et multi-langue
+   196→
+   197→L'application mobile est conçue pour être accessible à des membres dont la maîtrise du numérique varie, et dont la langue maternelle peut ne pas être le français :
+   198→
+   199→- **Interface en gros caractères** — option pour les membres âgés, avec tailles de police ajustables.
+   200→- **Navigation simplifiée** — maximum 3 taps pour atteindre une information clé.
+   201→- **Notifications vocales** — pour les patriarches et membres âgés, lecture vocale des annonces critiques via synthèse vocale.
+   202→- **Multi-langue** — français (par défaut), anglais, et à terme langues locales (medumba, fe'fe', ghomala', ewondo, duala). L'architecture i18n est en place dès le départ, même si les traductions locales seront ajoutées progressivement.
+   203→- **Mode sombre** — pour économiser la batterie et réduire la fatigue oculaire.
+   204→
+   205→### 3.5 Sécurité mobile
+   206→
+   207→La sécurité mobile repose sur :
+   208→
+   209→- **Authentification biométrique** — Face ID / Touch ID pour le déverrouillage de l'application, en complément du mot de passe.
+   210→- **Chiffrement local** — la base SQLite locale est chiffrée (SQLCipher), pour protéger les données en cas de perte ou de vol de l'appareil.
+   211→- **Jeton à courte durée** — le jeton d'authentification a une durée de validité courte (1 heure), avec refresh automatique, et est révoqué en cas de déconnexion.
+   212→- **Effacement à distance** — en cas de perte de l'appareil, le membre peut révoquer tous ses jetons depuis le web, ce qui empêche l'accès aux données locales (qui restent chiffrées sans la clé).
+   213→
+   214→### 3.6 Distribution et mises à jour
+   215→
+   216→- **Android** — distribution via Google Play Store et, en complément, via téléchargement direct (APK) pour les appareils sans Google Play (fréquents au Cameroun).
+   217→- **iOS** — distribution via Apple App Store, avec revue Apple standard.
+   218→- **Mises à jour** — CodePush (Microsoft App Center) pour les mises à jour JavaScript (sans repasser par les stores), mises à jour natives via les stores pour les modifications de code natif.
+   219→- **Versioning** — semver, avec politique de support des N-2 versions (les 3 dernières versions mineures sont supportées).
+   220→
+   221→---
+   222→
+   223→## 4. Front-end web
+   224→
+   225→### 4.1 Choix du framework : Next.js 16
+   226→
+   227→Le front-end web est développé en **Next.js 16** (App Router), le framework React de Vercel. Ce choix se justifie par :
+   228→
+   229→- **Server-Side Rendering (SSR) et Static Site Generation (SSG)** — pour des performances optimales, notamment pour la diaspora qui peut avoir une connexion faible.
+   230→- **App Router** — architecture moderne avec Server Components, Streaming, et Suspense.
+   231→- **TypeScript natif** — cohérence avec le mobile React Native et le back-end NestJS.
+   232→- **Écosystème** — Vercel pour l'hébergement (optionnel), mais surtout écosystème React complet.
+   233→- **SEO** — bien que FamilleConnect ne soit pas une application publique, le SEO peut être utile pour les pages publiques (landing, blog, documentation).
+   234→- **PWA** — Next.js supporte nativement les Progressive Web Apps, ce qui permet une expérience hors-ligne légère sur navigateur.
+   235→
+   236→### 4.2 Architecture web
+   237→
+   238→L'architecture web Next.js suit les bonnes pratiques modernes :
+   239→
+   240→- **App Router** avec dossiers `app/` pour le routage, layouts imbriqués, et Server Components par défaut.
+   241→- **Server Components** pour les pages qui n'ont pas besoin d'interactivité (consultation de registre, lecture d'albums), réduisant le JavaScript envoyé au client.
+   242→- **Client Components** pour les interactions (formulaires, votes, messagerie), avec hydration sélective.
+   243→- **Streaming** avec Suspense pour les pages longues à charger (albums photo, archives U6), affichant progressivement le contenu.
+   244→- **API Routes** pour les endpoints légers (webhooks Mobile Money, callbacks OAuth), délégués au back-end NestJS pour la logique métier.
+   245→
+   246→### 4.3 Mode hors-ligne léger (PWA)
+   247→
+   248→Le web ne peut pas offrir un mode hors-ligne aussi riche que le mobile (pas de base SQLite locale), mais il peut offrir un mode hors-ligne léger via PWA :
+   249→
+   250→- **Service Worker** — mise en cache des assets statiques (CSS, JS, images) pour un chargement rapide même hors-ligne.
+   251→- **Cache API** — mise en cache des réponses API pour consultation hors-ligne (dernière valeur connue).
+   252→- **Background Sync** — file d'attente des actions effectuées hors-ligne, synchronisées au retour de la connexion.
+   253→- **Installable** — l'utilisateur peut installer l'application web sur son écran d'accueil, pour une expérience proche du natif.
+   254→
+   255→Ce mode PWA est particulièrement utile pour la diaspora qui préfère le web au mobile, et pour les membres qui utilisent un ordinateur.
+   256→
+   257→### 4.4 Optimisation diaspora
+   258→
+   259→La diaspora est un public important, avec des contraintes spécifiques :
+   260→
+   261→- **Réseau variable** — la diaspora peut avoir une excellente connexion (Europe) ou une connexion limitée (certains pays). L'application web doit être optimisée pour tous les profils.
+   262→- **Latence** — la diaspora est éloignée des serveurs (potentiellement hébergés en Afrique). L'utilisation d'un CDN mondial (Cloudflare, AWS CloudFront) réduit la latence.
+   263→- **Multi-langue** — la diaspora peut préférer l'anglais ou la langue du pays d'accueil, en complément du français.
+   264→- **Fuseaux horaires** — toutes les heures affichées en heure locale du navigateur, calculée à partir du fuseau du membre.
+   265→
+   266→### 4.5 Accessibilité web
+   267→
+   268→L'accessibilité web suit les standards WCAG 2.1 AA :
+   269→
+   270→- **Sémantique HTML** — utilisation correcte des balises (header, nav, main, article, aside, footer) pour les lecteurs d'écran.
+   271→- **Contrastes** — respect des ratios de contraste pour la lisibilité (texte sur fond, boutons).
+   272→- **Navigation au clavier** — toutes les actions atteignables au clavier, avec focus visible.
+   273→- **Tailles de police** — tailles relatives (rem, em) pour le zoom utilisateur.
+   274→- **ARIA** — attributs ARIA pour les composants complexes (modales, menus déroulants, onglets).
+   275→
+   276→---
+   277→
+   278→## 5. Back-end
+   279→
+   280→### 5.1 Choix du framework : NestJS
+   281→
+   282→Le back-end est développé en **NestJS**, le framework Node.js/TypeScript inspiré d'Angular. Ce choix se justifie par :
+   283→
+   284→- **Architecture modulaire** — NestJS encourage une organisation en modules, parfaitement adaptée à la séparation des 7 univers. Chaque univers est un module dédié, avec ses contrôleurs, services, et repositories.
+   285→- **TypeScript natif** — typage strict, décorateurs, injection de dépendances, cohérence avec le front-end.
+   286→- **Écosystème mature** — NestJS est utilisé par de nombreuses entreprises (Roche, Adidas, Société Générale), avec une documentation riche et une communauté active.
+   287→- **Out-of-the-box** — NestJS fournit des solutions pour l'authentification, la validation, la documentation API (Swagger), les tests, le logging, ce qui accélère le développement.
+   288→- **Microservices-ready** — NestJS supporte nativement les microservices (TCP, Redis, Kafka, gRPC), ce qui permet une évolution progressive vers une architecture microservices si le monolithe atteint ses limites.
+   289→
+   290→### 5.2 Architecture en microservices modérés
+   291→
+   292→Plutôt qu'un monolithe strict ou des microservices complets, FamilleConnect adopte une **architecture en microservices modérés** : un seul déploiement (monolithe), mais une organisation interne en modules fortement découplés, prêts à être extraits en microservices si le besoin s'en fait sentir.
+   293→
+   294→Les modules métiers correspondent aux 7 univers :
+   295→
+   296→- **U1 Famille Module** — gestion du registre, de l'arbre, des branches, des rôles.
+   297→- **U2 Vie Familiale Module** — gestion des événements, du calendrier, du moteur workflow.
+   298→- **U3 Solidarité Module** — gestion des dossiers de solidarité, des collectes, du suivi.
+   299→- **U4 Finances Module** — gestion de la caisse, des cotisations, de la comptabilité, des paiements Mobile Money.
+   300→- **U5 Gouvernance Module** — gestion des votes, des comités, des élections, des PV.
+   301→- **U6 Mémoire Module** — gestion des archives, des albums, des interviews, des traditions.
+   302→- **U7 Réseau Module** — gestion des compétences, de l'entraide, du mentorat, de la diaspora.
+   303→
+   304→Les modules transverses (qui ne sont pas rattachés à un univers mais servent tous) :
+   305→
+   306→- **Auth Service** — authentification, autorisation, gestion des jetons, 2FA.
+   307→- **Notification Engine** — moteur de notifications multi-canal, anti-saturation, préférences.
+   308→- **Workflow Engine** — moteur de workflows configurable, utilisé principalement par U2.
+   309→- **Audit Service** — journalisation immuable des actions sensibles.
+   310→- **File Storage Service** — gestion des fichiers (photos, documents, vidéos), délégation au stockage S3.
+   311→- **Search Service** — interface avec Elasticsearch pour la recherche full-text.
+   312→
+   313→### 5.3 Workflow Engine
+   314→
+   315→Le Workflow Engine est un composant critique, utilisé principalement par l'Univers 2 (moteur événementiel automatisé). Il est responsable de l'exécution des workflows configurables (décès, mariage, congrès, etc.), avec leurs étapes, leurs déclencheurs, et leurs critères de complétion.
+   316→
+   317→Le moteur implémente :
+   318→
+   319→- **Définition des workflows** — en configuration (YAML ou JSON), avec étapes, déclencheurs, responsables, critères de complétion.
+   320→- **Instances de workflows** — chaque déclenchement crée une instance, suivie en base de données.
+   321→- **Exécution des étapes** — le moteur exécute les étapes selon les déclencheurs, en notifiant les responsables, en surveillant les critères, et en passant à l'étape suivante.
+   322→- **Gestion des retards** — le moteur détecte les retards (J+N sans action) et déclenche les relances.
+   323→- **Audit** — toutes les actions du moteur sont journalisées, pour audit et optimisation.
+   324→
+   325→Le Workflow Engine est conçu pour être configurable sans modification de code : un administrateur (patriarche, conseil) peut modifier un workflow via une interface dédiée, et le moteur exécute la nouvelle version.
+   326→
+   327→### 5.4 Notification Engine
+   328→
+   329→Le Notification Engine est le composant qui implémente le catalogue des 121 notifications (voir document dédié). Il reçoit les événements déclencheurs depuis les modules métiers, évalue la priorité, le canal, le ciblage, et l'anti-saturation, puis envoie la notification via le canal approprié.
+   330→
+   331→Le moteur implémente :
+   332→
+   333→- **Catalogue des notifications** — défini en configuration, avec déclencheur, canal, priorité, destinataires, texte type.
+   334→- **Évaluation de la priorité** — chaque notification a un niveau (Critique, Urgent, Standard, Information, Silencieux) qui détermine son comportement.
+   335→- **Ciblage** — calcul des destinataires à partir du périmètre (branche, génération, diaspora, rôle).
+   336→- **Respect des fuseaux horaires** — calcul de l'heure locale de chaque destinataire, diffraction si hors heures de repos.
+   337→- **Anti-saturation** — plafonds quotidiens et hebdomadaires, digests, regroupement.
+   338→- **Multi-canal** — push (FCM/APNs), SMS (passerelle), vocal (service de synthèse vocale), e-mail (SMTP).
+   339→- **Journalisation** — toutes les notifications envoyées sont journalisées pour audit et optimisation.
+   340→
+   341→### 5.5 Auth Service
+   342→
+   343→L'Auth Service gère l'authentification et l'autorisation :
+   344→
+   345→- **Authentification** — par mot de passe + 2FA (SMS OTP) pour les opérations sensibles. Possibilité d'authentification biométrique côté client.
+   346→- **Jetons JWT** — jetons d'accès à courte durée (1 heure), jetons de refresh à durée moyenne (30 jours), révocables.
+   347→- **RBAC** — Role-Based Access Control, avec 5 rôles principaux (patriarche, conseil, chef de branche, membre adulte, membre junior) et permissions par univers.
+   348→- **Multi-appareils** — un membre peut avoir plusieurs appareils connectés, avec gestion centralisée et révocation.
+   349→- **OAuth** — possibilité de se connecter avec Google ou Apple (pour la diaspora), en complément du compte FamilleConnect.
+   350→
+   351→---
+   352→
+   353→## 6. API et interfaces
+   354→
+   355→### 6.1 Trois types d'API
+   356→
+   357→FamilleConnect expose trois types d'API, adaptés à différents besoins :
+   358→
+   359→- **REST API** — pour les opérations CRUD classiques (consultation, création, modification, suppression). Format JSON, norme OpenAPI 3.0 pour la documentation.
+   360→- **GraphQL API** — pour les requêtes complexes (arbre généalogique, recherche multi-critères, agrégations). Permet au client de demander exactement les champs dont il a besoin, évitant le sur-fetching et le sous-fetching.
+   361→- **WebSocket API** — pour le temps réel (messagerie U7, votes en session U5, suivi temps réel d'une collecte U3, notifications push en direct).
+   362→
+   363→### 6.2 REST API
+   364→
+   365→La REST API est l'interface principale pour les opérations CRUD. Elle suit les conventions REST standard :
+   366→
+   367→- **Verbes HTTP** — GET (lecture), POST (création), PUT/PATCH (modification), DELETE (suppression logique).
+   368→- **Ressources** — organisées par univers (`/api/v1/famille/membres`, `/api/v1/finances/cotisations`, etc.).
+   369→- **Versioning** — préfixe `/api/v1/`, avec stratégie de dépréciation pour les évolutions majeures.
+   370→- **Pagination** — pagination par curseur pour les grandes listes, avec métadonnées (`total`, `hasNext`, `cursor`).
+   371→- **Filtrage et tri** — paramètres de query string (`?branche=nord&statut=actif&sort=-dateCreation`).
+   372→- **Erreurs** — format standardisé avec code, message, et détails (`{ "error": { "code": "VALIDATION_ERROR", "message": "...", "details": [...] } }`).
+   373→- **Documentation** — Swagger/OpenAPI 3.0 généré automatiquement à partir des décorateurs NestJS, accessible sur `/api/docs`.
+   374→
+   375→### 6.3 GraphQL API
+   376→
+   377→La GraphQL API complète la REST API pour les cas nécessitant des requêtes complexes. Elle est particulièrement adaptée à :
+   378→
+   379→- **Arbre généalogique** — récupération d'un membre avec ses parents, enfants, conjoints, sur plusieurs générations, en une seule requête.
+   380→- **Tableau de bord** — agrégation d'indicateurs provenant de plusieurs univers (prochains événements U2, cotisations U4, votes en cours U5).
+   381→- **Recherche multi-critères** — recherche combinée sur membres, événements, archives, avec filtrage et tri.
+   382→
+   383→La GraphQL API utilise **Apollo Server** intégré à NestJS, avec :
+   384→
+   385→- **Schema-first** — schéma défini en SDL (Schema Definition Language), résolveurs en TypeScript.
+   386→- **DataLoader** — pour éviter le problème N+1 (batching des requêtes base de données).
+   387→- **Persisted queries** — pour réduire la taille des requêtes et améliorer la sécurité.
+   388→- **Rate limiting** — limitation du nombre de requêtes par minute et par client.
+   389→
+   390→### 6.4 WebSocket API
+   391→
+   392→La WebSocket API gère le temps réel. Elle utilise **Socket.io** (côté serveur) et les bibliothèques client dédiées (côté mobile et web). Les cas d'usage sont :
+   393→
+   394→- **Messagerie U7** — envoi et réception de messages en temps réel, avec accusés de lecture.
+   395→- **Votes en session U5** — diffusion en direct des résultats pendant un vote en assemblée.
+   396→- **Suivi temps réel U3** — mise à jour en direct du montant collecté pendant une collecte de solidarité.
+   397→- **Notifications push en direct** — si l'application est ouverte, les notifications sont affichées en direct via WebSocket, sans passer par FCM/APNs.
+   398→- **Présence** — indicateur de membres en ligne (pour la messagerie).
+   399→
+   400→La WebSocket API gère la reconnexion automatique en cas de coupure, avec reprise des messages manqués (buffer de 5 minutes).
+   401→
+   402→### 6.5 Webhooks
+   403→
+   404→Les webhooks sont utilisés pour les intégrations externes qui nécessitent une notification asynchrone :
+   405→
+   406→- **MTN MoMo** — notification de paiement reçu, notification de paiement échoué.
+   407→- **Orange Money** — notification de paiement reçu, notification de paiement échoué.
+   408→- **Calendriers externes** — synchronisation bidirectionnelle avec Google Calendar, Apple Calendar, Outlook.
+   409→- **Services tiers** — intégration avec des services externes (visioconférence, génération de PDF, IA).
+   410→
+   411→Les webhooks sont signés (HMAC SHA-256) pour garantir l'authenticité, et idempotents (traitage unique même en cas de retransmission).
+   412→
+   413→### 6.6 Rate limiting et sécurité API
+   414→
+   415→- **Rate limiting** — limitation par IP et par jeton (par défaut 100 requêtes par minute pour un utilisateur authentifié, 10 pour un anonyme).
+   416→- **CORS** — politique stricte, avec liste blanche des domaines autorisés.
+   417→- **Helmet** — middleware de sécurisation des en-têtes HTTP.
+   418→- **Validation** — validation systématique des entrées (class-validator en NestJS), avec rejet des payloads invalides.
+   419→- **Sanitization** — nettoyage des entrées pour prévenir les injections (SQL, NoSQL, XSS).
+   420→
+   421→---
+   422→
+   423→## 7. Base de données
+   424→
+   425→### 7.1 Vue d'ensemble
+   426→
+   427→La couche de données de FamilleConnect combine plusieurs technologies complémentaires, chacune adaptée à un besoin spécifique :
+   428→
+   429→- **PostgreSQL** — base de données principale (relationnelle, ACID, immutabilité).
+   430→- **Redis** — cache distribué et file de messages.
+   431→- **Elasticsearch** — moteur de recherche full-text (pour U6).
+   432→- **Stockage objet S3-compatible** — fichiers (photos, documents, vidéos).
+   433→- **Time-series (optionnel)** — pour les métriques et logs détaillés.
+   434→
+   435→### 7.2 PostgreSQL — base principale
+   436→
+   437→PostgreSQL est la base de données principale, choisie pour :
+   438→
+   439→- **ACID** — transactions atomiques, cohérentes, isolées, durables, essentielles pour les opérations financières U4.
+   440→- **Immutabilité** — capacité à implémenter un journal immuable (U3, U4, U5) via tables d'audit et triggers.
+   441→- **Maturité** — PostgreSQL est une base mature, stable, avec une communauté active et des fonctionnalités avancées (JSONB, full-text search, partitions).
+   442→- **Open-source** — pas de coût de licence, ce qui correspond au modèle économique.
+   443→- **Scalabilité** — réplication en lecture, partitionnement, sharding (à maturité).
+   444→
+   445→#### Schéma de données
+   446→
+   447→Le schéma PostgreSQL est organisé par univers (schemas PostgreSQL dédiés), avec des tables pour chaque entité principale décrite dans les spécifications :
+   448→
+   449→- `famille` schema — `membres`, `branches`, `liens`, `roles`, `adresses`, `audit_logs`
+   450→- `vie_familiale` schema — `evenements`, `etapes_workflow`, `participants`, `contributions`, `documents`, `messages`
+
+[showing lines 1-450 of 883; use offset=451 with limit to continue reading]

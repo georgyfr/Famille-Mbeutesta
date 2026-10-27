@@ -1,0 +1,402 @@
+     1→# Univers 1 — La Famille
+     2→
+     3→**Socle fondateur de l'application de gouvernance des grandes familles africaines**
+     4→
+     5→| Document | Spécifications fonctionnelles — Univers 1 |
+     6→|---|---|
+     7→| Version | 1.0 |
+     8→| Date | Septembre 2026 |
+     9→| Statut | Pour validation |
+    10→| Audience | Chefs de famille, comité de pilotage, équipe produit, équipe développement |
+    11→
+    12→---
+    13→
+    14→## Synthèse exécutive
+    15→
+    16→L'Univers 1, intitulé **« La Famille »**, constitue le socle fondateur de l'ensemble du système numérique dédié à la gouvernance des grandes familles africaines. Il ne s'agit pas d'un module parmi d'autres : il est la condition d'existence de tous les autres. Sans registre structuré des membres, sans arbre généalogique fiable, sans identification claire des branches et des rôles, aucune cotisation ne peut être correctement répartie, aucun décès ne peut être attribué à la bonne branche, aucun congrès ne peut être organisé de manière représentative, aucune solidarité ne peut être ciblée. L'Univers 1 est donc non négociable : il doit être conçu, livré et adopté en premier.
+    17→
+    18→Le présent document définit son rôle, ses objectifs mesurables, son architecture fonctionnelle en sept modules, son modèle de données conceptuel, ses règles de gestion, ainsi que les cas limites propres aux réalités des grandes familles camerounaises et africaines (polygamie, adoption, diaspora, brouilles, héritage). Il propose enfin une roadmap séquencée, des wireframes textuels des écrans clés, et une grille d'indicateurs de succès permettant de mesurer l'adoption réelle par les membres.
+    19→
+    20→La philosophie de conception est la suivante : l'Univers 1 n'est pas un annuaire, c'est une **institution numérique**. Il ne se contente pas d'enregistrer des informations ; il encode l'identité, la mémoire et l'autorité légitime de la famille. À ce titre, il doit être traité avec la rigueur d'un registre d'état civil, tout en restant accessible à des membres dont l'âge, la langue et la maîtrise du numérique varient considérablement.
+    21→
+    22→---
+    23→
+    24→## 1. Rôle et finalité de l'Univers 1
+    25→
+    26→### 1.1 Rôle stratégique
+    27→
+    28→L'Univers 1 joue quatre rôles stratégiques imbriqués qui justifient son caractère prioritaire.
+    29→
+    30→**Premièrement, il est la source unique de vérité sur l'identité familiale.** Dans une grande famille camerounaise comptant typiquement entre 80 et 400 membres répartis sur plusieurs générations et plusieurs pays, la question « qui est membre de notre famille ? » n'a pas de réponse évidente. Les unions mixtes, les adoptions traditionnelles, les enfants élevés par des tantes, les cousins éloignés installés à l'étranger depuis trente ans : autant de situations qui rendent floue la frontière du « dedans » et du « dehors ». L'Univers 1 met fin à ce flou en proposant un référentiel partagé, validé par les autorités familiales légitimes, et constamment maintenu à jour. Il devient impossible, une fois l'Univers 1 en place, de contester l'appartenance d'un membre ou d'en ignorer un autre lors d'un événement.
+    31→
+    32→**Deuxièmement, il est le socle de la mémoire familiale.** Les grandes familles africaines sont des institutions de longue durée, dont la mémoire orale remonte sur quatre à six générations. Or cette mémoire se perd : les aïeux disparaissent, leurs récits s'effacent, les branches se dispersent. En structurant l'arbre généalogique et en l'enrichissant progressivement de récits, de photos et de documents, l'Univers 1 transforme une mémoire fragile en un patrimoine consultable et transmissible. C'est une réponse directe à l'une des douleurs les plus profondes exprimées par les patriarches : « nos enfants ne savent plus d'où nous venons ».
+    33→
+    34→**Troisièmement, il est le fondement de la gouvernance.** Aucune décision légitime ne peut être prise sans savoir qui a le droit de voter, qui doit être consulté, qui représente quelle branche, qui peut valider une dépense. L'Univers 1 porte les rôles, les responsabilités et les règles de succession de l'autorité familiale. Sans lui, le module Gouvernance ne sait pas à qui adresser un vote ; sans lui, le module Finances ne sait pas qui peut valider une dépense ; sans lui, le module Solidarité ne sait pas quelle branche est concernée par un deuil.
+    35→
+    36→**Quatrièmement, il est l'infrastructure de ciblage de tous les autres univers.** Lorsqu'un décès survient dans la branche Nord, ce sont les membres de cette branche et leurs alliés qui doivent être alertés en priorité, pas l'ensemble de la famille. Lorsqu'une cotisation est lancée, c'est l'ensemble des membres adultes vivants qui sont redevables, à l'exclusion des mineurs et des décédés. Lorsqu'un congrès est organisé à Douala, ce sont les membres de la diaspora européenne qui doivent être informés suffisamment tôt pour réserver leurs billets. Toutes ces opérations supposent que le système connaisse précisément l'identité, le rattachement, la situation géographique et le statut de chaque membre.
+    37→
+    38→### 1.2 Finalité opérationnelle
+    39→
+    40→Sur le plan opérationnel, l'Univers 1 poursuit une finalité simple : **qu'à tout moment, tout membre autorisé puisse, en quelques secondes, répondre à six questions fondamentales** :
+    41→
+    42→1. Qui sont les membres vivants de ma famille, et combien sont-ils ?
+    43→2. À quelle branche appartient telle personne, et quels sont ses liens de filiation ?
+    44→3. Où résident les membres de la famille, et combien vivent à l'étranger ?
+    45→4. Qui exerce l'autorité dans la famille, et quels sont mes interlocuteurs légitimes ?
+    46→5. Quels sont les membres décédés, et où sont-ils enterrés ?
+    47→6. Quels sont les anniversaires, fêtes et événements à venir concernant les membres ?
+    48→
+    49→Si ces six questions trouvent une réponse immédiate et fiable, l'Univers 1 remplit sa mission. Toute autre fonctionnalité est accessoire ou relève des univers suivants.
+    50→
+    51→---
+    52→
+    53→## 2. Objectifs mesurables
+    54→
+    55→L'Univers 1 doit être évalué sur des indicateurs concrets. Les objectifs ci-dessous sont proposés pour la première année d'exploitation, sur une famille pilote de 150 à 300 membres.
+    56→
+    57→| Objectif | Indicateur | Cible année 1 |
+    58→|---|---|---|
+    59→| Couverture du registre | Taux de membres disposant d'une fiche complète (nom, filiation, contact, branche) | ≥ 90 % |
+    60→| Qualité de l'arbre | Taux de membres rattachés à un ancêtre commun documenté | ≥ 80 % |
+    61→| Exactitude des contacts | Taux de numéros de téléphone validés par SMS OTP | ≥ 70 % |
+    62→| Adoption par les aînés | Taux de membres de plus de 60 ans s'étant connectés au moins une fois par mois | ≥ 50 % |
+    63→| Maintien à jour | Délai moyen entre un changement familial (décès, naissance, mariage) et sa saisie dans l'app | ≤ 14 jours |
+    64→| Utilisation hebdomadaire | Taux de membres consultant le registre au moins une fois par semaine | ≥ 30 % |
+    65→| Satisfaction des autorités | Pourcentage des chefs de branche jugeant le registre « fiable » | ≥ 80 % |
+    66→| Réduction des doublons | Nombre de fiches en double détectées et fusionnées | ≥ 95 % des doublons résolus |
+    67→
+    68→Ces cibles sont indicatives ; elles devront être ajustées avec les familles pilotes. Elles traduisent néanmoins l'ambition : un outil qui ne serait pas consulté, pas tenu à jour, ou pas jugé fiable par les autorités familiales serait un échec, même s'il est techniquement parfait.
+    69→
+    70→---
+    71→
+    72→## 3. Architecture fonctionnelle
+    73→
+    74→L'Univers 1 est composé de **sept modules fonctionnels** qui s'articulent autour d'un cœur commun : le registre des membres. L'arbre généalogique, les branches, les rôles, la diaspora, la confidentialité et la recherche sont autant de vues ou d'extensions de ce registre, et non des modules indépendants.
+    75→
+    76→### Vue d'ensemble des modules
+    77→
+    78→```
+    79→┌─────────────────────────────────────────────────────────────┐
+    80→│              UNIVERS 1 — LA FAMILLE                          │
+    81→│                                                              │
+    82→│  ┌────────────────────────────────────────────────────────┐  │
+    83→│  │  CŒUR : Registre des membres (fiches individuelles)    │  │
+    84→│  └────────────────────────────────────────────────────────┘  │
+    85→│                              │                               │
+    86→│   ┌──────────┬──────────┬────┴─────┬──────────┬──────────┐  │
+    87→│   ▼          ▼          ▼          ▼          ▼          ▼  │
+    88→│ 4.1 Arbre  4.2 Bran-  4.3 Rôles  4.4 Dias-  4.5 Confi- 4.6 Re- │
+    89→│  généa-    ches &     & gou-     pora &    dentia-   cherche │
+    90→│  logique   sous-      vernance   cartogra-  lité &    & fil- │
+    91→│            branches   minimale   phie       visibilité tres  │
+    92→│                                                              │
+    93→└─────────────────────────────────────────────────────────────┘
+    94→```
+    95→
+    96→L'organisation de l'application reflète cette architecture : un écran d'accueil — le **tableau de bord familial** — présente les indicateurs synthétiques (nombre de membres, branches, pays, événements à venir) et donne accès aux six vues. Chaque vue est elle-même organisée en sous-écrans. Cette structure plate, sans profondeur de navigation excessive, est essentielle pour les utilisateurs âgés qui doivent pouvoir atteindre n'importe quelle information en deux ou trois taps maximum.
+    97→
+    98→### Navigation principale
+    99→
+   100→La navigation s'organise autour d'une barre inférieure à cinq entrées (sur mobile) ou d'une barre latérale (sur desktop) :
+   101→
+   102→1. **Accueil** — tableau de bord
+   103→2. **Membres** — registre, recherche, fiche
+   104→3. **Arbre** — vue généalogique, branches
+   105→4. **Carte** — diaspora et localisations
+   106→5. **Profil** — ma fiche, mes paramètres, confidentialité
+   107→
+   108→Les rôles de gouvernance (patriarche, conseil, chefs de branche) disposent en plus d'une entrée **Administration** accessible uniquement aux autorités. Cette séparation est essentielle pour éviter que les écrans de gouvernance ne perturbent l'expérience des membres ordinaires.
+   109→
+   110→---
+   111→
+   112→## 4. Module 4.1 — Le registre familial
+   113→
+   114→### 4.1.1 Description
+   115→
+   116→Le registre est le composant central. Il contient, pour chaque membre de la famille, une fiche structurée. La fiche est l'unité atomique du système : tout événement, toute cotisation, toute décision y est rattaché. Sa qualité conditionne donc la qualité de l'ensemble de l'application.
+   117→
+   118→### 4.1.2 Champs de la fiche membre
+   119→
+   120→La fiche membre est organisée en six blocs d'information, du plus public au plus privé. Cette structuration par blocs facilite le paramétrage de la confidentialité (voir module 4.6).
+   121→
+   122→| Bloc | Champs | Visibilité par défaut |
+   123→|---|---|---|
+   124→| Identité | Nom, prénom, surnom, sexe, date et lieu de naissance | Publique familiale |
+   125→| Filiation | Père, mère, parents adoptifs éventuels | Publique familiale |
+   126→| Appartenance | Branche, sous-branche, génération | Publique familiale |
+   127→| Situation | État civil (célibataire, marié, veuf, divorcé), conjoint(s), enfants | Publique familiale |
+   128→| Contact | Téléphone, e-mail, ville, pays, adresse postale | Publique familiale (sauf adresse précise : restreinte) |
+   129→| Profession | Métier, employeur, compétences, disponibilités | Publique familiale (sauf détails : restreinte) |
+   130→| Santé | Groupe sanguin, allergies, contacts d'urgence, personne à prévenir | Restreinte (visible par comité médiation uniquement) |
+   131→| Préférences | Langue, fuseau horaire, canal de notification préféré | Privée |
+   132→| Mémoire | Photo, biographie courte, anecdotes | Publique familiale |
+   133→
+   134→### 4.1.3 Cas particulier des membres décédés
+   135→
+   136→Les membres décédés ne sont pas supprimés du registre ; ils sont marqués comme tels et conservent leur fiche. Les champs spécifiques sont : date du décès, lieu du décès, lieu d'inhumation, cause (optionnelle, restreinte), photo, biographie, éventuel message posthume. Cette conservation est essentielle pour la mémoire familiale et pour le calcul de la génération courante. Les descendants d'un membre décédé conservent leur rattachement à sa branche.
+   137→
+   138→### 4.1.4 User stories
+   139→
+   140→À titre d'illustration, les user stories suivantes structurent les écrans du module :
+   141→
+   142→- **En tant que patriarche**, je veux valider l'ajout d'un nouveau membre (naissance, mariage entrant) afin de garantir que seules les personnes légitimes entrent au registre.
+   143→- **En tant que chef de branche**, je veux voir la liste des membres de ma branche afin de vérifier qu'aucun n'a été oublié.
+   144→- **En tant que membre**, je veux consulter la fiche d'un cousin que je ne connais pas afin de savoir qui il est et comment le contacter.
+   145→- **En tant que membre**, je veux mettre à jour mon propre numéro de téléphone afin que la famille puisse toujours me joindre.
+   146→- **En tant que membre diaspora**, je veux indiquer mon pays de résidence et mon fuseau horaire afin de ne pas être notifié la nuit.
+   147→- **En tant qu'administrateur**, je veux marquer un membre comme décédé afin que les notifications ne lui soient plus adressées et que sa fiche soit archivée dans la mémoire familiale.
+   148→- **En tant que membre**, je veux voir les anniversaires du mois afin de pouvoir souhaiter à temps.
+   149→- **En tant que chef de branche**, je veux rattacher un enfant à son père afin que l'arbre généalogique soit exact.
+   150→
+   151→### 4.1.5 Cas limites spécifiques au registre
+   152→
+   153→- **Adoption traditionnelle** : un enfant élevé par un oncle ou une tante doit pouvoir être rattaché à deux foyers (biologique et adoptif), avec un champ précisant la nature du lien.
+   154→- **Polygamie** : un père peut avoir plusieurs épouses, chacune avec ses enfants. La fiche du père doit lister toutes ses unions, et la fiche de chaque enfant doit identifier la mère biologique.
+   155→- **Enfants hors mariage** : ils ont pleinement leur place au registre, avec indication du parent biologique connu. Leur rattachement à une branche suit la règle de la filiation paternelle reconnue, ou maternelle à défaut.
+   156→- **Conjoints externes** : un conjoint qui épouse un membre de la famille est enregistré comme « allié », sans pour autant devenir membre de la branche. Son rattachement est explicite : « époux de X ».
+   157→- **Membres brouillés** : un membre peut être temporairement désactivé (sans suppression de sa fiche) sur décision du conseil familial. Il ne reçoit alors plus de notifications mais son rattachement et son historique sont conservés.
+   158→
+   159→---
+   160→
+   161→## 5. Module 4.2 — L'arbre généalogique interactif
+   162→
+   163→### 5.1 Description
+   164→
+   165→L'arbre généalogique est la vue la plus symbolique de l'Univers 1. Il transforme une liste de noms en une représentation visuelle des liens de filiation, permettant à chaque membre de se situer dans la chaîne des générations. C'est aussi l'un des outils les plus puissants pour susciter l'adoption : peu de membres restent indifférents devant la découverte de leur propre place dans un arbre de plusieurs centaines de personnes.
+   166→
+   167→### 5.2 Représentation et navigation
+   168→
+   169→L'arbre est présenté sous forme graphique, avec les ancêtres en haut et les descendants en bas. Chaque nœud représente un membre, et chaque lien représente soit une filiation (parent → enfant), soit une union (époux ↔ épouse, avec mention de la date du mariage et éventuellement de la dot). Les unions polygamiques sont représentées par plusieurs liens d'union partant du même nœud père.
+   170→
+   171→La navigation permet trois mouvements principaux :
+   172→
+   173→1. **Zoomer / dézoomer** — pour passer d'une vue d'ensemble de toute la famille à une vue détaillée d'une sous-branche.
+   174→2. **Cliquer sur un nœud** — pour ouvrir la fiche du membre correspondant.
+   175→3. **Suivre un lien** — pour naviguer d'un membre à son père, sa mère, ses enfants, ou son conjoint.
+   176→
+   177→### 5.3 Affichage par branche
+   178→
+   179→L'arbre peut être filtré par branche ou par sous-branche, ce qui permet de visualiser spécifiquement la descendance d'un ancêtre commun. Cette vue est particulièrement utile lors des congrès, où chaque branche présente son état actuel.
+   180→
+   181→### 5.4 Gestion des unions multiples
+   182→
+   183→La gestion des unions multiples (remariage après veuvage, polygamie) est l'un des points les plus délicats. L'arbre doit afficher clairement :
+   184→
+   185→- Les unions successives, avec leurs dates et leur statut (en cours, dissoutes par veuvage, divorcées).
+   186→- Les enfants issus de chaque union, rattachés aux deux parents.
+   187→- Les enfants adoptifs ou élevés dans un foyer qui n'est pas strictement biologique.
+   188→
+   189→L'application ne doit jamais imposer un modèle familial unique. Elle doit accepter toutes les configurations réelles des grandes familles africaines, y compris les plus complexes.
+   190→
+   191→### 5.5 Cas limites de la filiation
+   192→
+   193→- **Père inconnu** : l'enfant est rattaché à la mère et à sa branche, avec un champ « père biologique » laissé vide et une mention explicite.
+   194→- **Adoption plénière** : les liens biologiques peuvent être masqués dans la vue publique, mais conservés dans la base pour la mémoire.
+   195→- **Filiation par alliance** : un beau-père qui élève les enfants de son épouse doit pouvoir être désigné comme « tuteur » ou « parent d'élevage » sans pour autant apparaître comme père biologique.
+   196→- **Membres d'origine externe** : les conjoints externes apparaissent dans l'arbre, mais leur propre ascendance n'est pas développée (sauf si leur famille d'origine est également inscrite dans l'app, ce qui est rare).
+   197→
+   198→---
+   199→
+   200→## 6. Module 4.3 — Branches et sous-branches
+   201→
+   202→### 6.1 Définition
+   203→
+   204→Une branche familiale est l'ensemble des descendants d'un ancêtre commun identifié, généralement un fils ou une fille de l'ancêtre fondateur de la famille. Dans une grande famille camerounaise, il est fréquent de compter quatre à huit branches principales, chacune comptant plusieurs dizaines à plusieurs centaines de membres. Les sous-branches descendent des petits-enfants du fondateur.
+   205→
+   206→### 6.2 Structure hiérarchique
+   207→
+   208→L'application gère les branches selon une hiérarchie arborescente :
+   209→
+   210→```
+   211→Famille (racine)
+   212→├── Branche principale A (descendance de l'aîné du fondateur)
+   213→│   ├── Sous-branche A1
+   214→│   ├── Sous-branche A2
+   215→│   └── Sous-branche A3
+   216→├── Branche principale B
+   217→│   ├── Sous-branche B1
+   218→│   └── Sous-branche B2
+   219→└── Branche principale C
+   220→```
+   221→
+   222→Chaque membre est obligatoirement rattaché à une branche principale et, le cas échéant, à une sous-branche. Le rattachement suit la règle de la filiation paternelle par défaut, mais peut être ajusté par décision du conseil familial en cas d'adoption traditionnelle, de résidence chez la famille maternelle, ou d'autres circonstances culturelles.
+   223→
+   224→### 6.3 Chefs de branche
+   225→
+   226→Chaque branche principale désigne un **chef de branche**, généralement l'aîné des descendants masculins de la génération en exercice, mais ce principe varie selon les traditions familiales. Le chef de branche exerce plusieurs responsabilités dans l'application :
+   227→
+   228→- Valide l'inscription des nouveaux membres de sa branche (naissances, mariages entrants).
+   229→- Représente sa branche au conseil familial.
+   230→- Peut être consulté pour les décisions le concernant.
+   231→- Reçoit les notifications critiques concernant sa branche (décès, maladie grave).
+   232→
+   233→Le chef de branche peut désigner un suppléant, par exemple s'il est âgé ou vit à l'étranger. La désignation du chef de branche est formalisée dans l'application par le patriarche ou le conseil familial, et fait l'objet d'une trace (date, décision, validateur).
+   234→
+   235→### 6.4 Cas limites des branches
+   236→
+   237→- **Branche éteinte** : si une branche n'a plus de descendant vivant, elle est marquée comme éteinte mais conservée dans l'arbre pour la mémoire. Une branche éteinte peut faire l'objet d'un hommage lors des congrès.
+   238→- **Création d'une nouvelle branche** : exceptionnellement, le conseil familial peut décider de la création d'une nouvelle branche, par exemple pour reconnaître une lignée longtemps tenue à l'écart. Cette opération est sensible et doit être tracée.
+   239→- **Changement de branche** : en cas d'erreur de rattachement initial, un membre peut être reclassé dans une autre branche. Cette opération est rare et doit être validée par les deux chefs de branche concernés.
+   240→
+   241→---
+   242→
+   243→## 7. Module 4.4 — Rôles et gouvernance minimale
+   244→
+   245→### 7.1 Hiérarchie des rôles
+   246→
+   247→L'Univers 1 porte la hiérarchie minimale nécessaire à la gouvernance de la famille. Cinq niveaux de rôles sont définis :
+   248→
+   249→| Rôle | Détention | Prérogatives principales |
+   250→|---|---|---|
+   251→| Patriarche / Matriarche | Désigné par tradition familiale, généralement l'aîné de la génération régnante | Arbitre final, valide les grandes décisions, représente la famille auprès des autorités externes |
+   252→| Conseil familial | Composé des chefs de branche et d'éventuels sages cooptés | Vote les décisions importantes, arbitre les conflits, valide le règlement intérieur |
+   253→| Chef de branche | Désigné selon la tradition de chaque branche | Valide l'inscription des membres de sa branche, la représente au conseil |
+   254→| Membre adulte | Tout membre âgé de 18 ans ou plus | Consulte le registre, participe aux votes ouverts, cotise, propose des événements |
+   255→| Membre junior | Tout membre de moins de 18 ans | Consulte le registre (version filtrée), ne vote pas, ne cotise pas |
+   256→
+   257→### 7.2 Permissions
+   258→
+   259→Chaque rôle ouvre des droits spécifiques dans l'application. Le tableau ci-dessous synthétise les permissions principales :
+   260→
+   261→| Action | Patriarche | Conseil | Chef branche | Membre adulte | Membre junior |
+   262→|---|---|---|---|---|---|
+   263→| Consulter le registre complet | Oui | Oui | Sa branche + vue publique | Vue publique | Vue publique filtrée |
+   264→| Ajouter un membre | Non (valide seulement) | Non | Oui (sa branche) | Non | Non |
+   265→| Valider un ajout | Oui | Oui | Sa branche | Non | Non |
+   266→| Marquer un décès | Valide | Oui | Sa branche | Signale | Signale |
+   267→| Modifier sa propre fiche | Oui | Oui | Oui | Oui (champs personnels) | Oui (champs personnels) |
+   268→| Créer un vote | Oui | Oui | Sa branche | Non | Non |
+   269→| Participer à un vote | Oui | Oui | Oui | Oui (selon périmètre) | Non |
+   270→| Consulter la trésorerie | Oui | Oui | Sa branche (agrégat) | Vue agrégée | Non |
+   271→
+   272→### 7.3 Transition des rôles
+   273→
+   274→Les transitions de pouvoir sont des moments sensibles. L'application doit formaliser chaque transition avec :
+   275→
+   276→- La date d'effet.
+   277→- L'identité du prédécesseur et du successeur.
+   278→- Le type de transition (décès, démission, destitution, désignation anticipée).
+   279→- Le validateur (patriarche, conseil familial, ou assemblée générale selon les cas).
+   280→- Un journal d'audit consultable.
+   281→
+   282→Cette traçabilité est essentielle pour prévenir les contestations. Dans les familles où la succession du patriarche est source de tensions, l'absence de trace formelle est un facteur majeur de conflit.
+   283→
+   284→### 7.4 Cas de destitution ou de démission
+   285→
+   286→Un chef de branche ou un membre du conseil peut être destitué par vote du conseil familial, selon les règles propres à chaque famille. L'application doit permettre cette procédure tout en la rendant exceptionnelle : un workflow dédié impose une justification, un délai de réflexion, et un vote à la majorité qualifiée. La destitution est consignée au journal d'audit.
+   287→
+   288→---
+   289→
+   290→## 8. Module 4.5 — Cartographie de la diaspora
+   291→
+   292→### 8.1 Description
+   293→
+   294→Les grandes familles camerounaises et africaines sont par nature dispersées. Une même famille peut compter des membres à Yaoundé, Douala, Bafoussam, Paris, Bruxelles, Montréal, Atlanta, Libreville et Dakar. Cette dispersion n'est pas un défaut : c'est une richesse, mais elle complique la communication et l'organisation. Le module Diaspora cartographie cette répartition géographique et fournit des outils de ciblage par localisation.
+   295→
+   296→### 8.2 Données enregistrées
+   297→
+   298→Pour chaque membre, le module enregistre :
+   299→
+   300→- Le pays de résidence (obligatoire).
+   301→- La ville de résidence (obligatoire).
+   302→- Le fuseau horaire (déduit du pays, ajustable).
+   303→- La langue principale (français, anglais, langue locale).
+   304→- Le statut de résidence (résident, expatrié temporaire, étudiant à l'étranger).
+   305→- La date d'installation dans le pays actuel.
+   306→
+   307→### 8.3 Vues proposées
+   308→
+   309→Le module offre trois vues principales :
+   310→
+   311→1. **Vue carte mondiale** — avec des points colorés par branche, permettant de visualiser la dispersion d'un coup d'œil.
+   312→2. **Vue liste par pays** — classant les membres par pays, puis par ville, avec décomptes.
+   313→3. **Vue diaspora par branche** — montrant où se trouvent les membres de chaque branche.
+   314→
+   315→### 8.4 Utilité opérationnelle
+   316→
+   317→Le module Diaspora sert concrètement à :
+   318→
+   319→- Adapter les canaux de communication (un membre en France ne sera pas notifié via Mobile Money camerounais).
+   320→- Planifier les congrès en choisissant un lieu accessible à la majorité.
+   321→- Identifier les relais locaux dans chaque pays (un membre diaspora peut accueillir un autre membre de passage).
+   322→- Cibler les collectes de fonds exceptionnelles (les membres diaspora contribuent souvent davantage).
+   323→
+   324→### 8.5 Cas limites
+   325→
+   326→- **Membres sans adresse fixe** : un membre en mobilité (étudiant, militaire, commerçant itinérant) peut indiquer une zone plutôt qu'une ville précise.
+   327→- **Double résidence** : un membre vivant entre deux pays peut enregistrer deux adresses, dont une principale.
+   328→- **Confidentialité de l'adresse** : la ville et le pays sont publics familiaux, mais l'adresse précise est restreinte et visible uniquement par le comité médiation et le bureau exécutif.
+   329→
+   330→---
+   331→
+   332→## 9. Module 4.6 — Confidentialité et visibilité
+   333→
+   334→### 9.1 Principe directeur
+   335→
+   336→La confidentialité est l'un des sujets les plus sensibles de l'Univers 1. Une grande famille est un espace de solidarité mais aussi de jugement, de comparaison et parfois de conflit. Si l'application expose sans filtre toutes les informations sur tous les membres, elle sera rejetée ou détournée. Le principe directeur est donc : **chaque membre contrôle ce qu'il partage, dans le cadre fixé par les règles familiales**.
+   337→
+   338→### 9.2 Niveaux de visibilité
+   339→
+   340→Trois niveaux de visibilité sont définis pour chaque champ de la fiche membre :
+   341→
+   342→- **Public familial** — visible par tous les membres de la famille authentifiés.
+   343→- **Restreint** — visible par le chef de branche, le conseil familial et le comité médiation.
+   344→- **Privé** — visible par le membre uniquement et, le cas échéant, par le patriarche sur demande justifiée.
+   345→
+   346→### 9.3 Champs particulièrement sensibles
+   347→
+   348→Certains méritent une attention particulière :
+   349→
+   350→- **Santé** — par défaut restreint, avec un niveau supplémentaire « comité médiation uniquement » pour les maladies graves, les hospitalisations en cours, les handicaps.
+   351→- **Adresse précise** — restreinte par défaut, publique familiale uniquement si le membre y consent.
+   352→- **Conflits familiaux** — un membre peut demander que son numéro de téléphone ne soit pas visible par certains membres, en cas de brouille. Cette demande est examinée par le comité médiation.
+   353→- **Informations financières personnelles** — non présentes dans l'Univers 1, mais si elles le sont (revenu, situation de précarité), elles doivent être strictement privées.
+   354→
+   355→### 9.4 Cas limites de confidentialité
+   356→
+   357→- **Membre mineur** — sa fiche est gérée par ses parents. Les champs de santé et d'adresse sont visibles par les parents et le chef de branche.
+   358→- **Membre sous tutelle** — un membre majeur placé sous tutelle (par exemple en cas de maladie mentale grave) voit sa fiche gérée par son tuteur désigné, avec validation du conseil familial.
+   359→- **Membre décédé** — sa fiche bascule en statut « mémoire » : les champs personnels sont verrouillés, mais la photo, la biographie et les informations généalogiques deviennent pleinement publiques familiales.
+   360→- **Membre ayant quitté la famille** — en cas de divorce, sa fiche est conservée avec un statut « allié ancien », mais les champs personnels sont purgés sur sa demande.
+   361→
+   362→### 9.5 Journal des consultations
+   363→
+   364→Pour renforcer la confiance, l'application tient un journal des consultations des fiches sensibles. Un membre peut voir qui a consulté sa fiche restreinte (par exemple son dossier médical). Ce journal n'est pas public, mais il est consultable par le membre concerné et par le comité médiation en cas de litige. Cette transparence dissuade les consultations abusives.
+   365→
+   366→---
+   367→
+   368→## 10. Module 4.7 — Recherche et filtres
+   369→
+   370→### 10.1 Description
+   371→
+   372→Avec plusieurs centaines de membres, la recherche est une fonction critique. Un membre doit pouvoir trouver n'importe quel autre membre en quelques secondes, et un chef de branche doit pouvoir extraire sa branche en un clic. Le module Recherche offre plusieurs modes complémentaires.
+   373→
+   374→### 10.2 Modes de recherche
+   375→
+   376→1. **Recherche par nom** — saisie libre, tolérante aux fautes de frappe et aux accents.
+   377→2. **Recherche par filtres combinés** — branche, génération, pays, profession, tranche d'âge.
+   378→3. **Recherche par lien de parenté** — « trouver les cousins de X », « trouver les descendants de Y ».
+   379→4. **Recherche par événement** — « qui a participé au congrès de 2023 ? », « qui a cotisé pour le décès de Z ? ».
+   380→
+   381→### 10.3 Déduplication et fusion
+   382→
+   383→L'enrichissement progressif du registre conduit inévitablement à des doublons : un membre enregistré une première fois par le chef de branche, puis une seconde fois par un autre responsable qui ne savait pas qu'il existait déjà. L'application propose :
+   384→
+   385→- Une détection automatique des doublons (mêmes nom, prénom, date de naissance, ou même numéro de téléphone).
+   386→- Un workflow de fusion assistée : un chef de branche ou un administrateur compare les deux fiches, choisit les champs à conserver, et fusionne.
+   387→- Un journal des fusions, pour préserver la trace des opérations effectuées.
+   388→
+   389→### 10.4 Export et impression
+   390→
+   391→Le registre peut être exporté en PDF ou en Excel, sous trois formats :
+   392→
+   393→1. **Annuaire complet** — toutes les fiches, format répertoire.
+   394→2. **Annuaire par branche** — un document par branche, distribué au chef de branche.
+   395→3. **Annuaire de poche** — format condensé pour impression, distribué lors des congrès.
+   396→
+   397→Ces exports répondent à un besoin réel : de nombreuses familles souhaitent conserver un support physique, notamment pour les aînés qui n'utilisent pas l'application.
+   398→
+   399→---
+   400→
+
+[showing lines 1-400 of 779; use offset=401 with limit to continue reading]

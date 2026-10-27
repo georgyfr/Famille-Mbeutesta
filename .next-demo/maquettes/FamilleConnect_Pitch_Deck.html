@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FamilleConnect — Pitch Deck Investisseur</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'fc-bg': '#F4F1E9', 'fc-primary': '#2A4A3A', 'fc-primary-light': '#3A5A4A',
+                        'fc-accent': '#C89F62', 'fc-accent-light': '#D8B978',
+                        'fc-surface': '#F0EDE5', 'fc-body': '#1A1A1A', 'fc-secondary': '#5A5A5A',
+                        'fc-critical': '#B91C1C', 'fc-urgent': '#D97706', 'fc-success': '#16A34A',
+                    },
+                    fontFamily: { 'sans': ['Calibri', 'Arial', 'sans-serif'], 'mono': ['Consolas', 'monospace'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 0; background: #1a1a1a; font-family: 'Calibri', Arial, sans-serif; overflow: hidden; }
+        .slide { display: none; width: 100vw; height: 100vh; padding: 60px 80px; position: relative; }
+        .slide.active { display: flex; flex-direction: column; }
+        .slide-number { position: absolute; bottom: 30px; right: 60px; color: #5A5A5A; font-size: 14px; }
+        .slide-brand { position: absolute; bottom: 30px; left: 60px; color: #5A5A5A; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+        .slide-brand-dot { width: 8px; height: 8px; background: #C89F62; border-radius: 50%; }
+        .nav-btn { position: fixed; top: 50%; transform: translateY(-50%); width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,0.1); color: white; border: none; font-size: 24px; cursor: pointer; z-index: 100; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
+        .nav-btn:hover { background: rgba(200,159,98,0.8); }
+        .nav-prev { left: 20px; }
+        .nav-next { right: 20px; }
+        .progress-bar { position: fixed; top: 0; left: 0; height: 4px; background: #C89F62; transition: width 0.3s; z-index: 100; }
+        .badge { display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+        .stat-card { background: white; border-radius: 16px; padding: 32px; border-left: 4px solid #C89F62; }
+        .fade-in { animation: fadeIn 0.5s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .gradient-text { background: linear-gradient(135deg, #2A4A3A, #C89F62); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    </style>
+</head>
+<body>
+
+<div class="progress-bar" id="progress" style="width: 8.33%"></div>
+<button class="nav-btn nav-prev" onclick="prevSlide()">‹</button>
+<button class="nav-btn nav-next" onclick="nextSlide()">›</button>
+
+<!-- ============ SLIDE 1 — COUVERTURE ============ -->
+<div class="slide active" style="background: linear-gradient(135deg, #2A4A3A 0%, #1a2e22 100%); color: white;">
+    <div class="flex-1 flex flex-col justify-center items-center text-center fade-in">
+        <div class="w-20 h-20 bg-fc-accent rounded-2xl flex items-center justify-center text-fc-primary font-bold text-4xl mb-8">F</div>
+        <h1 class="text-6xl font-bold mb-4">FamilleConnect</h1>
+        <p class="text-2xl text-fc-accent-light mb-2">Le système d'exploitation numérique</p>
+        <p class="text-2xl text-fc-accent-light mb-12">des grandes familles africaines</p>
+        <div class="flex gap-12 text-center">
+            <div><div class="text-3xl font-bold text-fc-accent">7</div><div class="text-sm opacity-70">Univers</div></div>
+            <div><div class="text-3xl font-bold text-fc-accent">30 000+</div><div class="text-sm opacity-70">Familles cibles</div></div>
+            <div><div class="text-3xl font-bold text-fc-accent">9 mois</div><div class="text-sm opacity-70">MVP</div></div>
+        </div>
+    </div>
+    <div class="slide-brand"><span class="slide-brand-dot"></span> FamilleConnect · Pitch Deck Investisseur · Octobre 2026</div>
+    <div class="slide-number">1 / 12</div>
+</div>
+
+<!-- ============ SLIDE 2 — LE PROBLÈME ============ -->
+<div class="slide" style="background: #F4F1E9;">
+    <div class="fade-in flex-1 flex flex-col">
+        <div class="badge bg-fc-critical text-white mb-4">LE PROBLÈME</div>
+        <h1 class="text-5xl font-bold text-fc-primary mb-8">WhatsApp ne suffit plus</h1>
+        <p class="text-xl text-fc-secondary mb-10 max-w-3xl">Les grandes familles camerounaises de 100 à 500 membres vivent aujourd'hui sur WhatsApp. Mais WhatsApp est un canal de communication, pas un système de gestion.</p>
+        <div class="grid grid-cols-2 gap-6 flex-1">
+            <div class="stat-card">
+                <div class="text-4xl mb-3">💸</div>
+                <h3 class="text-xl font-bold text-fc-primary mb-2">Cotisations perdues</h3>
+                <p class="text-fc-secondary">Pas de suivi individuel, pas de relances structurées, pas de reçu. 20-30% des cotisations en retard en permanence.</p>
+            </div>
+            <div class="stat-card">
+                <div class="text-4xl mb-3">⚰️</div>
+                <h3 class="text-xl font-bold text-fc-primary mb-2">Décès dans le chaos</h3>
+                <p class="text-fc-secondary">Annonces qui se perdent, collectes opaques, logistique improvisée. La famille bricole au lieu d'exécuter un protocole.</p>
+            </div>
+            <div class="stat-card">
+                <div class="text-4xl mb-3">📜</div>
+                <h3 class="text-xl font-bold text-fc-primary mb-2">Mémoire qui s'efface</h3>
+                <p class="text-fc-secondary">Quand un ancien disparaît, c'est une bibliothèque qui brûle. Aucune interview, aucun récit capté, aucune tradition documentée.</p>
+            </div>
+            <div class="stat-card">
+                <div class="text-4xl mb-3">🔍</div>
+                <h3 class="text-xl font-bold text-fc-primary mb-2">Opportunités invisibles</h3>
+                <p class="text-fc-secondary">Un cousin expert-comptable, un oncle médecin, un relais diaspora à Paris. Autant de ressources ignorées faute de répertoire.</p>
+            </div>
+        </div>
+    </div>
+    <div class="slide-brand"><span class="slide-brand-dot"></span> FamilleConnect</div>
+    <div class="slide-number">2 / 12</div>
+</div>
+
+<!-- ============ SLIDE 3 — LA SOLUTION ============ -->
+<div class="slide" style="background: white;">
+    <div class="fade-in flex-1 flex flex-col">
+        <div class="badge bg-fc-success text-white mb-4">LA SOLUTION</div>
+        <h1 class="text-5xl font-bold text-fc-primary mb-4">7 univers, une plateforme</h1>
+        <p class="text-xl text-fc-secondary mb-10 max-w-3xl">FamilleConnect transforme la gestion familiale en institution numérique. Pas un meilleur WhatsApp — un système d'exploitation de la famille.</p>
+        <div class="grid grid-cols-4 gap-4 flex-1">
+            <div class="bg-fc-surface rounded-xl p-5 text-center card-hover">
+                <div class="text-4xl mb-3">👨‍👩‍👧</div>
+                <div class="font-bold text-fc-primary">U1 — Famille</div>
+                <div class="text-xs text-fc-secondary mt-1">Registre, arbre, branches, rôles</div>
+            </div>
+            <div class="bg-fc-surface rounded-xl p-5 text-center card-hover">
+                <div class="text-4xl mb-3">📅</div>
+                <div class="font-bold text-fc-primary">U2 — Vie familiale</div>
+                <div class="text-xs text-fc-secondary mt-1">Calendrier, événements, workflow auto</div>
+            </div>
+            <div class="bg-fc-surface rounded-xl p-5 text-center card-hover">
+                <div class="text-4xl mb-3">❤️</div>
+                <div class="font-bold text-fc-primary">U3 — Solidarité</div>
+                <div class="text-xs text-fc-secondary mt-1">Dossiers, collectes, équité, audit</div>
+            </div>
+            <div class="bg-fc-surface rounded-xl p-5 text-center card-hover">
+                <div class="text-4xl mb-3">💰</div>
+                <div class="font-bold text-fc-primary">U4 — Finances</div>
+                <div class="text-xs text-fc-secondary mt-1">Caisse, Mobile Money, compta</div>
+            </div>
+            <div class="bg-fc-surface rounded-xl p-5 text-center card-hover">
+                <div class="text-4xl mb-3">🗳️</div>
+                <div class="font-bold text-fc-primary">U5 — Gouvernance</div>
+                <div class="text-xs text-fc-secondary mt-1">Votes, comités, élections, PV</div>
+            </div>
+            <div class="bg-fc-surface rounded-xl p-5 text-center card-hover">
+                <div class="text-4xl mb-3">📚</div>
+                <div class="font-bold text-fc-primary">U6 — Mémoire</div>
+                <div class="text-xs text-fc-secondary mt-1">Archives, anciens, traditions</div>
+            </div>
+            <div class="bg-fc-surface rounded-xl p-5 text-center card-hover">
+                <div class="text-4xl mb-3">🤝</div>
+                <div class="font-bold text-fc-primary">U7 — Réseau</div>
+                <div class="text-xs text-fc-secondary mt-1">Compétences, mentorat, diaspora</div>
+            </div>
+            <div class="bg-fc-primary rounded-xl p-5 text-center text-white">
+                <div class="text-4xl mb-3">🔗</div>
+                <div class="font-bold">Effet réseau</div>
+                <div class="text-xs opacity-80 mt-1">Chaque univers enrichit les autres</div>
+            </div>
+        </div>
+    </div>
+    <div class="slide-brand"><span class="slide-brand-dot"></span> FamilleConnect</div>
+    <div class="slide-number">3 / 12</div>
+</div>
+
+<!-- ============ SLIDE 4 — DIFFÉRENCIATEURS ============ -->
+<div class="slide" style="background: #F4F1E9;">
+    <div class="fade-in flex-1 flex flex-col">
+        <div class="badge bg-fc-accent text-fc-primary mb-4">POURQUOI C'EST DIFFÉRENT</div>
+        <h1 class="text-5xl font-bold text-fc-primary mb-10">5 différenciateurs uniques</h1>
+        <div class="space-y-5 flex-1">
+            <div class="flex items-start gap-6 bg-white rounded-xl p-6">
+                <div class="w-14 h-14 bg-fc-primary rounded-xl flex items-center justify-center text-white font-bold text-2xl flex-shrink-0">1</div>
+                <div class="flex-1">
+                    <h3 class="text-xl font-bold text-fc-primary mb-1">Moteur workflow automatisé</h3>
+                    <p class="text-fc-secondary">Un décès déclenche automatiquement : annonce ciblée → comité → collecte → programme → logistique → album → clôture. La famille exécute un protocole, elle ne bricole plus.</p>
+                </div>
+            </div>
+            <div class="flex items-start gap-6 bg-white rounded-xl p-6">
+                <div class="w-14 h-14 bg-fc-primary rounded-xl flex items-center justify-center text-white font-bold text-2xl flex-shrink-0">2</div>
+                <div class="flex-1">
+                    <h3 class="text-xl font-bold text-fc-primary mb-1">Mobile Money natif</h3>
+                    <p class="text-fc-secondary">Intégration API MTN MoMo + Orange Money avec rapprochement automatique. Le paiement est dans l'application, pas à côté.</p>
+                </div>
+            </div>
+            <div class="flex items-start gap-6 bg-white rounded-xl p-6">
+                <div class="w-14 h-14 bg-fc-primary rounded-xl flex items-center justify-center text-white font-bold text-2xl flex-shrink-0">3</div>
+                <div class="flex-1">
+                    <h3 class="text-xl font-bold text-fc-primary mb-1">Transparence radicale</h3>
+                    <p class="text-fc-secondary">Journal immutable, double validation des dépenses, justificatifs obligatoires, rapport mensuel automatique. La confiance est inscrite dans le système.</p>
+                </div>
+            </div>
+            <div class="flex items-start gap-6 bg-white rounded-xl p-6">
+                <div class="w-14 h-14 bg-fc-primary rounded-xl flex items-center justify-center text-white font-bold text-2xl flex-shrink-0">4</div>
+                <div class="flex-1">
+                    <h3 class="text-xl font-bold text-fc-primary mb-1">Adapté aux réalités africaines</h3>
+                    <p class="text-fc-secondary">Polygamie, adoption traditionnelle, diaspora multi-fuseaux, cérémonies secrètes, langues locales. Aucune app grand public ne gère ces cas.</p>
+                </div>
+            </div>
+            <div class="flex items-start gap-6 bg-white rounded-xl p-6">
+                <div class="w-14 h-14 bg-fc-primary rounded-xl flex items-center justify-center text-white font-bold text-2xl flex-shrink-0">5</div>
+                <div class="flex-1">
+                    <h3 class="text-xl font-bold text-fc-primary mb-1">Mémoire des anciens</h3>
+                    <p class="text-fc-secondary">Interviews audio/vidéo avec transcription, biographies, traditions documentées. Le patrimoine immatériel est capté avant qu'il ne disparaisse.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="slide-brand"><span class="slide-brand-dot"></span> FamilleConnect</div>
+    <div class="slide-number">4 / 12</div>
+</div>
+
+<!-- ============ SLIDE 5 — MARCHÉ ============ -->
+<div class="slide" style="background: white;">
+    <div class="fade-in flex-1 flex flex-col">
+        <div class="badge bg-fc-primary text-white mb-4">LE MARCHÉ</div>
+        <h1 class="text-5xl font-bold text-fc-primary mb-10">Un marché colossal et sous-servi</h1>
+        <div class="grid grid-cols-4 gap-6 mb-8">
+            <div class="stat-card text-center">
+                <div class="text-5xl font-bold gradient-text mb-2">3K-5K</div>
+                <div class="text-sm text-fc-secondary">Grandes familles au Cameroun</div>
+                <div class="text-xs text-fc-secondary mt-2">Phase 1 — marché initial</div>
+            </div>
+            <div class="stat-card text-center">
+                <div class="text-5xl font-bold gradient-text mb-2">10K-15K</div>
+                <div class="text-sm text-fc-secondary">Familles en zone CEMAC</div>
+                <div class="text-xs text-fc-secondary mt-2">Phase 2 — extension régionale</div>
+            </div>
+            <div class="stat-card text-center">
+                <div class="text-5xl font-bold gradient-text mb-2">50K+</div>
+                <div class="text-sm text-fc-secondary">Familles Afrique francophone</div>
+                <div class="text-xs text-fc-secondary mt-2">Phase 3 — scale continental</div>
+            </div>
+            <div class="stat-card text-center">
+                <div class="text-5xl font-bold gradient-text mb-2">10M+</div>
+                <div class="text-sm text-fc-secondary">Membres diaspora</div>
+                <div class="text-xs text-fc-secondary mt-2">Marché complémentaire</div>
+            </div>
+        </div>
+        <div class="bg-fc-surface rounded-xl p-6">
+            <h3 class="font-bold text-fc-primary mb-3">Extension à d'autres communautés structurées</h3>
+            <div class="grid grid-cols-3 gap-4 text-sm">
+                <div class="flex items-center gap-2"><span class="text-2xl">🏡</span> Associations villageoises</div>
+                <div class="flex items-center gap-2"><span class="text-2xl">⛪</span> Congrégations religieuses</div>
+                <div class="flex items-center gap-2"><span class="text-2xl">🤝</span> Tontines & mutuelles</div>
+            </div>
+            <p class="text-xs text-fc-secondary mt-4">Le marché des communautés structurées africaines est multiplié par 5 à 10 si l'on sort du strict cadre familial.</p>
+        </div>
+    </div>
+    <div class="slide-brand"><span class="slide-brand-dot"></span> FamilleConnect</div>
+    <div class="slide-number">5 / 12</div>
+</div>
+
+<!-- ============ SLIDE 6 — MODÈLE ÉCONOMIQUE ============ -->
+<div class="slide" style="background: #F4F1E9;">
+    <div class="fade-in flex-1 flex flex-col">
+        <div class="badge bg-fc-accent text-fc-primary mb-4">MODÈLE ÉCONOMIQUE</div>
+        <h1 class="text-5xl font-bold text-fc-primary mb-10">Freemium + abonnement familial</h1>
+        <div class="grid grid-cols-2 gap-8 flex-1">
+            <div>
+                <h3 class="text-xl font-bold text-fc-primary mb-4">Tarification par segment</h3>
+                <div class="space-y-3">
+                    <div class="bg-white rounded-lg p-4 flex justify-between items-center">
+                        <div><div class="font-semibold text-fc-primary">Petites familles (< 50 membres)</div><div class="text-xs text-fc-secondary">Freemium — découverte</div></div>
+                        <div class="text-2xl font-bold text-fc-success">0 FCFA</div>
+                    </div>
+                    <div class="bg-white rounded-lg p-4 flex justify-between items-center">
+                        <div><div class="font-semibold text-fc-primary">Familles moyennes (50-200)</div><div class="text-xs text-fc-secondary">Cœur de marché</div></div>
+                        <div class="text-2xl font-bold text-fc-primary">10K<span class="text-sm text-fc-secondary">/an</span></div>
+                    </div>
+                    <div class="bg-white rounded-lg p-4 flex justify-between items-center">
+                        <div><div class="font-semibold text-fc-primary">Grandes familles (200+)</div><div class="text-xs text-fc-secondary">Segment premium</div></div>
+                        <div class="text-2xl font-bold text-fc-primary">25K<span class="text-sm text-fc-secondary">/an</span></div>
+                    </div>
+                    <div class="bg-white rounded-lg p-4 flex justify-between items-center">
+                        <div><div class="font-semibold text-fc-primary">Services onboarding</div><div class="text-xs text-fc-secondary">Accompagnement humain</div></div>
+                        <div class="text-2xl font-bold text-fc-primary">100-500K</div>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <h3 class="text-xl font-bold text-fc-primary mb-4">Projection de revenus</h3>
+                <div class="bg-white rounded-xl p-6">
+                    <div class="space-y-4">
+                        <div>
+                            <div class="flex justify-between mb-1"><span class="text-sm font-semibold">Année 1 — 10 familles pilotes</span><span class="font-bold text-fc-primary">~0 FCFA</span></div>
+                            <div class="w-full bg-fc-surface rounded-full h-2"><div class="bg-fc-accent h-2 rounded-full" style="width: 5%"></div></div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between mb-1"><span class="text-sm font-semibold">Année 2 — 100 familles</span><span class="font-bold text-fc-primary">~1,5M FCFA</span></div>
+                            <div class="w-full bg-fc-surface rounded-full h-2"><div class="bg-fc-accent h-2 rounded-full" style="width: 15%"></div></div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between mb-1"><span class="text-sm font-semibold">Année 3 — 500 familles</span><span class="font-bold text-fc-primary">~7,5M FCFA</span></div>
+                            <div class="w-full bg-fc-surface rounded-full h-2"><div class="bg-fc-accent h-2 rounded-full" style="width: 40%"></div></div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between mb-1"><span class="text-sm font-semibold">Année 5 — 2 000+ familles</span><span class="font-bold text-fc-primary">~30M+ FCFA</span></div>
+                            <div class="w-full bg-fc-surface rounded-full h-2"><div class="bg-fc-success h-2 rounded-full" style="width: 90%"></div></div>
+                        </div>
+                    </div>
+                    <div class="mt-6 pt-4 border-t border-gray-100">
+                        <p class="text-sm text-fc-secondary">Point d'équilibre : <strong class="text-fc-primary">~500 familles abonnées</strong> (18-24 mois post-lancement)</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="slide-brand"><span class="slide-brand-dot"></span> FamilleConnect</div>
+    <div class="slide-number">6 / 12</div>
+</div>
+
+<!-- ============ SLIDE 7 — FEUILLE DE ROUTE ============ -->
+<div class="slide" style="background: white;">
+    <div class="fade-in flex-1 flex flex-col">
+        <div class="badge bg-fc-primary text-white mb-4">FEUILLE DE ROUTE</div>
+        <h1 class="text-5xl font-bold text-fc-primary mb-10">3 phases sur 30 mois</h1>
+        <div class="grid grid-cols-3 gap-6 flex-1">
+            <div class="bg-fc-surface rounded-xl p-6 border-t-4 border-fc-accent">
+                <div class="badge bg-fc-accent text-fc-primary mb-3">PHASE 1 — MVP</div>
+                <h3 class="text-2xl font-bold text-fc-primary mb-2">Mois 1-9</h3>
+                <div class="text-sm text-fc-secondary mb-4">5-10 familles pilotes · 1 500-3 000 membres</div>
+                <div class="space-y-2 text-sm">
+                    <div class="flex items-center gap-2"><span class="text-fc-success">✓</span> U1 Famille (registre, branches, rôles)</div>
+                    <div class="flex items-center gap-2"><span class="text-fc-success">✓</span> U4 Finances (caisse, Mobile Money)</div>
+                    <div class="flex items-center gap-2"><span class="text-fc-success">✓</span> U2 Vie (catalogue 8 types, workflow décès)</div>
+                    <div class="flex items-center gap-2"><span class="text-fc-success">✓</span> Mobile Android + Web responsive</div>
+                </div>
+                <div class="mt-4 pt-4 border-t border-gray-200">
+                    <div class="text-xs text-fc-secondary">Budget : 40-60M FCFA</div>
+                    <div class="text-xs text-fc-secondary">Équipe : 5 personnes</div>
+                </div>
+            </div>
+            <div class="bg-fc-surface rounded-xl p-6 border-t-4 border-fc-primary">
+                <div class="badge bg-fc-primary text-white mb-3">PHASE 2 — ENRICHISSEMENT</div>
+                <h3 class="text-2xl font-bold text-fc-primary mb-2">Mois 10-18</h3>
+                <div class="text-sm text-fc-secondary mb-4">30-100 familles · 9 000-30 000 membres</div>
+                <div class="space-y-2 text-sm">
+                    <div class="flex items-center gap-2"><span class="text-fc-primary">→</span> U3 Solidarité (dossiers, collectes, suivi)</div>
+                    <div class="flex items-center gap-2"><span class="text-fc-primary">→</span> U5 Gouvernance (votes, comités, PV)</div>
+                    <div class="flex items-center gap-2"><span class="text-fc-primary">→</span> U2 Workflows configurables (23 types)</div>
+                    <div class="flex items-center gap-2"><span class="text-fc-primary">→</span> U4 Comptabilité SYSCOHADA</div>
+                </div>
+                <div class="mt-4 pt-4 border-t border-gray-200">
+                    <div class="text-xs text-fc-secondary">Budget : 60-90M FCFA</div>
+                    <div class="text-xs text-fc-secondary">Équipe : 8 personnes</div>
+                </div>
+            </div>
+            <div class="bg-fc-surface rounded-xl p-6 border-t-4 border-fc-success">
+                <div class="badge bg-fc-success text-white mb-3">PHASE 3 — MATURITÉ</div>
+                <h3 class="text-2xl font-bold text-fc-primary mb-2">Mois 19-30</h3>
+                <div class="text-sm text-fc-secondary mb-4">500-2 000 familles · 150K-600K membres</div>
+                <div class="space-y-2 text-sm">
+                    <div class="flex items-center gap-2"><span class="text-fc-accent">★</span> U6 Mémoire (interviews, traditions)</div>
+                    <div class="flex items-center gap-2"><span class="text-fc-accent">★</span> U7 Réseau (compétences, mentorat)</div>
+                    <div class="flex items-center gap-2"><span class="text-fc-accent">★</span> IA familiale (assistant langage naturel)</div>
+                    <div class="flex items-center gap-2"><span class="text-fc-accent">★</span> Multi-famille & extension communautés</div>
+                </div>
+                <div class="mt-4 pt-4 border-t border-gray-200">
+                    <div class="text-xs text-fc-secondary">Budget : 100-150M FCFA</div>
+                    <div class="text-xs text-fc-secondary">Équipe : 15 personnes</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="slide-brand"><span class="slide-brand-dot"></span> FamilleConnect</div>
+    <div class="slide-number">7 / 12</div>
+</div>
+
+<!-- ============ SLIDE 8 — TRACTION & VALIDATION ============ -->
+<div class="slide" style="background: #F4F1E9;">
+    <div class="fade-in flex-1 flex flex-col">
+        <div class="badge bg-fc-success text-white mb-4">TRACTION & VALIDATION</div>
+        <h1 class="text-5xl font-bold text-fc-primary mb-10">Le projet est prêt à démarrer</h1>
+        <div class="grid grid-cols-2 gap-8 flex-1">
+            <div>
+                <h3 class="text-xl font-bold text-fc-primary mb-4">Spécifications complètes</h3>
+                <div class="space-y-3">
+                    <div class="bg-white rounded-lg p-4 flex items-center gap-4">
+                        <div class="text-3xl font-bold text-fc-accent">7</div>
+                        <div><div class="font-semibold text-fc-primary">Univers spécifiés en détail</div><div class="text-xs text-fc-secondary">~46 000 mots de spécifications fonctionnelles</div></div>
+                    </div>
+                    <div class="bg-white rounded-lg p-4 flex items-center gap-4">
+                        <div class="text-3xl font-bold text-fc-accent">52</div>
+                        <div><div class="font-semibold text-fc-primary">Tables PostgreSQL définies</div><div class="text-xs text-fc-secondary">Schéma physique complet avec index et requêtes</div></div>
+                    </div>
+                    <div class="bg-white rounded-lg p-4 flex items-center gap-4">
+                        <div class="text-3xl font-bold text-fc-accent">121</div>
+                        <div><div class="font-semibold text-fc-primary">Notifications cataloguées</div><div class="text-xs text-fc-secondary">4 canaux, 5 niveaux de priorité, anti-saturation</div></div>
+                    </div>
+                    <div class="bg-white rounded-lg p-4 flex items-center gap-4">
+                        <div class="text-3xl font-bold text-fc-accent">1</div>
+                        <div><div class="font-semibold text-fc-primary">Maquette interactive HTML</div><div class="text-xs text-fc-secondary">8 écrans navigables, données de démonstration</div></div>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <h3 class="text-xl font-bold text-fc-primary mb-4">Architecture technique validée</h3>
+                <div class="bg-white rounded-xl p-6">
+                    <div class="grid grid-cols-2 gap-4 text-sm">
+                        <div><div class="text-xs text-fc-secondary uppercase font-semibold">Mobile</div><div class="font-semibold text-fc-primary">React Native</div></div>
+                        <div><div class="text-xs text-fc-secondary uppercase font-semibold">Web</div><div class="font-semibold text-fc-primary">Next.js 16</div></div>
+                        <div><div class="text-xs text-fc-secondary uppercase font-semibold">Back-end</div><div class="font-semibold text-fc-primary">NestJS + TypeScript</div></div>
+                        <div><div class="text-xs text-fc-secondary uppercase font-semibold">Base</div><div class="font-semibold text-fc-primary">PostgreSQL + Redis</div></div>
+                        <div><div class="text-xs text-fc-secondary uppercase font-semibold">Hébergement</div><div class="font-semibold text-fc-primary">AWS multi-zones</div></div>
+                        <div><div class="text-xs text-fc-secondary uppercase font-semibold">Paiement</div><div class="font-semibold text-fc-primary">MTN MoMo + Orange Money</div></div>
+                    </div>
+                    <div class="mt-6 pt-4 border-t border-gray-100">
+                        <div class="flex justify-between text-sm">
+                            <span class="text-fc-secondary">Coût infrastructure cible</span>
+                            <span class="font-bold text-fc-primary">&lt; 500 FCFA / membre / mois</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-4 bg-fc-primary text-white rounded-xl p-4">
+                    <div class="text-sm font-semibold mb-1">✓ Prêt pour le développement</div>
+                    <div class="text-xs opacity-80">Tous les documents techniques sont produits. L'équipe peut démarrer le codage immédiatement après le financement.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="slide-brand"><span class="slide-brand-dot"></span> FamilleConnect</div>
+    <div class="slide-number">8 / 12</div>
+</div>
+
+<!-- ============ SLIDE 9 — ÉQUIPE ============ -->
+<div class="slide" style="background: white;">
+    <div class="fade-in flex-1 flex flex-col">
+        <div class="badge bg-fc-primary text-white mb-4">L'ÉQUIPE</div>
+        <h1 class="text-5xl font-bold text-fc-primary mb-10">Une équipe à constituer, des rôles définis</h1>
+        <div class="grid grid-cols-5 gap-4 mb-8">
+            <div class="bg-fc-surface rounded-xl p-5 text-center">
+                <div class="w-16 h-16 bg-fc-primary rounded-full flex items-center justify-center text-white font-bold text-xl mx-auto mb-3">PM</div>
+                <div class="font-bold text-fc-primary text-sm">Product Manager</div>
+                <div class="text-xs text-fc-secondary mt-1">Vision produit, roadmap, relations familles pilotes</div>
+            </div>
+            <div class="bg-fc-surface rounded-xl p-5 text-center">
+                <div class="w-16 h-16 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-xl mx-auto mb-3">TL</div>
+                <div class="font-bold text-fc-primary text-sm">Tech Lead</div>
+                <div class="text-xs text-fc-secondary mt-1">Architecture, NestJS, PostgreSQL, DevOps</div>
+            </div>
+            <div class="bg-fc-surface rounded-xl p-5 text-center">
+                <div class="w-16 h-16 bg-fc-primary rounded-full flex items-center justify-center text-white font-bold text-xl mx-auto mb-3">FS</div>
+                <div class="font-bold text-fc-primary text-sm">Full-Stack Dev</div>
+                <div class="text-xs text-fc-secondary mt-1">React Native, Next.js, NestJS</div>
+            </div>
+            <div class="bg-fc-surface rounded-xl p-5 text-center">
+                <div class="w-16 h-16 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-xl mx-auto mb-3">UI</div>
+                <div class="font-bold text-fc-primary text-sm">Designer UX/UI</div>
+                <div class="text-xs text-fc-secondary mt-1">Maquettes, design system, accessibilité</div>
+            </div>
+            <div class="bg-fc-surface rounded-xl p-5 text-center">
+                <div class="w-16 h-16 bg-fc-primary rounded-full flex items-center justify-center text-white font-bold text-xl mx-auto mb-3">RF</div>
+                <div class="font-bold text-fc-primary text-sm">Référent Familles</div>
+                <div class="text-xs text-fc-secondary mt-1">Onboarding, support, retours d'expérience</div>
+            </div>
+        </div>
+        <div class="bg-fc-surface rounded-xl p-6">
+            <h3 class="font-bold text-fc-primary mb-3">Avantages de l'équipe</h3>
+            <div class="grid grid-cols-3 gap-4 text-sm">
+                <div class="flex items-start gap-3">
+                    <span class="text-2xl">🇨🇲</span>
+                    <div><div class="font-semibold text-fc-primary">Basée au Cameroun</div><div class="text-xs text-fc-secondary">Coûts maîtrisés, proximité terrain, compréhension du contexte</div></div>
+                </div>
+                <div class="flex items-start gap-3">
+                    <span class="text-2xl">🌍</span>
+                    <div><div class="font-semibold text-fc-primary">Télétravail diaspora</div><div class="text-xs text-fc-secondary">Recrutement de compétences camerounaises expatriées</div></div>
+                </div>
+                <div class="flex items-start gap-3">
+                    <span class="text-2xl">🎓</span>
+                    <div><div class="font-semibold text-fc-primary">Partenariats écoles</div><div class="text-xs text-fc-secondary">ENS, IUT, universités de Yaoundé pour stages et recrutement</div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="slide-brand"><span class="slide-brand-dot"></span> FamilleConnect</div>
+    <div class="slide-number">9 / 12</div>
+</div>
+
+<!-- ============ SLIDE 10 — RISQUES ============ -->
+<div class="slide" style="background: #F4F1E9;">
+    <div class="fade-in flex-1 flex flex-col">
+        <div class="badge bg-fc-urgent text-white mb-4">RISQUES & MITIGATIONS</div>
+        <h1 class="text-5xl font-bold text-fc-primary mb-10">Les risques sont identifiés et gérés</h1>
+        <div class="grid grid-cols-2 gap-4 flex-1">
+            <div class="bg-white rounded-lg p-5">
+                <div class="flex items-center gap-2 mb-2"><span class="badge bg-fc-critical text-white">Critique</span><span class="font-semibold text-fc-primary">Adoption par les aînés</span></div>
+                <p class="text-sm text-fc-secondary">Interface gros caractères, notifications vocales, accompagnement humain référent. Les patriarches sont la clé de l'adoption.</p>
+            </div>
+            <div class="bg-white rounded-lg p-5">
+                <div class="flex items-center gap-2 mb-2"><span class="badge bg-fc-critical text-white">Critique</span><span class="font-semibold text-fc-primary">Perte de confiance financière</span></div>
+                <p class="text-sm text-fc-secondary">Journal immutable, double validation, audit aléatoire, sanction exemplaire. La transparence est inscrite dans le système.</p>
+            </div>
+            <div class="bg-white rounded-lg p-5">
+                <div class="flex items-center gap-2 mb-2"><span class="badge bg-fc-urgent text-white">Élevé</span><span class="font-semibold text-fc-primary">Indisponibilité Mobile Money</span></div>
+                <p class="text-sm text-fc-secondary">Double intégration MTN + Orange, mode espèces de secours, file d'attente, communication transparente.</p>
+            </div>
+            <div class="bg-white rounded-lg p-5">
+                <div class="flex items-center gap-2 mb-2"><span class="badge bg-fc-urgent text-white">Élevé</span><span class="font-semibold text-fc-primary">Concurrence grand public</span></div>
+                <p class="text-sm text-fc-secondary">Spécialisation familiale africaine, effet réseau, lock-in par la mémoire accumulée. WhatsApp ne peut pas répliquer.</p>
+            </div>
+            <div class="bg-white rounded-lg p-5">
+                <div class="flex items-center gap-2 mb-2"><span class="badge bg-fc-accent text-fc-primary">Moyen</span><span class="font-semibold text-fc-primary">Recrutement technique</span></div>
+                <p class="text-sm text-fc-secondary">Formation interne, partenariats écoles, télétravail diaspora. Le Cameroun a un vivier tech en croissance.</p>
+            </div>
+            <div class="bg-white rounded-lg p-5">
+                <div class="flex items-center gap-2 mb-2"><span class="badge bg-fc-accent text-fc-primary">Moyen</span><span class="font-semibold text-fc-primary">Coût d'infrastructure</span></div>
+                <p class="text-sm text-fc-secondary">Open-source, services managés économiques, monitoring des coûts. Cible &lt; 500 FCFA/membre/mois.</p>
+            </div>
+        </div>
+    </div>
+    <div class="slide-brand"><span class="slide-brand-dot"></span> FamilleConnect</div>
+    <div class="slide-number">10 / 12</div>
+</div>
+
+<!-- ============ SLIDE 11 — L'ASK ============ -->
+<div class="slide" style="background: linear-gradient(135deg, #2A4A3A 0%, #1a2e22 100%); color: white;">
+    <div class="fade-in flex-1 flex flex-col justify-center">
+        <div class="badge bg-fc-accent text-fc-primary mb-4">L'OPPORTUNITÉ</div>
+        <h1 class="text-5xl font-bold mb-10">Ce que nous cherchons</h1>
+        <div class="grid grid-cols-3 gap-6 mb-10">
+            <div class="bg-white bg-opacity-10 rounded-xl p-6 border border-white border-opacity-20">
+                <div class="text-4xl mb-3">💰</div>
+                <h3 class="text-xl font-bold mb-2">Investisseurs</h3>
+                <p class="text-sm opacity-80 mb-3">100-200M FCFA sur 24 mois contre equity</p>
+                <div class="text-xs text-fc-accent">Financement Phase 1 + Phase 2</div>
+            </div>
+            <div class="bg-white bg-opacity-10 rounded-xl p-6 border border-white border-opacity-20">
+                <div class="text-4xl mb-3">🤝</div>
+                <h3 class="text-xl font-bold mb-2">Partenaires techniques</h3>
+                <p class="text-sm opacity-80 mb-3">MTN, Orange, banques, hébergeurs</p>
+                <div class="text-xs text-fc-accent">Intégrations natives & distribution</div>
+            </div>
+            <div class="bg-white bg-opacity-10 rounded-xl p-6 border border-white border-opacity-20">
+                <div class="text-4xl mb-3">👨‍👩‍👧</div>
+                <h3 class="text-xl font-bold mb-2">Familles pilotes</h3>
+                <p class="text-sm opacity-80 mb-3">5-10 grandes familles camerounaises</p>
+                <div class="text-xs text-fc-accent">Accompagnement gratuit contre témoignages</div>
+            </div>
+        </div>
+        <div class="bg-white bg-opacity-10 rounded-xl p-6 border border-white border-opacity-20">
+            <h3 class="text-xl font-bold mb-4">Utilisation des fonds</h3>
+            <div class="grid grid-cols-5 gap-4">
+                <div class="text-center"><div class="text-3xl font-bold text-fc-accent">55%</div><div class="text-xs opacity-80">Salaires techniques</div></div>
+                <div class="text-center"><div class="text-3xl font-bold text-fc-accent">15%</div><div class="text-xs opacity-80">Infrastructure</div></div>
+                <div class="text-center"><div class="text-3xl font-bold text-fc-accent">15%</div><div class="text-xs opacity-80">Accompagnement</div></div>
+                <div class="text-center"><div class="text-3xl font-bold text-fc-accent">10%</div><div class="text-xs opacity-80">Marketing</div></div>
+                <div class="text-center"><div class="text-3xl font-bold text-fc-accent">5%</div><div class="text-xs opacity-80">Réserve</div></div>
+            </div>
+        </div>
+    </div>
+    <div class="slide-brand"><span class="slide-brand-dot"></span> FamilleConnect</div>
+    <div class="slide-number">11 / 12</div>
+</div>
+
+<!-- ============ SLIDE 12 — CALL TO ACTION ============ -->
+<div class="slide" style="background: linear-gradient(135deg, #2A4A3A 0%, #C89F62 100%); color: white;">
+    <div class="fade-in flex-1 flex flex-col justify-center items-center text-center">
+        <div class="w-20 h-20 bg-white rounded-2xl flex items-center justify-center text-fc-primary font-bold text-4xl mb-8">F</div>
+        <h1 class="text-6xl font-bold mb-6">Rejoignez l'aventure</h1>
+        <p class="text-2xl opacity-90 mb-2 max-w-3xl">La famille mérite de durer, au-delà des générations et au-delà des modes.</p>
+        <p class="text-xl text-fc-accent-light mb-12">FamilleConnect — l'infrastructure numérique des grandes familles africaines.</p>
+        <div class="grid grid-cols-3 gap-8 mb-12">
+            <div class="text-center">
+                <div class="text-4xl font-bold text-fc-accent-light">7</div>
+                <div class="text-sm opacity-80">Univers spécifiés</div>
+            </div>
+            <div class="text-center">
+                <div class="text-4xl font-bold text-fc-accent-light">9 mois</div>
+                <div class="text-sm opacity-80">Pour le MVP</div>
+            </div>
+            <div class="text-center">
+                <div class="text-4xl font-bold text-fc-accent-light">30 000+</div>
+                <div class="text-sm opacity-80">Familles cibles</div>
+            </div>
+        </div>
+        <div class="bg-white bg-opacity-20 rounded-xl px-12 py-6 border border-white border-opacity-30">
+            <div class="text-lg font-semibold mb-2">Prochaines étapes</div>
+            <div class="text-sm opacity-90">Réunion de présentation approfondie sous 30 jours · Due diligence · Term sheet</div>
+        </div>
+        <div class="mt-8 text-sm opacity-70">FamilleConnect · Octobre 2026 · Document confidentiel</div>
+    </div>
+    <div class="slide-brand"><span class="slide-brand-dot"></span> FamilleConnect</div>
+    <div class="slide-number">12 / 12</div>
+</div>
+
+<!-- ============ JAVASCRIPT ============ -->
+<script>
+    let currentSlide = 0;
+    const slides = document.querySelectorAll('.slide');
+    const totalSlides = slides.length;
+
+    function showSlide(index) {
+        slides.forEach(s => s.classList.remove('active'));
+        slides[index].classList.add('active');
+        currentSlide = index;
+        document.getElementById('progress').style.width = ((index + 1) / totalSlides * 100) + '%';
+    }
+
+    function nextSlide() {
+        if (currentSlide < totalSlides - 1) showSlide(currentSlide + 1);
+    }
+
+    function prevSlide() {
+        if (currentSlide > 0) showSlide(currentSlide - 1);
+    }
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); nextSlide(); }
+        if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); prevSlide(); }
+        if (e.key === 'Home') showSlide(0);
+        if (e.key === 'End') showSlide(totalSlides - 1);
+        // Number keys 1-9
+        const num = parseInt(e.key);
+        if (num >= 1 && num <= 9 && num <= totalSlides) showSlide(num - 1);
+    });
+
+    // Click to advance (optional, on right half)
+    document.addEventListener('click', (e) => {
+        if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+        if (e.clientX > window.innerWidth / 2) nextSlide();
+        else prevSlide();
+    });
+</script>
+
+</body>
+</html>

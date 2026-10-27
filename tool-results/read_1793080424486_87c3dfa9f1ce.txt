@@ -1,0 +1,1013 @@
+     1→# Univers 5 — La Gouvernance
+     2→
+     3→**Les décisions, les votes et l'architecture du pouvoir familial**
+     4→
+     5→| Document | Spécifications fonctionnelles — Univers 5 |
+     6→|---|---|
+     7→| Version | 1.0 |
+     8→| Date | Septembre 2026 |
+     9→| Statut | Pour validation |
+    10→| Audience | Chefs de famille, membres du conseil, comité de pilotage, équipe produit, équipe développement |
+    11→| Prérequis | Spécifications Univers 1 à 4 |
+    12→
+    13→---
+    14→
+    15→## Synthèse exécutive
+    16→
+    17→L'Univers 5, intitulé **« La Gouvernance »**, est le pilier invisible de l'application. Sans lui, aucune décision n'est véritablement légitime : le vote d'un budget, l'élection d'un trésorier, la désignation d'un nouveau chef de branche, l'arbitrage d'un conflit, le choix du lieu du prochain congrès — toutes ces décisions resteraient aujourd'hui prises dans le flou, contestées a posteriori, ou pire, confisquées par les plus véhéments. La gouvernance est ce qui transforme une somme d'individus en institution capable de décider ensemble et de respecter ses décisions.
+    18→
+    19→La proposition centrale de l'Univers 5 est de remplacer les décisions implicites et orales d'aujourd'hui par des **processus tracés, configurables et légitimes**. Chaque type de décision — consultation, vote simple, vote des responsables, vote du conseil, décision du patriarche — possède son propre protocole, ses règles de quorum et de majorité, son périmètre de votants, et sa trace formelle. Les comités familiaux disposent d'espaces de travail dédiés. Les élections (trésorier, chef de branche, patriarche) suivent des processus formels. Le règlement intérieur est consultable, amendable et voté. Les procès-verbaux des assemblées et congrès sont archivés et consultables. En cas de contestation, une procédure de recours est ouverte.
+    20→
+    21→Le présent document définit le rôle, les objectifs, l'architecture en sept modules, le modèle de données, les règles de gestion, les cas limites et la roadmap de l'Univers 5. Il s'appuie sur l'Univers 1 (membres, branches, rôles) pour identifier les votants et les éligibles, sur l'Univers 2 (événements) pour les assemblées et congrès, sur l'Univers 3 (solidarité, médiation) pour les recours, et sur l'Univers 4 (finances) pour les votes budgétaires. L'Univers 5 est conçu pour transformer un sujet souvent confisqué par les aînés ou les plus véhements en une discipline partagée, sans déraciner les traditions familiales qui font leur légitimité.
+    22→
+    23→---
+    24→
+    25→## 1. Rôle et finalité de l'Univers 5
+    26→
+    27→### 1.1 Rôle stratégique
+    28→
+    29→L'Univers 5 joue quatre rôles stratégiques imbriqués qui en font le pilier invisible de l'application.
+    30→
+    31→**Premièrement, il est le cadre de légitimité des décisions.** Dans une grande famille camerounaise, les décisions importantes — vote du budget annuel, désignation du trésorier, choix du lieu du congrès, arbitrage d'un conflit, destitution d'un chef de branche — peuvent être prises par différentes instances selon les traditions : le patriarche seul, le conseil familial, l'assemblée générale, ou un référendum de tous les membres. Sans cadre explicite, ces décisions sont contestées : « qui a décidé ? », « qui avait le droit de voter ? », « la majorité était-elle atteinte ? ». L'Univers 5 impose un cadre : chaque décision est rattachée à un type de processus, avec ses règles, ses votants, son quorum, sa majorité, et sa trace. La légitimité devient vérifiable, plus seulement alléguée.
+    32→
+    33→**Deuxièmement, il est l'infrastructure de la participation.** Une grande famille de 200 ou 300 membres ne peut décider efficacement que si la participation est organisée. Les consultations WhatsApp génèrent 150 messages incohérents, dont on ne sait jamais si un consensus s'est dégagé. L'Univers 5 propose un système structuré : consultation ciblée, vote avec bulletins, résultats agrégés automatiquement, délai d'expression défini. La participation devient possible à grande échelle, sans noyer les décisions dans le bruit.
+    34→
+    35→**Troisièmement, il est la mémoire des décisions passées.** Chaque décision importante est consignée dans un procès-verbal, archivé, et consultable. Les descendants peuvent, dans vingt ou cinquante ans, voir quelles décisions ont été prises, par qui, avec quelle majorité, et pour quels motifs. Cette mémoire est précieuse pour la transmission institutionnelle et pour la prévention des conflits : en cas de contestation, même des années plus tard, les archives tranchent.
+    36→
+    37→**Quatrièmement, il est le gardien des équilibres traditionnels et démocratiques.** Les grandes familles africaines ne fonctionnent ni sur un modèle purement traditionnel (où l'aîné décide seul), ni sur un modèle purement démocratique (où la majorité décide sans respect des aînés). Elles fonctionnent sur un modèle hybride, où l'autorité des anciens coexiste avec la consultation des membres. L'Univers 5 propose un cadre configurable qui respecte cette hybridité : chaque famille peut définir ses propres règles, en mixant les niveaux de décision (consultation → vote simple → vote des responsables → vote du conseil → décision du patriarche) selon le type de sujet.
+    38→
+    39→### 1.2 Finalité opérationnelle
+    40→
+    41→Sur le plan opérationnel, l'Univers 5 poursuit une finalité claire : **qu'à tout moment, tout membre autorisé puisse répondre à cinq questions fondamentales** :
+    42→
+    43→1. Quelles sont les décisions en cours dans la famille, et lesquelles me concernent directement ?
+    44→2. Comment puis-je participer à une consultation ou à un vote, et quelle est la procédure ?
+    45→3. Qui sont les membres des différents comités, et quel est leur mandat ?
+    46→4. Où trouver les procès-verbaux des dernières assemblées et congrès ?
+    47→5. En cas de désaccord avec une décision, quel est le processus de recours ?
+    48→
+    49→Si ces cinq questions trouvent une réponse immédiate et fiable, l'Univers 5 remplit sa mission. La gouvernance cesse d'être un sujet d'opacité ou de contestation pour devenir un fonctionnement partagé.
+    50→
+    51→### 1.3 Quatre dimensions de la gouvernance
+    52→
+    53→L'Univers 5 distinguera systématiquement quatre dimensions de la gouvernance, qui appellent des réponses différentes :
+    54→
+    55→- **La dimension délibérative** — consultations, votes, motions. Elle est portée par le module Votes et consultations, et par le module Assemblées et congrès.
+    56→- **La dimension représentative** — comités, conseils, mandats. Elle est portée par le module Comités et conseils, et par le module Élections et mandats.
+    57→- **La dimension normative** — règlement intérieur, statuts, règles. Elle est portée par le module Règlement intérieur.
+    58→- **La dimension contentieuse** — recours, médiation, contestations. Elle est portée par le module Médiation et recours, en lien avec le comité médiation de l'Univers 3.
+    59→
+    60→Cette distinction structure tout l'Univers 5 : chaque décision, chaque instance, chaque règle, chaque contestation est rattachée à l'une de ces dimensions, ce qui évite la confusion entre ce qui relève de la délibération, de la représentation, de la norme, et du contentieux.
+    61→
+    62→---
+    63→
+    64→## 2. Objectifs mesurables
+    65→
+    66→L'Univers 5 doit être évalué sur des indicateurs concrets. Les objectifs ci-dessous sont proposés pour la première année d'exploitation, sur une famille pilote de 150 à 300 membres.
+    67→
+    68→| Objectif | Indicateur | Cible année 1 |
+    69→|---|---|---|
+    70→| Taux de participation aux votes | Pourcentage de votants sur les membres concernés | ≥ 60 % |
+    71→| Délai de décision | Délai moyen entre lancement d'une consultation et clôture | ≤ 14 jours |
+    72→| Taux de décisions contestées | Pourcentage de décisions faisant l'objet d'un recours | ≤ 5 % |
+    73→| Délai de traitement des recours | Délai moyen de réponse du comité médiation | ≤ 14 jours |
+    74→| Couverture des PV | Pourcentage d'assemblées et congrès avec PV archivé | 100 % |
+    75→| Taux de comités actifs | Pourcentage de comités ayant tenu au moins une réunion dans le trimestre | ≥ 80 % |
+    76→| Satisfaction sur la légitimité | Note moyenne des membres sur la légitimité des décisions | ≥ 4/5 |
+    77→| Traçabilité des mandats | Pourcentage de mandats avec début, fin, et validateur tracés | 100 % |
+    78→| Adoption du règlement intérieur | Pourcentage de familles ayant un règlement intérieur voté dans l'app | ≥ 90 % |
+    79→| Taux d'abstention | Pourcentage d'abstentions sur les votes (cible basse) | ≤ 20 % |
+    80→
+    81→Ces cibles sont indicatives ; elles devront être ajustées avec les familles pilotes. Elles traduisent l'ambition : une gouvernance participative, traçable, légitime et respectée.
+    82→
+    83→---
+    84→
+    85→## 3. Architecture fonctionnelle
+    86→
+    87→L'Univers 5 est composé de **sept modules fonctionnels** qui s'articulent autour d'un cœur commun : la décision. Les votes, comités, élections, règlement, PV, assemblées et recours sont autant de dimensions complémentaires de la gouvernance familiale.
+    88→
+    89→### Vue d'ensemble des modules
+    90→
+    91→```
+    92→┌─────────────────────────────────────────────────────────────┐
+    93→│              UNIVERS 5 — LA GOUVERNANCE                      │
+    94→│                                                              │
+    95→│  ┌────────────────────────────────────────────────────────┐  │
+    96→│  │  CŒUR : La décision (vote, motion, élection, arbitrage) │  │
+    97→│  └────────────────────────────────────────────────────────┘  │
+    98→│                              │                               │
+    99→│   ┌──────────┬──────────┬────┴─────┬──────────┬──────────┐  │
+   100→│   ▼          ▼          ▼          ▼          ▼          ▼  │
+   101→│  Votes &   Comités &  Élections  Règlement  PV &     Assem- │
+   102→│  consult-  conseils  & mandats  intérieur  archives  blées &│
+   103→│  ations                                            congrès  │
+   104→│                                                              │
+   105→│                       ┌────────────────┐                     │
+   106→│                       │ Médiation &    │                     │
+   107→│                       │ recours        │                     │
+   108→│                       └────────────────┘                     │
+   109→└─────────────────────────────────────────────────────────────┘
+   110→```
+   111→
+   112→L'organisation de l'application reflète cette architecture : un tableau de bord de la gouvernance affiche les votes en cours, les comités actifs, les prochains scrutins, et les derniers PV. Les membres consultent leur implication (droit de vote, mandats, comités) et participent aux consultations.
+   113→
+   114→### Navigation principale
+   115→
+   116→La navigation de l'Univers 5 s'organise autour de cinq entrées principales :
+   117→
+   118→1. **Votes en cours** — consultations et scrutins ouverts, avec mon droit de vote.
+   119→2. **Comités** — liste des comités, membres, comptes-rendus récents.
+   120→3. **Décisions** — motions adoptées, PV archivés, historique consultable.
+   121→4. **Règlement** — règlement intérieur consultable, amendements en cours.
+   122→5. **Recours** — formulaire de contestation, suivi des recours.
+   123→
+   124→Le patriarche, le conseil et les chefs de branche disposent en plus d'une entrée **Administration** (gestion des élections, validation des motions, ouverture des consultations) accessible uniquement aux rôles autorisés.
+   125→
+   126→---
+   127→
+   128→## 4. Module 4.1 — Votes et consultations
+   129→
+   130→### 4.1.1 Description
+   131→
+   132→Le module Votes et consultations est le cœur opérationnel de l'Univers 5. Il transforme les décisions floues en processus traçables. Chaque consultation ou vote est un objet distinct, avec son type, son périmètre, ses règles, et son résultat officiel.
+   133→
+   134→### 4.1.2 Les cinq niveaux de décision
+   135→
+   136→L'Univers 5 propose cinq niveaux de décision, du plus participatif au plus concentré. Chaque type de sujet est rattaché à un niveau par défaut, configurable par la famille.
+   137→
+   138→| Niveau | Description | Votants | Quorum par défaut | Majorité par défaut |
+   139→|---|---|---|---|---|
+   140→| Consultation | Sondage non contraignant pour mesurer l'opinion | Tous les membres adultes | Aucun | Non contraignant |
+   141→| Vote simple | Décision prise par l'ensemble des membres | Tous les membres adultes | 50 % des votants | Majorité simple |
+   142→| Vote des responsables | Décision prise par les chefs de branche | Chefs de branche (+ suppléants) | 2/3 des chefs | Majorité simple |
+   143→| Vote du conseil | Décision prise par le conseil familial | Membres du conseil | 2/3 du conseil | Majorité qualifiée 2/3 |
+   144→| Décision du patriarche | Décision unilatérale du patriarche | Patriarche seul | — | — |
+   145→
+   146→### 4.1.3 Paramètres d'un vote
+   147→
+   148→Chaque vote est défini par les paramètres suivants :
+   149→
+   150→- **Type** — consultation, vote simple, vote des responsables, vote du conseil.
+   151→- **Sujet** — formulation claire de la question.
+   152→- **Options** — liste des réponses possibles (oui/non, choix multiples, libre).
+   153→- **Périmètre** — membres concernés (toute la famille, une branche, un comité).
+   154→- **Durée** — date d'ouverture et date de clôture.
+   155→- **Quorum** — minimum de participation requis.
+   156→- **Majorité** — majorité simple, qualifiée (2/3), ou absolue.
+   157→- **Anonymat** — vote anonyme, nominatif, ou semi-anonyme (visible par le conseil).
+   158→- **Validateur** — autorité qui ouvre et clôture le vote (chef de branche, conseil, patriarche).
+   159→
+   160→### 4.1.4 Déroulement d'un vote
+   161→
+   162→Le déroulement suit quatre étapes :
+   163→
+   164→1. **Ouverture** — un membre autorisé crée le vote, avec ses paramètres. Le système notifie les votants concernés.
+   165→2. **Expression** — chaque votant exprime son choix dans l'application, avec authentification à deux facteurs pour les votes contraignants. Les votes sont chiffrés jusqu'à la clôture.
+   166→3. **Clôture** — à la date prévue, ou manuellement par le validateur. Le système agrège les résultats, vérifie le quorum, et détermine si la majorité est atteinte.
+   167→4. **Publication** — les résultats sont publiés à tous les votants, avec mention de la légitimité (quorum atteint, majorité atteinte) et de la décision qui en découle.
+   168→
+   169→### 4.1.5 Traçabilité et anonymat
+   170→
+   171→Pour garantir à la fois la transparence et la liberté d'expression, le système applique les règles suivantes :
+   172→
+   173→- **Anonymat du bulletin** — dans un vote anonyme, le choix d'un votant n'est jamais visible, même par le conseil. Seul le fait d'avoir voté est enregistré.
+   174→- **Vérifiabilité** — chaque votant reçoit un reçu de son vote, avec un identifiant unique. En cas de contestation, il peut prouver qu'il a voté, sans révéler son choix.
+   175→- **Journal d'audit** — le journal des ouvertures, clôtures, et publications est consultable par le conseil, mais jamais les contenus des bulletins individuels.
+   176→- **Anonymat semi-nominatif** — pour les votes sensibles (élections, destitutions), le vote est nominatif et visible uniquement par le conseil et le patriarche. Ce mode est utilisé avec parcimonie.
+   177→
+   178→### 4.1.6 Cas limite — égalité
+   179→
+   180→En cas d'égalité dans un vote simple ou un vote des responsables, la procédure par défaut est :
+   181→
+   182→- Nouveau vote dans un délai de 7 jours, avec incitation à la discussion préalable.
+   183→- En cas de nouvelle égalité, le patriarche tranche (ou le conseil, selon la configuration familiale).
+   184→
+   185→Cette règle, configurable, évite les blocages tout en respectant l'autorité traditionnelle.
+   186→
+   187→---
+   188→
+   189→## 5. Module 4.2 — Comités et conseils
+   190→
+   191→### 5.1 Description
+   192→
+   193→Les grandes familles africaines fonctionnent traditionnellement avec des comités spécialisés : comité financier, comité social, comité événementiel, comité jeunesse, comité femmes, comité diaspora, comité communication, comité médiation, comité culturel, comité exécutif. L'Univers 5 propose un module dédié à la gestion structurée de ces comités, qui sont à la fois des instances de décision, des espaces de travail, et des relais de l'autorité familiale.
+   194→
+   195→### 5.2 Les dix types de comités
+   196→
+   197→| Type | Description | Composition typique |
+   198→|---|---|---|
+   199→| Comité exécutif (ou Conseil familial) | Instance suprême de décision entre deux congrès | Patriarche, chefs de branche, sages cooptés |
+   200→| Comité financier | Gestion budgétaire et comptable | Trésorier, trésoriers de branche, contrôleur |
+   201→| Comité social | Solidarité, aides sociales, suivi des situations | Référents solidarité, comité médiation |
+   202→| Comité événementiel | Organisation des congrès et grands rassemblements | Référents événements, coordinateurs logistiques |
+   203→| Comité jeunesse | Animation, formation, intégration des jeunes | Membres 18-35 ans, représentants par branche |
+   204→| Comité femmes | Questionnement féminin, veuves, mamans | Déléguées femmes par branche |
+   205→| Comité diaspora | Coordination des membres à l'étranger | Référents diaspora par pays |
+   206→| Comité communication | Information, journal familial, site web | Rédacteurs, photographes, community managers |
+   207→| Comité médiation | Arbitrage des conflits, dossiers sensibles | 3 à 5 membres reconnus pour sagesse et discrétion |
+   208→| Comité culturel et traditionnel | Cérémonies traditionnelles, mémoire des coutumes | Anciens, gardiens des traditions |
+   209→
+   210→### 5.3 Composition et mandat
+   211→
+   212→Chaque comité possède :
+   213→
+   214→- **Un président** — désigné selon les traditions (souvent par le patriarche ou le conseil).
+   215→- **Des membres** — 3 à 15 selon le type, avec un équilibre entre branches et générations.
+   216→- **Un secrétaire** — chargé des comptes-rendus.
+   217→- **Un mandat** — généralement 2 à 4 ans, renouvelable, avec rotation.
+   218→- **Un suppléant** — pour assurer la continuité en cas d'indisponibilité.
+   219→
+   220→La composition est publique dans l'application : chaque membre peut voir qui est dans quel comité, et comment les contacter. Cette transparence est essentielle pour la légitimité.
+   221→
+   222→### 5.4 Espace de travail
+   223→
+   224→Chaque comité dispose d'un espace de travail dédié dans l'application, avec :
+   225→
+   226→- **Un fil de discussion** — réservé aux membres du comité, pour les échanges quotidiens.
+   227→- **Un agenda** — réunions, échéances, livrables.
+   228→- **Une bibliothèque de documents** — comptes-rendus, notes, références.
+   229→- **Un suivi des décisions** — motions adoptées, actions en cours.
+   230→- **Un lien avec les votes** — consultations et votes internes au comité.
+   231→
+   232→Cet espace remplace avantageusement les groupes WhatsApp dédiés aux comités, qui manquent de structure et de traçabilité.
+   233→
+   234→### 5.5 Comptes-rendus
+   235→
+   236→Chaque réunion de comité donne lieu à un compte-rendu, structuré en :
+   237→
+   238→- Date, lieu, présence.
+   239→- Ordre du jour.
+   240→- Délibérations (résumé des discussions).
+   241→- Décisions adoptées (motions).
+   242→- Actions assignées (qui, quoi, quand).
+   243→- Prochaine réunion.
+   244→
+   245→Le compte-rendu est validé par le président et le secrétaire, puis archivé dans l'application. Il est consultable par les membres du comité et, pour les décisions publiques, par l'ensemble de la famille.
+   246→
+   247→### 5.6 Cas limite — comité inactif
+   248→
+   249→Si un comité n'a tenu aucune réunion pendant 6 mois, le système signale l'inactivité au conseil. Le conseil peut :
+   250→
+   251→- Relancer le comité, avec un nouveau président si nécessaire.
+   252→- Fusionner le comité avec un autre (par exemple, comité jeunesse et comité femmes fusionnés en comité vivant).
+   253→- Dissoudre le comité, si son objet n'est plus pertinent.
+   254→
+   255→Cette surveillance prévient l'enlisement des instances, qui est l'une des causes principales de perte de légitimité des gouvernances familiales.
+   256→
+   257→---
+   258→
+   259→## 6. Module 4.3 — Élections et mandats
+   260→
+   261→### 6.1 Description
+   262→
+   263→Les élections sont les moments sensibles de la gouvernance familiale. L'élection du trésorier, du chef de branche, ou la transition du patriarche, peuvent être source de tensions profondes, voire de scissions. L'Univers 5 propose un processus formel, traçable et légitime, qui ne supprime pas les enjeux mais les encadre.
+   264→
+   265→### 6.2 Types d'élections
+   266→
+   267→| Type | Description | Éligibilité | Votants | Mandat |
+   268→|---|---|---|---|---|
+   269→| Trésorier | Responsable des finances familiales | Membre adulte, reconnu pour intégrité | Conseil familial | 2-4 ans, renouvelable |
+   270→| Trésorier adjoint | Suppléant du trésorier | Membre adulte | Conseil familial | Identique au trésorier |
+   271→| Chef de branche | Responsable d'une branche principale | Membre de la branche, génération en exercice | Membres adultes de la branche | À vie ou jusqu'à destitution |
+   272→| Patriarche | Autorité suprême de la famille | Désigné par tradition (aîné de la génération régnante) | Non élu, transmis | À vie |
+   273→| Membres du conseil | Représentants au conseil | Membres adultes | Selon configuration familiale | 2-4 ans, renouvelable |
+   274→| Membres de comités | Selon type de comité | Membres adultes | Selon type | 2-4 ans, renouvelable |
+   275→
+   276→### 6.3 Processus électoral
+   277→
+   278→Une élection suit cinq étapes :
+   279→
+   280→1. **Annonce** — le conseil (ou le patriarche) annonce l'élection, avec la date, le poste, les modalités.
+   281→2. **Candidatures** — les candidats se déclarent dans un délai défini (par défaut 14 jours). Chaque candidature comprend un profil, un programme court, et des soutiens.
+   282→3. **Campagne** — période d'expression des candidats (par défaut 14 jours), avec publication des programmes, questions des votants, débats si possible.
+   283→4. **Scrutin** — vote à bulletin secret, sur une période courte (par défaut 7 jours), avec authentification à deux facteurs.
+   284→5. **Proclamation** — résultats publiés, avec mention de la légitimité (quorum, majorité), et validation par le patriarche ou le conseil. Le mandat commence à la date prévue.
+   285→
+   286→### 6.4 Gestion des mandats
+   287→
+   288→Chaque mandat est enregistré dans l'application, avec :
+   289→
+   290→- Le titulaire (membre U1).
+   291→- Le poste (trésorier, chef de branche, etc.).
+   292→- La date de début et la date de fin prévue.
+   293→- Le validateur (patriarche, conseil, assemblée).
+   294→- Le journal des actions marquantes (décisions validées, absences, délégations).
+   295→- Le cas échéant, le motif de fin anticipée (démission, destitution, décès).
+   296→
+   297→Cette traçabilité est essentielle pour prévenir les contestations et assurer la continuité institutionnelle.
+   298→
+   299→### 6.5 Renouvellement et destitution
+   300→
+   301→Le renouvellement d'un mandat suit le même processus qu'une élection initiale, avec une possibilité de réélection si le titulaire se représente.
+   302→
+   303→La destitution est exceptionnelle et suit une procédure dédiée :
+   304→
+   305→- Saisine du conseil par au moins 10 % des membres adultes, ou par le patriarche.
+   306→- Enquête du comité médiation.
+   307→- Vote du conseil à la majorité qualifiée (2/3).
+   308→- Le cas échéant, validation par le patriarche.
+   309→- Notification au destinataire, avec motivation et droit de recours.
+   310→
+   311→La destitution est gravissime : elle doit être réservée aux manquements sérieux (fraude avérée, indélicatesse répétée, incapacité permanente). Elle est consignée au journal d'audit et archive le mandat dans l'Univers 6.
+   312→
+   313→### 6.6 Transition du patriarche
+   314→
+   315→La transition du patriarche est le moment le plus sensible de la gouvernance familiale. Elle suit généralement la tradition (aîné de la génération régnante), mais peut être contestée. Le système prévoit :
+   316→
+   317→- L'enregistrement formel de la désignation (par le conseil sortant, ou par le patriarche défunt si désignation anticipée).
+   318→- La validation par le conseil et par les chefs de branche.
+   319→- L'annonce officielle à la famille, avec cérémonie protocolaire.
+   320→- Le transfert des accès et des prérogatives dans l'application.
+   321→
+   322→En cas de contestation, le comité médiation est saisi. La procédure est longue et sensible, mais sa traçabilité prévient les conflits ouverts.
+   323→
+   324→---
+   325→
+   326→## 7. Module 4.4 — Règlement intérieur et statuts
+   327→
+   328→### 7.1 Description
+   329→
+   330→Le règlement intérieur est le texte fondamental de la famille. Il définit les règles de fonctionnement, les prérogatives de chaque instance, les modalités de décision, les droits et devoirs des membres. Sans règlement intérieur consultable et amendable, la gouvernance reste implicite et contestable. L'Univers 5 propose un module dédié à la gestion structurée de ce document.
+   331→
+   332→### 7.2 Structure du règlement intérieur
+   333→
+   334→Le règlement intérieur type comprend les sections suivantes (configurables) :
+   335→
+   336→1. **Dispositions générales** — nom de la famille, objet, siège, durée.
+   337→2. **Membres** — définition, droits, devoirs, admission, démission, exclusion.
+   338→3. **Branches** — composition, chefs de branche, prérogatives.
+   339→4. **Instances** — patriarche, conseil, comités, assemblée générale, congrès.
+   340→5. **Décisions** — types de votes, quorum, majorité, périmètre.
+   341→6. **Finances** — cotisations, caisse, budget, contrôle.
+   342→7. **Solidarité** — aides, exonérations, médiation.
+   343→8. **Événements** — congrès, assemblées, funérailles, mariages.
+   344→9. **Mémoire et patrimoine** — archives, documents familiaux, traditions.
+   345→10. **Modifications du règlement** — procédure d'amendement.
+   346→
+   347→### 7.3 Consultation et recherche
+   348→
+   349→Le règlement est consultable dans l'application, avec :
+   350→
+   351→- **Une table des matières** cliquable.
+   352→- **Une recherche plein texte** sur les articles.
+   353→- **Un glossaire** des termes techniques et des coutumes familiales.
+   354→- **Des renvois** entre articles connexes.
+   355→
+   356→Chaque membre peut consulter le règlement à tout moment, ce qui prévient les interprétations divergentes et les contournements.
+   357→
+   358→### 7.4 Amendements
+   359→
+   360→Le règlement est amendable, selon une procédure formelle :
+   361→
+   362→- **Proposition** — par le patriarche, le conseil, ou au moins 10 % des membres adultes.
+   363→- **Examen** — par le comité exécutif, qui rédige la version amendée.
+   364→- **Vote** — par le conseil à la majorité qualifiée (2/3), ou par l'assemblée générale selon les dispositions du règlement lui-même.
+   365→- **Publication** — la nouvelle version est publiée à tous les membres, avec mention des modifications.
+   366→
+   367→Chaque version est archivée, ce qui permet de consulter l'historique des évolutions du règlement.
+   368→
+   369→### 7.5 Conformité des décisions
+   370→
+   371→Le système propose un outil de vérification de conformité : pour chaque décision (vote, motion, élection), le rattachement à un article du règlement est enregistré. En cas de doute, le conseil ou le comité médiation peut vérifier que la décision respecte le règlement. En cas de non-conformité, la décision peut être suspendue, et une procédure de régularisation est ouverte.
+   372→
+   373→### 7.6 Cas limite — conflit entre tradition et règlement
+   374→
+   375→Dans certaines familles, la tradition orale peut entrer en conflit avec le règlement intérieur écrit. Par exemple, le règlement prévoit l'élection du trésorier, mais la tradition veut que ce soit l'aîné de la branche concernée. Le système gère ce cas en :
+   376→
+   377→- Permettant l'inscription des traditions dans une section dédiée du règlement (avec le même statut que les articles écrits).
+   378→- Prévoyant une procédure d'arbitrage par le patriarche en cas de conflit.
+   379→- Archivant la décision d'arbitrage, pour faire jurisprudence.
+   380→
+   381→Cette approche respecte l'hybridité des familles africaines, sans renoncer à la rigueur du règlement écrit.
+   382→
+   383→---
+   384→
+   385→## 8. Module 4.5 — Procès-verbaux et archives de décisions
+   386→
+   387→### 8.1 Description
+   388→
+   389→Les procès-verbaux (PV) sont la mémoire des décisions. Sans PV, une décision reste orale, contestable, et oublieuse. L'Univers 5 propose un module dédié à la rédaction, la validation, et l'archivage des PV de toutes les instances de la famille.
+   390→
+   391→### 8.2 Types de PV
+   392→
+   393→| Type | Instance | Rédacteur | Validation |
+   394→|---|---|---|---|
+   395→| PV de réunion de comité | Comité | Secrétaire du comité | Président du comité |
+   396→| PV de réunion de branche | Branche | Secrétaire de branche | Chef de branche |
+   397→| PV de conseil | Conseil familial | Secrétaire du conseil | Patriarche |
+   398→| PV d'assemblée générale | Assemblée générale | Secrétaire général | Patriarche |
+   399→| PV de congrès | Congrès familial | Secrétaire général | Patriarche + conseil |
+   400→
+   401→### 8.3 Structure d'un PV
+   402→
+   403→Un PV type comprend :
+   404→
+   405→- **En-tête** — instance, date, lieu, présence (membres présents, excusés, absents).
+   406→- **Ordre du jour** — liste des points à traiter.
+   407→- **Déroulé** — résumé des discussions, par point de l'ordre du jour.
+   408→- **Décisions** — motions adoptées, votes, résultats.
+   409→- **Actions** — actions assignées, responsables, échéances.
+   410→- **Clôture** — date et lieu de la prochaine réunion, signatures (numériques).
+   411→
+   412→### 8.4 Validation et publication
+   413→
+   414→Le PV suit un cycle de validation :
+   415→
+   416→1. **Brouillon** — rédigé par le secrétaire, dans un délai court (par défaut 7 jours après la réunion).
+   417→2. **Relecture** — par le président de l'instance, qui peut demander des ajustements.
+   418→3. **Validation** — signature numérique du président et du secrétaire.
+   419→4. **Publication** — à l'instance concernée (membres du comité, conseil, ou toute la famille selon le type).
+   420→
+   421→Une fois validé, le PV est immutable : toute correction se fait par avenant, avec mention du motif et validation par les mêmes autorités. Cette immuabilité est essentielle pour la valeur juridique et historique des PV.
+   422→
+   423→### 8.5 Recherche et consultation
+   424→
+   425→Les PV archivés sont consultables par les membres autorisés, avec :
+   426→
+   427→- **Recherche plein texte** sur le contenu.
+   428→- **Filtres** par instance, date, type de décision, mots-clés.
+   429→- **Renvois** entre PV connexes (par exemple, un PV de congrès qui adopte une motion référençant un PV de conseil précédent).
+   430→- **Exports** PDF pour diffusion ou archivage externe.
+   431→
+   432→Cette recherche permet, en cas de contestation ou de simple curiosité, de retrouver rapidement une décision et son contexte.
+   433→
+   434→### 8.6 Lien avec l'Univers 6
+   435→
+   436→Les PV validés sont archivés dans l'Univers 6 (Mémoire), avec les autres documents familiaux. Ils restent consultables indéfiniment, et constituent la trace officielle des décisions de la famille. Dans 50 ans, les descendants pourront voir comment leur famille a décidé, délibéré, et tranché.
+   437→
+   438→---
+   439→
+   440→## 9. Module 4.6 — Assemblées et congrès
+   441→
+   442→### 9.1 Description
+   443→
+   444→Les assemblées générales et les congrès sont les moments forts de la gouvernance familiale. Ils rassemblent l'ensemble des membres (ou leurs représentants), votent les décisions importantes, et valident les orientations de la famille. L'Univers 5 propose un module dédié à l'organisation de ces rassemblements, en lien étroit avec l'Univers 2 (événements) et l'Univers 4 (budgets).
+   445→
+   446→### 9.2 Cycle d'une assemblée
+   447→
+   448→Une assemblée générale ou un congrès suit un cycle structuré :
+   449→
+   450→1. **Convocation** — par le patriarche ou le conseil, avec un préavis minimum (par défaut 30 jours pour une AG, 90 jours pour un congrès).
+   451→2. **Ordre du jour** — publié avec la convocation, il liste les points à traiter. Les motions des membres peuvent y être ajoutées dans un délai défini.
+   452→3. **Documents préparatoires** — rapports du trésorier, du conseil, des comités, transmis aux membres avant l'assemblée.
+   453→4. **Déroulé** — ouverture par le patriarche, présentation des rapports, débats, votes, motions, clôture.
+   454→5. **Procès-verbal** — rédigé par le secrétaire, validé, publié.
+   455→6. **Archivage** — dans l'Univers 6.
+   456→
+   457→### 9.3 Votes en session
+   458→
+   459→Pendant l'assemblée, les votes se déroulent en session, avec des modalités spécifiques :
+   460→
+   461→- **Vote à main levée** — pour les motions peu contestées, compté par le secrétaire.
+   462→- **Vote à bulletins secrets** — pour les décisions sensibles, avec urne physique ou vote électronique.
+   463→- **Vote électronique** — pour les membres diaspora ou absents, via l'application, avec une fenêtre de vote synchronisée.
+   464→
+   465→Le système gère les trois modes, avec un rapprochement automatique des résultats. Les votes en session sont plus courts que les votes asynchrones (par défaut 24 heures maximum), mais suivent les mêmes règles de quorum et de majorité.
+   466→
+   467→### 9.4 Motions
+   468→
+   469→Une motion est une proposition formelle soumise au vote. Elle comprend :
+   470→
+   471→- Un intitulé.
+   472→- Un exposé des motifs.
+   473→- Une proposition résolutive (ce qui est décidé si la motion est adoptée).
+   474→- Un porteur (membre ou comité qui la propose).
+   475→
+   476→Les motions peuvent être déposées avant l'assemblée (avec un délai de pré-publication) ou pendant l'assemblée (sur autorisation du patriarche). Les motions adoptées deviennent des décisions officielles, rattachées au règlement intérieur et consignées au PV.
+   477→
+   478→### 9.5 Lien avec l'Univers 2
+   479→
+   480→L'assemblée ou le congrès est un événement de l'Univers 2 (type I3 ou I4). Le dossier d'événement U2 contient les aspects logistiques (inscriptions, hébergement, repas), tandis que le module U5 gère les aspects délibératifs (ordre du jour, motions, votes, PV). Les deux modules sont liés par un identifiant partagé, et se complètent sans redondance.
+   481→
+   482→### 9.6 Assemblée hybride (présentiel + diaspora)
+   483→
+   484→Pour les congrès où la diaspora ne peut pas se déplacer, le système gère un format hybride :
+   485→
+   486→- Inscriptions en présentiel ou en visioconférence.
+   487→- Diffusion en direct des débats, avec traduction si nécessaire.
+   488→- Votes synchronisés pour les deux populations.
+   489→- Quorum global (présentiel + visio), avec règle de pondération si nécessaire.
+   490→
+   491→Ce format hybride est essentiel pour la légitimité : une décision prise sans la diaspora serait contestée. Le système garantit que tous les membres adultes ont leur voix, où qu'ils soient.
+   492→
+   493→---
+   494→
+   495→## 10. Module 4.7 — Médiation et recours
+   496→
+   497→### 10.1 Description
+   498→
+   499→Aucune gouvernance n'est parfaite, et aucune décision ne fait l'unanimité. L'Univers 5 prévoit un module dédié à la médiation et aux recours, qui complète le comité médiation de l'Univers 3. Ce module gère les contestations de décisions, les recours auprès des instances supérieures, et la résolution des conflits liés à la gouvernance.
+   500→
+   501→### 10.2 Types de recours
+   502→
+   503→| Type | Description | Destinataire | Délai |
+   504→|---|---|---|---|
+   505→| Contestation d'une décision | Un membre conteste une décision prise par un comité ou un vote | Comité médiation | 30 jours après la décision |
+   506→| Recours contre un chef de branche | Un membre conteste une décision de son chef de branche | Conseil familial | 30 jours |
+   507→| Recours contre le trésorier | Soupçon de malversation ou décision abusive | Conseil + comité médiation | Immédiat |
+   508→| Recours contre le patriarche | Contestation d'une décision du patriarche | Conseil familial élargi | Exceptionnel |
+   509→| Recours électoral | Contestation du déroulement ou du résultat d'une élection | Comité médiation + conseil | 7 jours après proclamation |
+   510→
+   511→### 10.3 Procédure de recours
+   512→
+   513→La procédure standard comprend cinq étapes :
+   514→
+   515→1. **Dépôt** — le membre dépose un formulaire de recours, avec motif, pièces éventuelles, et décision contestée.
+   516→2. **Examen de recevabilité** — par le comité médiation, dans un délai de 7 jours. Si le recours est irrecevable (hors délai, hors périmètre), il est rejeté avec motivation.
+   517→3. **Instruction** — audition des parties, examen des pièces, consultation éventuelle d'experts.
+   518→4. **Décision** — par le comité médiation, dans un délai de 14 jours. La décision est motivée, transmise aux parties et au conseil.
+   519→5. **Appel** — en cas de désaccord, le recours peut être porté devant le conseil, puis devant le patriarche en dernier ressort.
+   520→
+   521→### 10.4 Journal des recours
+   522→
+   523→Tous les recours sont journalisés, avec leur statut (en cours, tranché, en appel), leur décisions, et leurs motifs. Ce journal est consultable par le conseil et le comité médiation. Il permet de suivre les patterns de contestation (par exemple, une branche qui conteste systématiquement) et d'identifier les améliorations possibles de la gouvernance.
+   524→
+   525→### 10.5 Confidentialité
+   526→
+   527→Les recours sont confidentiels par défaut. Seules les parties concernées, le comité médiation, et le conseil y ont accès. La publication d'un recours à d'autres membres est interdite, sauf décision contraire du patriarche. Cette confidentialité protège les membres qui contestent des représailles, et préserve la dignité des personnes mises en cause.
+   528→
+   529→### 10.6 Recours contre le patriarche
+   530→
+   531→Le recours contre le patriarche est exceptionnel et délicat. Il est ouvert dans deux cas :
+   532→
+   533→- Décision manifestement contraire au règlement intérieur.
+   534→- Manquement grave à l'éthique familiale (détournement, abus, inaptitude).
+   535→
+   536→La procédure est :
+   537→
+   538→- Saisine du conseil par au moins 20 % des membres adultes, ou par le comité médiation.
+   539→- Concertation élargie avec les chefs de branche et les sages.
+   540→- Décision du conseil élargi, à la majorité qualifiée des 2/3.
+   541→- Le cas échéant, désignation d'un patriarche intérimaire, et ouverture d'une procédure de transition.
+   542→
+   543→Cette procédure est rarissime, mais sa simple existence prévient les dérives et rappelle que le patriarche, bien qu'autorité suprême, n'est pas au-dessus du règlement.
+   544→
+   545→### 10.7 Lien avec l'Univers 3
+   546→
+   547→Le comité médiation de l'Univers 3 (Solidarité) et celui de l'Univers 5 (Gouvernance) sont les mêmes personnes, mais leurs champs d'intervention diffèrent :
+   548→
+   549→- En U3, le comité traite des conflits liés à la solidarité (contestation de dépense, demande d'aide confidentielle, exonération).
+   550→- En U5, le comité traite des conflits liés à la gouvernance (contestation de décision, recours électoral, recours contre une instance).
+   551→
+   552→Cette unicité du comité évite l'éclatement des instances de médiation et garantit une cohérence dans l'approche. Les dossiers sont néanmoins distincts, avec leurs propres journaux et leurs propres procédures.
+   553→
+   554→---
+   555→
+   556→## 11. Modèle de données conceptuel
+   557→
+   558→Le modèle de données de l'Univers 5 s'articule autour de sept entités principales.
+   559→
+   560→| Entité | Description | Attributs clés |
+   561→|---|---|---|
+   562→| Vote | Une consultation ou un scrutin | Type, sujet, options, périmètre, durée, quorum, majorité, statut |
+   563→| Comité | Une instance de la famille | Type, président, membres, mandat, secrétaire |
+   564→| Élection | Un processus électoral | Poste, candidats, votants, scrutin, proclamation, validateur |
+   565→| Mandat | La tenure d'un membre à un poste | Titulaire, poste, début, fin, validateur, statut |
+   566→| RèglementIntérieur | Le texte fondamental de la famille | Version, articles, historique, validateur |
+   567→| ProcèsVerbal | Le PV d'une instance | Instance, date, ordre du jour, décisions, validateur |
+   568→| Recours | Une contestation formelle | Type, auteur, décision contestée, statut, décideur |
+   569→
+   570→### 11.1 Relations principales
+   571→
+   572→- Un **Vote** est rattaché à un **Comité** ou à une instance (assemblée, congrès, conseil).
+   573→- Un **Comité** possède plusieurs membres (Membres U1) et génère plusieurs **ProcèsVerbaux**.
+   574→- Une **Élection** génère un **Mandat** pour le candidat élu.
+   575→- Un **Mandat** est détenu par un **Membre** (lien U1) pour un poste donné.
+   576→- Le **RèglementIntérieur** est référencé par les décisions (Vote, Motion) pour vérifier leur conformité.
+   577→- Un **Recours** cible une décision (Vote, Élection, Mandat, motion d'un PV).
+   578→- Un **ProcèsVerbal** est rattaché à une instance (Comité, assemblée, congrès) et archive les décisions.
+   579→
+   580→### 11.2 Règles d'intégrité
+   581→
+   582→- Un vote ne peut être clôturé sans vérification du quorum.
+   583→- Une élection ne peut être proclamée sans validation du validateur (patriarche ou conseil).
+   584→- Un mandat ne peut être détenu simultanément par deux membres pour le même poste (sauf suppléance explicitement déclarée).
+   585→- Un PV validé ne peut être modifié ; toute correction se fait par avenant.
+   586→- Un recours ne peut être déposé hors délai (sauf exception motivée).
+   587→- Toute suppression est interdite ; les décisions et PV sont archivés, jamais effacés.
+   588→
+   589→---
+   590→
+   591→## 12. Règles de gestion essentielles
+   592→
+   593→Les règles ci-dessous s'imposent à tous les modules de l'Univers 5. Elles sont configurables par chaque famille.
+   594→
+   595→| # | Règle | Justification |
+   596→|---|---|---|
+   597→| R1 | Chaque vote est rattaché à un type (consultation, vote simple, vote des responsables, vote du conseil) avec ses règles de quorum et de majorité | Garantit la légitimité |
+   598→| R2 | Les votes contraignants requièrent authentification à deux facteurs | Prévient les fraudes |
+   599→| R3 | Les bulletins anonymes sont chiffrés jusqu'à la clôture | Protège la liberté d'expression |
+   600→| R4 | Aucun vote ne peut être clôturé sans vérification du quorum | Garantit la représentativité |
+   601→| R5 | Les PV validés sont immuables ; toute correction se fait par avenant | Préserve la valeur juridique |
+   602→| R6 | Tout mandat est tracé avec début, fin, validateur, et journal des actions | Prévient les contestations |
+   603→| R7 | Les recours sont confidentiels, sauf décision contraire du patriarche | Protège les parties |
+   604→| R8 | Le règlement intérieur est consultable par tous les membres | Garantit la transparence |
+   605→| R9 | Les amendements au règlement sont votés à la majorité qualifiée (2/3) | Préserve la stabilité |
+   606→| R10 | Les comités inactifs pendant 6 mois sont signalés au conseil | Prévient l'enlisement |
+   607→| R11 | Les élections suivent un processus formel (annonce, candidatures, campagne, scrutin, proclamation) | Garantit la légitimité |
+   608→| R12 | La destitution d'un mandat requiert un vote du conseil à la majorité qualifiée | Protège contre les abus |
+   609→| R13 | Les congrès et assemblées générales font l'objet d'un PV archivé dans l'Univers 6 | Préserve la mémoire institutionnelle |
+   610→| R14 | Le recours contre le patriarche est exceptionnel et nécessite 20 % des membres adultes | Prévient les abus tout en protégeant l'autorité |
+   611→| R15 | Toute décision est rattachée à un article du règlement intérieur pour vérification de conformité | Garantit la cohérence |
+   612→
+   613→---
+   614→
+   615→## 13. Cas limites et situations sensibles
+   616→
+   617→### 13.1 Transition de pouvoir contestée
+   618→
+   619→La transition du patriarche peut être contestée, notamment dans les familles où la règle de l'aînesse n'est pas claire ou où plusieurs prétendants existent. Le système gère ce cas par :
+   620→
+   621→- L'enregistrement de toutes les prétentions, avec leurs motifs.
+   622→- La consultation du conseil et des chefs de branche.
+   623→- L'arbitrage par le comité médiation élargi aux sages.
+   624→- Le cas échéant, un vote du conseil à la majorité qualifiée.
+   625→
+   626→Cette procédure est longue et sensible, mais sa traçabilité prévient les conflits ouverts. En cas de blocage persistant, une médiation externe (par un chef traditionnel ou une autorité religieuse) peut être sollicitée.
+   627→
+   628→### 13.2 Vote serré ou égalité
+   629→
+   630→En cas d'égalité dans un vote, la procédure par défaut (nouveau vote, puis arbitrage du patriarche) évite le blocage. Le système gère aussi les cas de vote serré (écart inférieur à 5 %) en proposant :
+   631→
+   632→- Une vérification automatique des bulletins (recomptage).
+   633→- Une période de contestation de 7 jours, ouverte à tout votant.
+   634→- Le cas échéant, un nouveau vote.
+   635→
+   636→Ces précautions renforcent la légitimité des décisions serrées, qui sont les plus susceptibles d'être contestées.
+   637→
+   638→### 13.3 Fraude électorale
+   639→
+   640→La fraude électorale (double vote, vote par procuration non autorisée, manipulation des résultats) est rare mais grave. Le système prévoit :
+   641→
+   642→- Authentification à deux facteurs pour tous les votes contraignants.
+   643→- Vérification automatique des doublons (même membre, même vote).
+   644→- Journal d'audit consultable par le conseil.
+   645→- Procédure de contestation dans les 7 jours suivant la proclamation.
+   646→- En cas de fraude avérée, annulation du vote, sanction des fraudeurs, et nouveau scrutin.
+   647→
+   648→### 13.4 Recours contre le patriarche
+   649→
+   650→Le recours contre le patriarche est exceptionnel. Il est ouvert dans deux cas seulement : décision manifestement contraire au règlement, et manquement grave à l'éthique. La procédure (saisine par 20 % des membres, décision du conseil élargi) est lourde, ce qui dissuade les recours abusifs. En cas de recevabilité, le patriarche est auditionné par le conseil élargi, qui rend une décision motivée. Le recours reste confidentiel jusqu'à la décision finale.
+   651→
+   652→### 13.5 Scission familiale
+   653→
+   654→Dans les cas extrêmes, une branche peut décider de faire sécession et de quitter la famille. Le système gère ce cas par :
+   655→
+   656→- L'enregistrement formel de la décision de sécession (vote de la branche concernée).
+   657→- La médiation du comité et du patriarche pour tenter d'éviter la rupture.
+   658→- Le cas échéant, la négociation des conditions de sécession (partage des biens, conservation des archives, statut des membres).
+   659→- L'archivage de la scission dans l'Univers 6, pour la mémoire.
+   660→
+   661→La scission est toujours un échec, mais sa gestion traçable préserve la dignité de tous et la mémoire pour les générations futures.
+   662→
+   663→### 13.6 Abstention massive
+   664→
+   665→Si une consultation ou un vote reçoit un taux d'abstention supérieur à 50 %, le système signale l'alerte au conseil. Une abstention massive peut indiquer un désintérêt, une incompréhension du sujet, ou un désaccord profond avec la procédure. Le conseil peut :
+   666→
+   667→- Reporter le vote, avec une campagne d'information renforcée.
+   668→- Reformuler la question, pour la rendre plus claire.
+   669→- Tenir des réunions d'explication, en présentiel ou en visio.
+   670→- Le cas échéant, modifier le règlement pour ajuster le quorum.
+   671→
+   672→L'abstention n'est pas une simple absence de participation : c'est un signal politique qu'il faut savoir entendre.
+   673→
+   674→### 13.7 Mineur revendiquant une voix
+   675→
+   676→Un membre de moins de 18 ans peut revendiquer une voix dans une consultation, notamment s'il est marié ou émancipé selon la tradition. Le système prévoit :
+   677→
+   678→- Un statut de « membre junior émancipé », attribué sur décision du chef de branche.
+   679→- Le droit de vote pour les consultations non contraignantes.
+   680→- Le droit de vote pour les votes contraignants, sur autorisation du patriarche.
+   681→
+   682→Cette flexibilité respecte les traditions où l'âge civil n'est pas le seul critère de maturité.
+   683→
+   684→### 13.8 Tradition vs démocratie
+   685→
+   686→Dans certaines familles, la tradition veut que l'aîné de la branche aînée décide seul des sujets importants, sans consultation. D'autres familles ont adopté des règles plus démocratiques. Le système gère cette diversité en permettant à chaque famille de configurer ses propres règles, par type de sujet. Un même système peut ainsi fonctionner selon la tradition pour la désignation du patriarche, et de manière démocratique pour l'élection du trésorier. Cette hybridité est l'une des forces de l'application.
+   687→
+   688→---
+   689→
+   690→## 14. Wireframes textuels des écrans clés
+   691→
+   692→Cette section décrit en pseudo-maquettes les cinq écrans les plus importants de l'Univers 5.
+   693→
+   694→### 14.1 Consultation en cours
+   695→
+   696→```
+   697→┌────────────────────────────────────────────────────────────┐
+   698→│  VOTE-2026-008  🗳️ CONSULTATION                            │
+   699→├────────────────────────────────────────────────────────────┤
+   700→│  Sujet : Lieu du congrès familial 2027                    │
+   701→│  Type : Consultation (non contraignante)                  │
+   702→│  Périmètre : Tous les membres adultes (220 votants)       │
+   703→│  Échéance : 15 octobre 2026 (J-7)                         │
+   704→│                                                            │
+   705→│  ─── OPTIONS ────────────────────────────                  │
+   706→│  ○ Yaoundé                                                │
+   707→│  ○ Douala                                                 │
+   708→│  ○ Bafoussam (village familial)                           │
+   709→│  ○ Autre (préciser)                                       │
+   710→│                                                            │
+   711→│  ─── MON VOTE ─────────────────────────                    │
+   712→│  Statut : ⏳ À exprimer                                   │
+   713→│                                                            │
+   714→│  [Exprimer mon vote]                                      │
+   715→│                                                            │
+   716→│  ─── PARTICIPATION ────────────────────                    │
+   717→│  Votants : 134 / 220 (61%)                                │
+   718→│  Quorum atteint : ✓ (50% requis)                         │
+   719→│                                                            │
+   720→│  ─── RÉSULTATS (visibles après clôture) ──                 │
+   721→│  Disponibles le 15 octobre 2026 à 23h59                   │
+   722→│                                                            │
+   723→└────────────────────────────────────────────────────────────┘
+   724→```
+   725→
+   726→### 14.2 Comité de travail
+   727→
+   728→```
+   729→┌────────────────────────────────────────────────────────────┐
+   730→│  COMITÉ FINANCIER                                          │
+   731→├────────────────────────────────────────────────────────────┤
+   732→│                                                            │
+   733→│  ─── COMPOSITION ────────────────────                      │
+   734→│  Président : Bernard NDONGO (trésorier)                   │
+   735→│  Secrétaire : Hélène NDONGO                               │
+   736→│  Membres : 7 (dont 1 par branche)                         │
+   737→│  Mandat : 2025-2027                                        │
+   738→│                                                            │
+   739→│  ─── PROCHAINE RÉUNION ────────────────                    │
+   740→│  15 octobre 2026 — 17h — En visio                         │
+   741→│  Ordre du jour : Budget 2027, audit T3                   │
+   742→│                                                            │
+   743→│  ─── DERNIERS COMPTES-RENDUS ─────────                     │
+   744→│  • PV-2026-014 — Réunion du 12/09/2026                   │
+   745→│    Décisions : 3 — Actions : 5                            │
+   746→│  • PV-2026-013 — Réunion du 09/08/2026                   │
+   747→│    Décisions : 2 — Actions : 4                            │
+   748→│                                                            │
+   749→│  ─── ACTIONS EN COURS ────────────────                     │
+   750→│  • Préparer budget 2027 — Bernard — 30/10                │
+   751→│  • Rapprocher banque T3 — Hélène — 15/10                 │
+   752→│  • Préparer rapport congrès — Paul — 01/12               │
+   753→│                                                            │
+   754→│  [Ouvrir l'espace de travail]                              │
+   755→│                                                            │
+   756→└────────────────────────────────────────────────────────────┘
+   757→```
+   758→
+   759→### 14.3 Élection trésorier
+   760→
+   761→```
+   762→┌────────────────────────────────────────────────────────────┐
+   763→│  ÉLECTION TRÉSORIER 2027                                  │
+   764→├────────────────────────────────────────────────────────────┤
+   765→│  Statut : CAMPAGNE (J-3 avant scrutin)                    │
+   766→│  Votants : Conseil familial (12 membres)                  │
+   767→│  Scrutin : 20-25 octobre 2026 (bulletin secret)          │
+   768→│  Quorum : 2/3 du conseil (8 votants)                     │
+   769→│  Majorité : Absolue (50 % + 1)                            │
+   770→│                                                            │
+   771→│  ─── CANDIDATS ───────────────────────────                 │
+   772→│                                                            │
+   773→│  1. Bernard NDONGO (sortant)                              │
+   774→│     Branche Nord — 52 ans — Expert-comptable             │
+   775→│     Programme : Continuité, modernisation, audit annuel  │
+   776→│     Soutiens : 4 chefs de branche                         │
+   777→│     [Voir le programme complet]                           │
+   778→│                                                            │
+   779→│  2. Paul BIYA                                              │
+   780→│     Branche Sud — 45 ans — Banquier                       │
+   781→│     Programme : Transparence renforcée, Mobile Money     │
+   782→│     Soutiens : 3 chefs de branche                         │
+   783→│     [Voir le programme complet]                           │
+   784→│                                                            │
+   785→│  ─── MON VOTE ─────────────────────────                    │
+   786→│  Statut : ⏳ À exprimer (du 20 au 25 oct.)               │
+   787→│  Authentification 2FA requise                             │
+   788→│                                                            │
+   789→│  [Je vais voter]                                           │
+   790→│                                                            │
+   791→└────────────────────────────────────────────────────────────┘
+   792→```
+   793→
+   794→### 14.4 Règlement intérieur
+   795→
+   796→```
+   797→┌────────────────────────────────────────────────────────────┐
+   798→│  RÈGLEMENT INTÉRIEUR — Famille NDONGO                     │
+   799→├────────────────────────────────────────────────────────────┤
+   800→│  Version : 3.2 (adoptée au congrès de décembre 2025)     │
+   801→│  Recherche : [_______________________]                    │
+   802→│                                                            │
+   803→│  ─── TABLE DES MATIÈRES ────────────────                   │
+   804→│  1. Dispositions générales                                │
+   805→│  2. Membres                                               │
+   806→│  3. Branches                                              │
+   807→│  4. Instances                                             │
+   808→│  5. Décisions                                             │
+   809→│  6. Finances                                              │
+   810→│  7. Solidarité                                            │
+   811→│  8. Événements                                            │
+   812→│  9. Mémoire et patrimoine                                 │
+   813→│  10. Modifications du règlement                           │
+   814→│                                                            │
+   815→│  ─── ARTICLE 5.3 — VOTES DES RESPONSABLES ────            │
+   816→│                                                            │
+   817→│  « Les décisions concernant l'organisation des            │
+   818→│  congrès et des grandes cérémonies traditionnelles        │
+   819→│  sont prises par le vote des chefs de branche, à la       │
+   820→│  majorité simple, avec un quorum de 2/3.                  │
+   821→│                                                            │
+   822→│  En cas d'égalité, le patriarche tranche. »              │
+   823→│                                                            │
+   824→│  Historique :                                             │
+   825→│  • Version 3.2 (12/2025) — Modification quorum 50%→2/3  │
+   826→│  • Version 3.1 (12/2023) — Ajout paragraphe 2            │
+   827→│  • Version 3.0 (12/2021) — Réécriture complète          │
+   828→│                                                            │
+   829→│  [Proposer un amendement]                                 │
+   830→│                                                            │
+   831→└────────────────────────────────────────────────────────────┘
+   832→```
+   833→
+   834→### 14.5 PV de congrès (extrait)
+   835→
+   836→```
+   837→┌────────────────────────────────────────────────────────────┐
+   838→│  PV-2026-003 — PROCÈS-VERBAL DU CONGRÈS 2026              │
+   839→├────────────────────────────────────────────────────────────┤
+   840→│  Instance : Congrès familial NDONGO                       │
+   841→│  Date : 26-28 décembre 2026                               │
+   842→│  Lieu : Village Bafoussam                                 │
+   843→│  Présents : 198 / 247 (présentiel + visio)               │
+   844→│  Président de séance : Papa Jean NDONGO (patriarche)     │
+   845→│  Secrétaire : Hélène NDONGO                               │
+   846→│                                                            │
+   847→│  ─── ORDRE DU JOUR ────────────────────                    │
+   848→│  1. Rapport moral du patriarche                           │
+   849→│  2. Rapport financier 2026                                │
+   850→│  3. Budget 2027                                           │
+   851→│  4. Élection du trésorier                                 │
+   852→│  5. motions diverses                                      │
+   853→│                                                            │
+   854→│  ─── DÉCISIONS ADOPTÉES ────────────────                   │
+   855→│                                                            │
+   856→│  Motion 1 : Adoption du budget 2027                       │
+   857→│  - Pour : 168 — Contre : 12 — Abstentions : 18           │
+   858→│  - Lien règlement : Article 6.4                           │
+   859→│  - Validé par : Patriarche                                │
+   860→│                                                            │
+   861→│  Motion 2 : Élection de Bernard NDONGO comme trésorier   │
+   862→│  - Pour : 9 — Contre : 3 (conseil familial)              │
+   863→│  - Lien règlement : Article 4.7                           │
+   864→│  - Mandat : 2027-2030                                     │
+   865→│                                                            │
+   866→│  Motion 3 : Achat d'un terrain familial à Bafoussam     │
+   867→│  - Pour : 142 — Contre : 38 — Abstentions : 18           │
+   868→│  - Lien règlement : Article 9.2                           │
+   869→│  - Budget : 8 000 000 FCFA (caisse investissement)       │
+   870→│                                                            │
+   871→│  ─── ACTIONS ───────────────────────────                   │
+   872→│  • Trésorier : Ouvrir la cotisation exceptionnelle        │
+   873→│    terrain — 15/01/2027                                   │
+   874→│  • Comité culturel : Organiser la cérémonie d'achat       │
+   875→│    coutumier — 15/02/2027                                 │
+   876→│                                                            │
+   877→│  ─── VALIDATION ────────────────────────                   │
+   878→│  Validé le : 28/12/2026                                   │
+   879→│  Signatures numériques : Papa Jean, Hélène               │
+   880→│  Statut : Immutable — Archivé U6                         │
+   881→│                                                            │
+   882→└────────────────────────────────────────────────────────────┘
+   883→```
+   884→
+   885→---
+   886→
+   887→## 15. Roadmap MVP et séquençage
+   888→
+   889→L'Univers 5 est séquencé en trois phases pour permettre une adoption progressive.
+   890→
+   891→### 15.1 Phase 1 — MVP (mois 6 à 10)
+   892→
+   893→| Périmètre | Détail |
+   894→|---|---|
+   895→| Votes simples | Consultation + vote simple, périmètre familial |
+   896→| Comités | Création des 10 types, composition, espace de travail |
+   897→| PV de réunions | Rédaction, validation, archivage |
+   898→| Règlement intérieur | Consultation, sans amendement en ligne |
+   899→| Authentification 2FA | Pour les votes contraignants |
+   900→
+   901→**Critères de sortie** : taux de participation aux votes ≥ 50 %, 100 % des PV archivés, taux de comités actifs ≥ 70 %.
+   902→
+   903→### 15.2 Phase 2 — Enrichissement (mois 11 à 15)
+   904→
+   905→| Périmètre | Détail |
+   906→|---|---|
+   907→| Votes des responsables | Vote des chefs de branche |
+   908→| Votes du conseil | Vote du conseil familial, majorité qualifiée |
+   909→| Élections | Processus complet (annonce, candidatures, scrutin, proclamation) |
+   910→| Mandats | Gestion, traçabilité, renouvellement |
+   911→| Amendements | Procédure d'amendement du règlement en ligne |
+   912→| Recours | Procédure de contestation, comité médiation U5 |
+   913→| Assemblées hybrides | Présentiel + diaspora en visioconférence |
+   914→
+   915→**Critères de sortie** : taux de participation ≥ 60 %, délai de décision ≤ 14 jours, satisfaction sur la légitimité ≥ 4/5.
+   916→
+   917→### 15.3 Phase 3 — Maturité (mois 16 à 22)
+   918→
+   919→| Périmètre | Détail |
+   920→|---|---|
+   921→| IA participation | Suggestions d'ajustement des quorum selon les taux |
+   922→| Votes hybrides diaspora | Optimisation multi-fuseaux |
+   923→| Conformité automatique | Vérification des décisions contre le règlement |
+   924→| Médiation assistée | Outils d'aide à la décision pour le comité |
+   925→| Notifications vocales | Appels automatiques pour rappeler les votes aux aînés |
+   926→| Gouvernance multi-famille | Coordination avec familles alliées |
+   927→
+   928→**Critères de sortie** : taux d'abstention ≤ 20 %, taux de décisions contestées ≤ 5 %, adoption du règlement intérieur ≥ 90 %.
+   929→
+   930→---
+   931→
+   932→## 16. Risques et points d'attention
+   933→
+   934→### 16.1 Abstention
+   935→
+   936→L'abstention est le risque principal. Si les membres ne participent pas aux consultations et aux votes, la légitimité des décisions s'effrite. La mitigation repose sur :
+   937→
+   938→- La simplicité de l'expression (un tap pour voter).
+   939→- Les rappels automatiques (J-7, J-1, jour même).
+   940→- La publication des résultats et de l'impact des votes, pour montrer que la participation compte.
+   941→- Le cas échéant, l'obligation de justifier une abstention pour les votes contraignants.
+   942→
+   943→### 16.2 Contestation de légitimité
+   944→
+   945→Une décision peut être contestée sur sa légitimité (quorum non atteint, majorité non respectée, périmètre de votants erroné). La mitigation repose sur la traçabilité (chaque vote est enregistré avec ses paramètres), la procédure de recours (module 4.7), et la publication des résultats avec mention de la légitimité.
+   946→
+   947→### 16.3 Conflits de pouvoir
+   948→
+   949→Les élections et les transitions de pouvoir peuvent générer des conflits ouverts. La mitigation repose sur la procédure formelle (annonce, campagne, scrutin, proclamation), la confidentialité des bulletins, et le rôle du comité médiation en cas de contestation. Le patriarche joue un rôle d'arbitre ultime, ce qui prévient les blocages.
+   950→
+   951→### 16.4 Traditionalisme
+   952→
+   953→Certains membres peuvent considérer que la gouvernance numérique est une intrusion dans les traditions. La mitigation repose sur :
+   954→
+   955→- La configurabilité : chaque famille adapte ses règles.
+   956→- L'hybridité : tradition et démocratie coexistent.
+   957→- L'accompagnement : formations, explications, présence d'un référent.
+   958→- Le respect de l'autorité du patriarche, qui reste l'arbitre ultime.
+   959→
+   960→### 16.5 Fraude électorale
+   961→
+   962→La fraude électorale est rare mais grave. La mitigation repose sur l'authentification 2FA, le chiffrement des bulletins, le journal d'audit, et la procédure de contestation dans les 7 jours. En cas de fraude avérée, sanction exemplaire et nouveau scrutin.
+   963→
+   964→### 16.6 Confidentialité des recours
+   965→
+   966→Les recours et les contestations sont sensibles. Une fuite (par exemple, divulgation du fait qu'un membre a contesté une décision) peut causer des représailles. La mitigation repose sur la restriction d'accès (comité médiation + conseil uniquement), le journal des consultations, et la formation des membres du comité au secret.
+   967→
+   968→### 16.7 Dérive technocratique
+   969→
+   970→L'application peut donner l'impression que la gouvernance devient technique, réservée à ceux qui maîtrisent l'outil. La mitigation repose sur :
+   971→
+   972→- La simplicité de l'interface (un tap pour voter).
+   973→- Les notifications vocales pour les aînés.
+   974→- L'accompagnement humain d'un référent pour les membres en difficulté.
+   975→- Le maintien des cérémonies protocolaires (le patriarche ouvre et clôture les congrès, les motions sont lues à voix haute).
+   976→
+   977→---
+   978→
+   979→## 17. Indicateurs de succès
+   980→
+   981→| Indicateur | Définition | Cible | Fréquence |
+   982→|---|---|---|---|
+   983→| Taux de participation aux votes | Votants / membres concernés | ≥ 60 % | Par vote |
+   984→| Délai de décision | Lancement → clôture d'une consultation | ≤ 14 jours | Par vote |
+   985→| Taux de décisions contestées | Décisions faisant l'objet d'un recours | ≤ 5 % | Mensuel |
+   986→| Délai de traitement des recours | Dépôt → décision du comité médiation | ≤ 14 jours | Par recours |
+   987→| Couverture des PV | Assemblées et congrès avec PV archivé | 100 % | Par instance |
+   988→| Taux de comités actifs | Comités ayant réuni dans le trimestre | ≥ 80 % | Trimestriel |
+   989→| Satisfaction sur la légitimité | Note moyenne des membres | ≥ 4/5 | Annuel |
+   990→| Traçabilité des mandats | Mandats avec début, fin, validateur | 100 % | Permanent |
+   991→| Adoption du règlement | Familles avec règlement voté dans l'app | ≥ 90 % | Annuel |
+   992→| Taux d'abstention | Abstentions sur les votes | ≤ 20 % | Par vote |
+   993→
+   994→---
+   995→
+   996→## 18. Conclusion
+   997→
+   998→L'Univers 5 est le pilier invisible de l'application. Sans lui, aucune décision n'est véritablement légitime, aucune élection n'est incontestable, aucun règlement n'est opposable. La gouvernance est ce qui transforme une somme d'individus en institution capable de décider ensemble et de respecter ses décisions. C'est un module moins visible que les autres — pas de cotisations, pas de funérailles, pas d'albums photos — mais il est la condition de la pérennité de tout le reste.
+   999→
+  1000→La proposition centrale de l'Univers 5 est simple : remplacer les décisions implicites et orales d'aujourd'hui par des processus tracés, configurables et légitimes. Chaque type de décision — consultation, vote simple, vote des responsables, vote du conseil, décision du patriarche — possède son propre protocole, ses règles, et sa trace. Les comités disposent d'espaces de travail. Les élections suivent des processus formels. Le règlement intérieur est consultable et amendable. Les PV sont archivés. En cas de contestation, une procédure de recours est ouverte.
+  1001→
+  1002→L'Univers 5 ne se substitue pas à l'autorité traditionnelle : il la respecte et la renforce. Le patriarche reste l'arbitre ultime, les chefs de branche conservent leurs prérogatives, les traditions continuent d'être honorées. Mais l'application apporte la transparence, la traçabilité, et la participation, qui sont les conditions de la légitimité moderne. Une famille qui décide ensemble, qui respecte ses décisions, et qui archive sa mémoire institutionnelle est une famille qui dure.
+  1003→
+  1004→Les prochaines étapes recommandées sont les suivantes :
+  1005→
+  1006→1. **Validation de cette spécification** par le comité de pilotage et par au moins deux familles pilotes, avec un accent particulier sur la configuration des cinq niveaux de décision et sur la procédure de recours.
+  1007→2. **Production des maquettes interactives** des cinq écrans clés (consultation, comité, élection, règlement, PV de congrès).
+  1008→3. **Définition des interfaces avec l'Univers 4** (votes budgétaires) et l'Univers 2** (assemblées et congrès).
+  1009→4. **Construction du MVP Phase 1** avec un périmètre strictement limité aux votes simples, aux comités, et aux PV de réunions.
+  1010→5. **Onboarding de la première famille pilote** dans un délai de dix mois après le démarrage du développement, avec un accompagnement particulier du conseil familial et des chefs de branche.
+  1011→
+  1012→L'Univers 5, s'il est bien conçu et bien livré, deviendra l'architecture du pouvoir familial : un lieu où chaque décision trouve sa légitimité, chaque instance sa trace, et chaque membre sa voix. Il transformera la gouvernance d'un sujet d'opacité en une discipline partagée, sans déraciner les traditions qui font la valeur et la singularité des grandes familles africaines.
+  1013→

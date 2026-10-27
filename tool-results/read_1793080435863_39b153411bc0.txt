@@ -1,0 +1,657 @@
+     1→# FamilleConnect — Stratégie de Stockage et Transfert P2P
+     2→
+     3→**Architecture peer-to-peer : l'application comme relais, pas comme stockage**
+     4→
+     5→| Document | Stratégie de stockage et transfert de fichiers |
+     6→|---|---|
+     7→| Version | 1.0 |
+     8→| Date | Octobre 2026 |
+     9→| Statut | Pour validation — Changement architectural majeur |
+    10→| Audience | Équipe technique, CTO, comité de pilotage, investisseurs |
+    11→| Prérequis | Architecture technique appliquée, Schéma PostgreSQL |
+    12→
+    13→---
+    14→
+    15→## Synthèse exécutive
+    16→
+    17→FamilleConnect adopte une architecture de transfert de fichiers **peer-to-peer (P2P)** inspirée du modèle WhatsApp : l'application est un **relais entre téléphones**, pas un fournisseur de stockage. Les fichiers média (photos, vidéos, audio, voice notes) partagés par un utilisateur ne sont **jamais stockés sur nos serveurs**. Ils restent sur le téléphone de l'expéditeur et sont téléchargés à la demande par les destinataires, directement depuis le téléphone de l'expéditeur.
+    18→
+    19→Si l'expéditeur supprime le fichier de son téléphone, il n'est plus disponible pour de nouveaux téléchargements. Mais si un destinataire l'a déjà téléchargé, il le conserve localement et peut le consulter indéfiniment, même après suppression par l'expéditeur.
+    20→
+    21→Seules les données nécessitant un **rappel permanent ou programmé** sont stockées dans le cloud (Cloudflare ou équivalent) : événements du calendrier, notifications, enregistrements comptables, votes, PV, registre des membres. Ces données sont légères (texte structuré, quelques kilo-octets par entrée) et leur coût de stockage est négligeable.
+    22→
+    23→Cette stratégie réduit drastiquement les coûts d'infrastructure (pas de stockage S3 pour les média, pas de bande passante pour le transfert de fichiers), améliore la confidentialité (les fichiers ne quittent jamais le contrôle de leur propriétaire), et s'aligne sur le modèle mental des utilisateurs habitués à WhatsApp.
+    24→
+    25→---
+    26→
+    27→## 1. Principes fondamentaux
+    28→
+    29→### 1.1 Le principe : relais, pas stockage
+    30→
+    31→FamilleConnect est un **relais** entre les téléphones des membres, pas un dépôt central. Le rôle de l'application est de :
+    32→
+    33→- **Faciliter la mise en relation** entre l'expéditeur et le destinataire d'un fichier.
+    34→- **Transférer le fichier** directement du téléphone de l'expéditeur vers le téléphone du destinataire (P2P via WebRTC).
+    35→- **Mettre en cache localement** le fichier sur le téléphone du destinataire après téléchargement.
+    36→- **Informer les destinataires** qu'un fichier est disponible (notification avec manifeste, pas avec le fichier lui-même).
+    37→
+    38→L'application ne stocke **jamais** le contenu des fichiers média. Elle ne stocke que des **manifestes** (métadonnées : nom, type, taille, checksum, expéditeur, date, statut de disponibilité).
+    39→
+    40→### 1.2 Ce qui reste sur le téléphone de l'expéditeur
+    41→
+    42→| Type de contenu | Stockage | Justification |
+    43→|---|---|---|
+    44→| Photos partagées | Téléphone de l'expéditeur | L'expéditeur est propriétaire, contrôle la disponibilité |
+    45→| Vidéos partagées | Téléphone de l'expéditeur | Volume important, pas de coût serveur |
+    46→| Audio / voice notes | Téléphone de l'expéditeur | L'expéditeur contrôle la suppression |
+    47→| Documents (PDF, Word) | Téléphone de l'expéditeur | Sauf documents officiels archivés en U6 (voir §3) |
+    48→| Messages de chat | Téléphone de l'expéditeur | Livré au destinataire quand les deux sont en ligne |
+    49→
+    50→### 1.3 Ce qui est stocké dans le cloud
+    51→
+    52→| Type de contenu | Stockage | Justification |
+    53→|---|---|---|
+    54→| Registre des membres (U1) | Cloud | Données structurées, consultables hors-ligne, recherchables |
+    55→| Événements et calendrier (U2) | Cloud | Rappels programmés, notifications temporisées |
+    56→| Dossiers de solidarité (U3) | Cloud | Suivi permanent, collectes, immutabilité |
+    57→| Écritures comptables (U4) | Cloud | Immutabilité, audit, rapprochement |
+    58→| Votes et PV (U5) | Cloud | Immutabilité, traçabilité, légitimité |
+    59→| Manifestes de fichiers | Cloud | Métadonnées uniquement (nom, type, taille, expéditeur, statut) — jamais le contenu |
+    60→| Notifications | Cloud | Historique, anti-saturation, préférences |
+    61→| Règlement intérieur | Cloud | Consultable à tout moment, versionné |
+    62→
+    63→### 1.4 Le cycle de vie d'un fichier partagé
+    64→
+    65→```
+    66→┌──────────────────────────────────────────────────────────────┐
+    67→│  1. EXPÉDITEUR partage un fichier                            │
+    68→│     • Le fichier reste sur son téléphone                     │
+    69→│     • Un MANIFESTE est créé dans le cloud                    │
+    70→│     • Les destinataires reçoivent une NOTIFICATION           │
+    71→│        (avec manifeste, sans le fichier)                     │
+    72→├──────────────────────────────────────────────────────────────┤
+    73→│  2. DESTINATAIRE veut voir le fichier                        │
+    74→│     • L'app demande le fichier au téléphone de l'expéditeur  │
+    75→│     • Transfert P2P via WebRTC (ou TURN si NAT)              │
+    76→│     • Le fichier est mis en CACHE LOCAL sur le destinataire  │
+    77→├──────────────────────────────────────────────────────────────┤
+    78→│  3. EXPÉDITEUR supprime le fichier de son téléphone          │
+    79→│     • Le manifeste est marqué "indisponible"                 │
+    80→│     • Les nouveaux destinataires ne peuvent plus télécharger │
+    81→│     • Les destinataires qui ont déjà téléchargé conservent   │
+    82→│       leur copie locale (visible indéfiniment)               │
+    83→├──────────────────────────────────────────────────────────────┤
+    84→│  4. EXPÉDITEUR hors-ligne                                    │
+    85→│     • Le fichier n'est pas téléchargeable temporairement     │
+    86→│     • Le manifeste affiche "Expéditeur hors-ligne"           │
+    87→│     • Le destinataire peut demander une notification         │
+    88→│       "Préviens-moi quand le fichier est disponible"         │
+    89→└──────────────────────────────────────────────────────────────┘
+    90→```
+    91→
+    92→---
+    93→
+    94→## 2. Architecture technique P2P
+    95→
+    96→### 2.1 Vue d'ensemble
+    97→
+    98→```
+    99→┌──────────────────────────────────────────────────────────────┐
+   100→│                   ARCHITECTURE P2P FAMILLECONNECT             │
+   101→├──────────────────────────────────────────────────────────────┤
+   102→│                                                                │
+   103→│  ┌──────────┐                              ┌──────────┐       │
+   104→│  │ Téléphone │                              │ Téléphone │       │
+   105→│  │  Alice    │                              │   Bob     │       │
+   106→│  │           │     ┌───────────────┐       │           │       │
+   107→│  │  Fichier  │────▶│  Serveur de    │─────▶│  Fichier  │       │
+   108→│  │  (local)  │     │  signalisation │      │  (cache)  │       │
+   109→│  │           │     │  (léger)       │      │           │       │
+   110→│  └──────────┘     └───────────────┘       └──────────┘       │
+   111→│       │                   │                      │             │
+   112→│       │           ┌───────┴────────┐             │             │
+   113→│       │           │  Cloud (léger)  │             │             │
+   114→│       │           │  • Manifestes   │             │             │
+   115→│       │           │  • Événements   │             │             │
+   116→│       │           │  • Comptabilité │             │             │
+   117→│       │           │  • Votes / PV   │             │             │
+   118→│       │           │  • Notifications│             │             │
+   119→│       │           └────────────────┘             │             │
+   120→│       │                                           │             │
+   121→│       │         ┌─────────────────┐              │             │
+   122→│       └────────▶│  Serveur TURN    │◀─────────────┘             │
+   123→│                 │  (relay si P2P   │                            │
+   124→│                 │   impossible)    │                            │
+   125→│                 └─────────────────┘                            │
+   126→│                                                                │
+   127→│  Transfert direct P2P (WebRTC) quand possible                  │
+   128→│  Transfert via TURN (relay temporaire) si NAT bloquant         │
+   129→│  AUCUN stockage de fichiers sur les serveurs                   │
+   130→└──────────────────────────────────────────────────────────────┘
+   131→```
+   132→
+   133→### 2.2 Composants techniques
+   134→
+   135→#### Serveur de signalisation (cloud, léger)
+   136→
+   137→Le serveur de signalisation est le seul composant cloud nécessaire pour le P2P. Il est **extrêmement léger** (quelques kilo-octets par connexion) et sert uniquement à :
+   138→
+   139→- **Établir la connexion WebRTC** entre les deux téléphones (échange d'offres SDP, candidats ICE).
+   140→- **Maintenir la présence** (qui est en ligne, qui est hors-ligne).
+   141→- **Relayer les manifestes** de fichiers (métadonnées, pas le contenu).
+   142→- **Gérer les files d'attente** (demandes de téléchargement en attente).
+   143→
+   144→Technologie recommandée : **Node.js + Socket.io** (déjà dans la stack), hébergé sur Cloudflare Workers ou un petit serveur.
+   145→
+   146→#### WebRTC — transfert P2P direct
+   147→
+   148→WebRTC (Web Real-Time Communication) est la technologie standard pour le transfert direct entre navigateurs et applications mobiles, sans passage par un serveur intermédiaire.
+   149→
+   150→- **DataChannel** : canal de données bidirectionnel pour le transfert de fichiers (binaire).
+   151→- **STUN** : aide à la traversée de NAT (gratuit, Google fournit des serveurs STUN publics).
+   152→- **TURN** : relay quand le P2P direct échoue (NAT symétrique, pare-feu d'entreprise).
+   153→
+   154→Le transfert WebRTC est **chiffré par défaut** (DTLS/SRTP), ce qui garantit la confidentialité du fichier en transit.
+   155→
+   156→#### Serveur TURN (relay temporaire)
+   157→
+   158→Quand le P2P direct échoue (environ 10-20 % des cas selon les réseaux), le serveur TURN relaye temporairement le fichier entre les deux téléphones. **Le fichier n'est jamais stocké sur le serveur TURN** — il transite uniquement, comme un tuyau.
+   159→
+   160→Technologie recommandée : **coturn** (open-source), hébergé sur un petit serveur (2 vCPU, 4 Go RAM). Coût : ~20 000 FCFA/mois.
+   161→
+   162→#### Cache local (téléphone du destinataire)
+   163→
+   164→Une fois le fichier téléchargé, il est stocké dans le **cache local** de l'application sur le téléphone du destinataire :
+   165→
+   166→- **Emplacement** : répertoire privé de l'application (inaccessible aux autres apps).
+   167→- **Chiffrement** : SQLCipher ou chiffrement natif iOS/Android.
+   168→- **Gestion** : nettoyage automatique si l'espace est insuffisant (les fichiers les plus anciens sont supprimés en premier, sauf ceux marqués "Conserver").
+   169→- **Marquage manuel** : le destinataire peut marquer un fichier "Conserver" pour empêcher le nettoyage automatique.
+   170→
+   171→### 2.3 Gestion de la présence (en ligne / hors-ligne)
+   172→
+   173→Le serveur de signalisation maintient un **registre de présence** en temps réel :
+   174→
+   175→```
+   176→Présence = { member_id, device_id, status: 'online' | 'offline', last_seen_at }
+   177→```
+   178→
+   179→Quand un destinataire veut télécharger un fichier :
+   180→1. L'app vérifie si l'expéditeur est en ligne.
+   181→2. Si **en ligne** : transfert P2P immédiat via WebRTC.
+   182→3. Si **hors-ligne** : le manifeste affiche "Expéditeur hors-ligne — fichier temporairement indisponible". Le destinataire peut activer une alerte "Préviens-moi quand disponible".
+   183→4. Quand l'expéditeur revient en ligne, les alertes sont déclenchées.
+   184→
+   185→### 2.4 Gestion des fichiers multiples destinataires
+   186→
+   187→Un fichier peut être partagé avec plusieurs destinataires (par exemple, une photo d'un événement familial partagée avec toute la branche). Dans ce cas :
+   188→
+   189→- **L'expéditeur est la source unique** : tous les destinataires téléchargent depuis son téléphone.
+   190→- **Mise en cache distribuée** : après qu'un destinataire a téléchargé le fichier, il peut (optionnellement) servir de source secondaire pour les autres destinataires (modèle torrent-like). Cela réduit la charge sur l'expéditeur et accélère les téléchargements si l'expéditeur a une connexion limitée.
+   191→- **Configuration** : cette option est activable par l'expéditeur ("Autoriser le partage en cascade") ou par défaut, selon les retours des familles pilotes.
+   192→
+   193→---
+   194→
+   195→## 3. Ce qui est stocké dans le cloud vs sur le téléphone
+   196→
+   197→### 3.1 Matrice de stockage par type de contenu
+   198→
+   199→| Type de contenu | Cloud (métadonnées) | Téléphone expéditeur (fichier) | Téléphone destinataire (cache) | Justification |
+   200→|---|---|---|---|---|
+   201→| Photos d'album | Manifeste uniquement | ✓ Original | ✓ Cache après téléchargement | P2P, pas de stockage serveur |
+   202→| Vidéos d'événement | Manifeste uniquement | ✓ Original | ✓ Cache après téléchargement | P2P, pas de stockage serveur |
+   203→| Audio / voice notes | Manifeste uniquement | ✓ Original | ✓ Cache après téléchargement | P2P, pas de stockage serveur |
+   204→| Documents (PDF, Word) | Manifeste uniquement | ✓ Original | ✓ Cache après téléchargement | P2P, sauf documents officiels (voir §3.2) |
+   205→| Messages de chat | ✓ Stockés (léger) | ✓ Local aussi | ✓ Livré au destinataire | Texte = quelques octets, nécessaire pour livraison différée |
+   206→| Événements / calendrier | ✓ Stockés | — | — | Rappels programmés, notifications |
+   207→| Cotisations / paiements | ✓ Stockés | — | — | Immutabilité, audit, rapprochement |
+   208→| Votes / PV | ✓ Stockés | — | — | Immutabilité, traçabilité |
+   209→| Registre des membres | ✓ Stockés | — | — | Recherche, consultation hors-ligne |
+   210→| Notifications | ✓ Stockés | — | — | Anti-saturation, historique |
+   211→| Justificatifs financiers | Manifeste + option cloud | ✓ Original | ✓ Cache | P2P par défaut, mais le trésorier peut "épingler" un justificatif pour archivage cloud (U6) |
+   212→| Interviews d'anciens (U6) | Manifeste + option cloud | ✓ Original | ✓ Cache | P2P par défaut, mais le comité culturel peut "archiver" une interview pour conservation permanente (cloud) |
+   213→
+   214→### 3.2 Exceptions — archivage cloud optionnel
+   215→
+   216→Certains fichiers ont une valeur patrimoniale qui justifie un archivage cloud permanent. Ces fichiers sont **explicitement archivés** par un administrateur (comité culturel, trésorier, patriarche) et ne suivent pas le modèle P2P standard :
+   217→
+   218→| Fichier | Qui archive | Justification |
+   219→|---|---|---|
+   220→| Interviews d'anciens (U6) | Comité culturel | Patrimoine familial permanent, l'ancien peut décéder |
+   221→| Justificatifs de dépenses > 500 000 FCFA | Trésorier | Audit, immutabilité comptable |
+   222→| Actes notariés, testaments | Patriarche / conseil | Conservation légale, consultation posthume |
+   223→| PV de congrès (version PDF signée) | Secrétaire | Trace officielle immuable |
+   224→| Photos emblématiques d'événements | Référent de l'événement | Mémoire familiale, l'expéditeur peut supprimer |
+   225→
+   226→L'archivage cloud est **explicite et délibéré** : un utilisateur ne peut pas archiver par accident. L'action d'archivage génère une notification au propriétaire du fichier et une trace dans le journal d'audit.
+   227→
+   228→### 3.3 Tailles estimées
+   229→
+   230→| Type | Taille moyenne | Par famille/an | Cloud ? |
+   231→|---|---|---|---|
+   232→| Photo d'album | 2-5 Mo | 500 photos = 1-2,5 Go | Non — P2P |
+   233→| Vidéo d'événement | 50-200 Mo | 50 vidéos = 2,5-10 Go | Non — P2P |
+   234→| Voice note | 0,5-2 Mo | 200 voice notes = 0,1-0,4 Go | Non — P2P |
+   235→| Message de chat | 0,2 Ko | 50 000 messages = 10 Mo | Oui — négligeable |
+   236→| Événement (structuré) | 1 Ko | 200 événements = 200 Ko | Oui — négligeable |
+   237→| Écriture comptable | 0,5 Ko | 2 000 écritures = 1 Mo | Oui — négligeable |
+   238→| Manifeste de fichier | 0,3 Ko | 1 000 manifestes = 300 Ko | Oui — négligeable |
+   239→
+   240→**Économie de stockage cloud** : sans P2P, une famille de 247 membres générerait 5-15 Go de média par an. Avec 1 000 familles en Phase 3, cela représenterait 5-15 To/an, soit un coût de 5-15 millions FCFA/an en stockage S3. **Avec le P2P, ce coût tombe à quasiment zéro** (seuls les manifestes et les données structurées sont stockés, soit moins de 1 Go par famille par an).
+   241→
+   242→---
+   243→
+   244→## 4. Schéma de données mis à jour
+   245→
+   246→### 4.1 Table `commun.file_manifest` (remplace `commun.file`)
+   247→
+   248→La table `commun.file` du schéma PostgreSQL initial est remplacée par `commun.file_manifest`, qui ne stocke que les métadonnées, pas le fichier lui-même.
+   249→
+   250→```sql
+   251→CREATE TABLE commun.file_manifest (
+   252→    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+   253→    family_id           UUID NOT NULL REFERENCES commun.family(id),
+   254→    
+   255→    -- Métadonnées du fichier (pas le contenu)
+   256→    original_name       VARCHAR(500) NOT NULL,
+   257→    mime_type           VARCHAR(100) NOT NULL,
+   258→    size_bytes          BIGINT NOT NULL,
+   259→    checksum_sha256     VARCHAR(64) NOT NULL,
+   260→    
+   261→    -- Expéditeur (source P2P)
+   262→    sender_member_id    UUID NOT NULL REFERENCES famille.member(id),
+   263→    sender_device_id    UUID NOT NULL REFERENCES commun.device(id),
+   264→    
+   265→    -- Disponibilité
+   266→    availability_status manifest_availability NOT NULL DEFAULT 'available',
+   267→    -- 'available' = expéditeur en ligne ou fichier en cache
+   268→    -- 'offline' = expéditeur hors-ligne
+   269→    -- 'deleted' = expéditeur a supprimé le fichier
+   270→    -- 'archived' = archivé dans le cloud (exception)
+   271→    
+   272→    -- Archivage cloud optionnel
+   273→    is_archived         BOOLEAN NOT NULL DEFAULT FALSE,
+   274→    archived_at         TIMESTAMPTZ,
+   275→    archived_by         UUID REFERENCES commun.user(id),
+   276→    s3_bucket           VARCHAR(255),  -- null sauf si is_archived = true
+   277→    s3_key              VARCHAR(500),
+   278→    
+   279→    -- Partage en cascade (torrent-like)
+   280→    cascade_enabled     BOOLEAN NOT NULL DEFAULT TRUE,
+   281→    
+   282→    -- Métadonnées complémentaires
+   283→    metadata            JSONB NOT NULL DEFAULT '{}',
+   284→    
+   285→    -- Champs communs
+   286→    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+   287→    created_by          UUID REFERENCES commun.user(id),
+   288→    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+   289→    deleted_at          TIMESTAMPTZ,
+   290→    version             INTEGER NOT NULL DEFAULT 1
+   291→);
+   292→
+   293→CREATE TYPE manifest_availability AS ENUM ('available', 'offline', 'deleted', 'archived');
+   294→
+   295→CREATE INDEX idx_manifest_family ON commun.file_manifest(family_id) WHERE deleted_at IS NULL;
+   296→CREATE INDEX idx_manifest_sender ON commun.file_manifest(sender_member_id) WHERE deleted_at IS NULL;
+   297→CREATE INDEX idx_manifest_availability ON commun.file_manifest(availability_status) WHERE deleted_at IS NULL;
+   298→CREATE INDEX idx_manifest_archived ON commun.file_manifest(is_archived) WHERE is_archived = TRUE;
+   299→```
+   300→
+   301→### 4.2 Table `commun.file_download` (cache des destinataires)
+   302→
+   303→Suit les fichiers téléchargés par chaque destinataire (cache local).
+   304→
+   305→```sql
+   306→CREATE TABLE commun.file_download (
+   307→    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+   308→    file_manifest_id    UUID NOT NULL REFERENCES commun.file_manifest(id),
+   309→    recipient_member_id UUID NOT NULL REFERENCES famille.member(id),
+   310→    recipient_device_id UUID NOT NULL REFERENCES commun.device(id),
+   311→    download_status     download_status NOT NULL DEFAULT 'pending',
+   312→    -- 'pending' = demandé, en attente
+   313→    -- 'downloading' = en cours de transfert P2P
+   314→    -- 'completed' = téléchargé et mis en cache
+   315→    -- 'failed' = échec (expéditeur hors-ligne, fichier supprimé)
+   316→    -- 'expired' = cache nettoyé automatiquement
+   317→    
+   318→    download_started_at TIMESTAMPTZ,
+   319→    download_completed_at TIMESTAMPTZ,
+   320→    local_path          VARCHAR(500),  -- chemin sur le téléphone (chiffré)
+   321→    local_size_bytes    BIGINT,
+   322→    is_pinned           BOOLEAN NOT NULL DEFAULT FALSE,  -- conservé manuellement
+   323→    
+   324→    -- Source du téléchargement
+   325→    source_type         download_source NOT NULL DEFAULT 'sender',
+   326→    -- 'sender' = téléchargé depuis le téléphone de l'expéditeur
+   327→    -- 'cascade' = téléchargé depuis un autre destinataire (partage en cascade)
+   328→    -- 'cloud' = téléchargé depuis l'archive cloud (si is_archived)
+   329→    source_member_id    UUID REFERENCES famille.member(id),  -- si cascade
+   330→    
+   331→    -- Champs communs
+   332→    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+   333→    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+   334→    version             INTEGER NOT NULL DEFAULT 1
+   335→);
+   336→
+   337→CREATE TYPE download_status AS ENUM ('pending', 'downloading', 'completed', 'failed', 'expired');
+   338→CREATE TYPE download_source AS ENUM ('sender', 'cascade', 'cloud');
+   339→
+   340→CREATE INDEX idx_download_manifest ON commun.file_download(file_manifest_id);
+   341→CREATE INDEX idx_download_recipient ON commun.file_download(recipient_member_id, download_status);
+   342→CREATE UNIQUE INDEX idx_download_unique ON commun.file_download(file_manifest_id, recipient_member_id, recipient_device_id);
+   343→CREATE INDEX idx_download_pinned ON commun.file_download(is_pinned) WHERE is_pinned = TRUE;
+   344→```
+   345→
+   346→### 4.3 Table `commun.presence` (statut en ligne)
+   347→
+   348→Registre de présence en temps réel pour le P2P.
+   349→
+   350→```sql
+   351→CREATE TABLE commun.presence (
+   352→    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+   353→    member_id       UUID NOT NULL REFERENCES famille.member(id),
+   354→    device_id       UUID NOT NULL REFERENCES commun.device(id),
+   355→    status          presence_status NOT NULL DEFAULT 'offline',
+   356→    last_online_at  TIMESTAMPTZ,
+   357→    last_ip         INET,
+   358→    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   359→);
+   360→
+   361→CREATE TYPE presence_status AS ENUM ('online', 'away', 'offline');
+   362→
+   363→CREATE UNIQUE INDEX idx_presence_device ON commun.presence(device_id);
+   364→CREATE INDEX idx_presence_member ON commun.presence(member_id, status);
+   365→CREATE INDEX idx_presence_online ON commun.presence(status) WHERE status = 'online';
+   366→```
+   367→
+   368→---
+   369→
+   370→## 5. Impact sur chaque univers
+   371→
+   372→### 5.1 U1 — La Famille
+   373→
+   374→- **Photo de profil** : stockée sur le téléphone du membre, téléchargée P2P par les autres membres qui consultent la fiche. Si le membre supprime sa photo, elle n'est plus disponible (mais ceux qui l'ont mise en cache la voient encore).
+   375→- **Documents d'identité** : P2P, sauf archivage explicite par le conseil.
+   376→- **Registre, branches, rôles** : cloud (données structurées, pas des fichiers).
+   377→
+   378→### 5.2 U2 — La Vie familiale
+   379→
+   380→- **Albums photo** : chaque photo est un manifeste P2P. L'expéditeur (ou les contributeurs) sont les sources. Les destinataires téléchargent à la demande. Le référent peut "épingler" des photos emblématiques pour archivage cloud.
+   381→- **Programme d'événement (PDF)** : P2P, sauf si l'événement nécessite un rappel (alors archivé cloud).
+   382→- **Vidéos d'événement** : P2P uniquement (volume trop important pour le cloud).
+   383→- **Événements (métadonnées)** : cloud (rappels, calendrier, notifications).
+   384→
+   385→### 5.3 U3 — La Solidarité
+   386→
+   387→- **Justificatifs de dépenses** : P2P par défaut. Pour les dépenses > 500 000 FCFA, le trésorier peut "épingler" le justificatif pour archivage cloud (audit, immutabilité).
+   388→- **Dossier, collecte, suivi** : cloud (données structurées, immutabilité).
+   389→
+   390→### 5.4 U4 — Les Finances
+   391→
+   392→- **Reçus PDF** : générés localement sur le téléphone du membre (pas de stockage cloud).
+   393→- **Relevés bancaires** : P2P, téléversés par le trésorier.
+   394→- **Écritures comptables, cotisations, paiements** : cloud (immutabilité, audit, rapprochement).
+   395→
+   396→### 5.5 U5 — La Gouvernance
+   397→
+   398→- **PV en PDF** : P2P pour la version brouillon. Une fois validé, le PV est archivé cloud (immutabilité, trace officielle).
+   399→- **Règlement intérieur** : cloud (consultable à tout moment, versionné).
+   400→- **Votes, élections, recours** : cloud (immutabilité, traçabilité).
+   401→
+   402→### 5.6 U6 — La Mémoire
+   403→
+   404→- **Interviews audio/vidéo** : P2P par défaut. Le comité culturel peut "archiver" une interview pour conservation permanente (cloud), car l'ancien peut décéder et le fichier serait perdu.
+   405→- **Albums photo historiques** : P2P, avec archivage cloud optionnel pour les photos emblématiques.
+   406→- **Documents officiels** : archivage cloud (actes notariés, testaments, statuts).
+   407→- **Traditions (texte, recettes)** : cloud (léger, consultable, recherchable).
+   408→
+   409→### 5.7 U7 — Le Réseau
+   410→
+   411→- **Portfolios, CV** : P2P (le membre est la source).
+   412→- **Messages de chat** : cloud (texte léger, livraison différée nécessaire).
+   413→- **Pièces jointes de messagerie** : P2P (photos, documents partagés en chat).
+   414→- **Compétences, opportunités, mentorat** : cloud (données structurées).
+   415→
+   416→---
+   417→
+   418→## 6. Gestion des messages texte
+   419→
+   420→### 6.1 Le modèle hybride
+   421→
+   422→Les messages texte de chat (U7 messagerie) sont stockés dans le cloud, car :
+   423→
+   424→- **Taille négligeable** : un message texte = 0,2 Ko en moyenne. 50 000 messages par an = 10 Mo, soit un coût cloud insignifiant.
+   425→- **Livraison différée** : le destinataire peut être hors-ligne. Le message doit attendre dans le cloud jusqu'à ce que le destinataire se connecte.
+   426→- **Recherche** : les messages doivent être recherchables (Elasticsearch).
+   427→- **Historique** : les membres consultent l'historique de leurs conversations.
+   428→
+   429→### 6.2 Comportement type WhatsApp
+   430→
+   431→- **Envoi** : le message est stocké dans le cloud + sur le téléphone de l'expéditeur.
+   432→- **Livraison** : quand le destinataire se connecte, le message est livré (push + stockage local).
+   433→- **Confirmation** : l'expéditeur reçoit une confirmation de livraison (✓✓).
+   434→- **Suppression** : l'expéditeur peut supprimer le message pour lui (local) ou pour tous (cloud + local de tous les destinataires, dans un délai de 1 heure).
+   435→- ** conservation** : les messages sont conservés dans le cloud pendant 90 jours, puis archivés en archive froide.
+   436→
+   437→### 6.3 Exception : les annonces critiques
+   438→
+   439→Les annonces critiques (décès, maladie grave) sont stockées dans le cloud de manière permanente, car elles déclenchent des workflows (U2) et des dossiers de solidarité (U3) qui nécessitent une trace durable.
+   440→
+   441→---
+   442→
+   443→## 7. Gestion de l'espace local sur le téléphone
+   444→
+   445→### 7.1 Stratégie de cache
+   446→
+   447→L'application gère intelligemment l'espace de stockage local sur le téléphone du destinataire :
+   448→
+   449→| Priorité | Comportement |
+   450→|---|---|
+   451→| Fichiers épinglés ("Conserver") | Jamais supprimés automatiquement |
+   452→| Fichiers récents (< 30 jours) | Conservés en priorité |
+   453→| Fichiers consultés fréquemment | Conservés en priorité |
+   454→| Fichiers anciens (> 90 jours) non consultés | Supprimés en premier si espace insuffisant |
+   455→| Fichiers jamais consultés | Supprimés en premier |
+   456→
+   457→### 7.2 Nettoyage automatique
+   458→
+   459→- **Seuil d'alerte** : quand le cache atteint 80 % de la limite configurable (par défaut 2 Go), l'app alerte le membre.
+   460→- **Nettoyage automatique** : quand le cache atteint 95 %, les fichiers les moins prioritaires sont supprimés.
+   461→- **Nettoyage manuel** : le membre peut nettoyer manuellement, avec un aperçu des fichiers par taille et par ancienneté.
+   462→
+   463→### 7.3 Paramétrage
+   464→
+   465→Le membre peut configurer :
+   466→- **Limite de cache** : 500 Mo, 1 Go, 2 Go, 5 Go, ou "Illimité".
+   467→- **Nettoyage automatique** : activé/désactivé.
+   468→- **Durée de conservation** : 30, 60, 90 jours, ou "Illimité".
+   469→
+   470→---
+   471→
+   472→## 8. Sécurité du transfert P2P
+   473→
+   474→### 8.1 Chiffrement en transit
+   475→
+   476→Le transfert WebRTC est chiffré par défaut avec **DTLS** (Datagram Transport Layer Security) pour le DataChannel. Le fichier est donc chiffré entre le téléphone de l'expéditeur et le téléphone du destinataire, sans possibilité d'interception par le serveur de signalisation ou le serveur TURN.
+   477→
+   478→### 8.2 Chiffrement local
+   479→
+   480→- **Expéditeur** : le fichier reste dans son emplacement d'origine (galerie photo, répertoire de fichiers). L'application n'a pas besoin de le chiffrer (il est déjà sur le téléphone du propriétaire).
+   481→- **Destinataire** : le fichier téléchargé est stocké dans le **répertoire privé chiffré** de l'application (SQLCipher ou chiffrement natif iOS/Android). Il n'est pas accessible depuis la galerie du téléphone, sauf si le destinataire choisit de l'"Exporter vers la galerie".
+   482→
+   483→### 8.3 Authentification des pairs
+   484→
+   485→Avant le transfert P2P, les deux téléphones s'authentifient mutuellement via le serveur de signalisation :
+   486→
+   487→1. Le destinataire envoie une demande de téléchargement au serveur de signalisation.
+   488→2. Le serveur vérifie que le destinataire a le droit d'accéder au fichier (permissions RBAC).
+   489→3. Le serveur facilite l'échange de certificats entre les deux téléphones.
+   490→4. Le transfert WebRTC commence, chiffré de bout en bout.
+   491→
+   492→### 8.4 Validation du checksum
+   493→
+   494→Après le téléchargement, le destinataire vérifie le **checksum SHA-256** du fichier reçu contre le manifeste. Si les checksums ne correspondent pas, le fichier est rejeté et le téléchargement est relancé.
+   495→
+   496→---
+   497→
+   498→## 9. Gestion des cas limites
+   499→
+   500→### 9.1 Expéditeur hors-ligne
+   501→
+   502→Si l'expéditeur est hors-ligne quand le destinataire veut télécharger :
+   503→- Le manifeste affiche "Expéditeur hors-ligne — fichier temporairement indisponible".
+   504→- Le destinataire peut activer une alerte "Préviens-moi quand disponible".
+   505→- Quand l'expéditeur revient en ligne, le serveur de signalisation notifie le destinataire.
+   506→- Le téléchargement peut alors commencer.
+   507→
+   508→**Alternative** : si le partage en cascade est activé et qu'un autre destinataire a déjà le fichier en cache, le téléchargement peut se faire depuis ce destinataire (source secondaire).
+   509→
+   510→### 9.2 Expéditeur supprime le fichier
+   511→
+   512→Si l'expéditeur supprime le fichier de son téléphone :
+   513→- L'application met à jour le manifeste : `availability_status = 'deleted'`.
+   514→- Les nouveaux destinataires voient "Fichier supprimé par l'expéditeur".
+   515→- Les destinataires qui ont déjà téléchargé conservent leur copie locale (cache).
+   516→- Le fichier n'est plus disponible pour de nouveaux téléchargements, sauf si :
+   517→  - Le partage en cascade est activé et d'autres destinataires ont le fichier en cache.
+   518→  - Le fichier a été archivé dans le cloud (is_archived = true).
+   519→
+   520→### 9.3 Expéditeur perd son téléphone
+   521→
+   522→Si l'expéditeur perd son téléphone :
+   523→- Tous ses fichiers deviennent "indisponibles" (expéditeur hors-ligne permanent).
+   524→- Les destinataires qui ont déjà téléchargé conservent leur copie locale.
+   525→- Si le partage en cascade est activé, les fichiers restent disponibles via les autres destinataires.
+   526→- Le support peut marquer les manifestes comme "perdus" et faciliter la récupération depuis les caches des destinataires.
+   527→
+   528→### 9.4 Fichier volumineux (vidéo > 200 Mo)
+   529→
+   530→Pour les fichiers volumineux :
+   531→- Le transfert P2P peut prendre plusieurs minutes selon la connexion.
+   532→- L'affichage montre une barre de progression en temps réel.
+   533→- Le téléchargement peut être mis en pause et repris (transfert par chunks).
+   534→- Si la connexion est interrompue, le téléchargement reprend là où il s'est arrêté (checksum par chunk).
+   535→
+   536→### 9.5 Congrès en zone rurale (réseau local)
+   537→
+   538→Pour les congrès en zone rurale sans connexion Internet :
+   539→- L'application peut fonctionner en **réseau local (LAN)** via Wi-Fi direct ou Bluetooth.
+   540→- Le transfert P2P se fait en局域, sans passer par le serveur de signalisation cloud.
+   541→- Les manifestes sont synchronisés au retour de la connexion Internet.
+   542→- Ce mode "LAN" est particulièrement utile pour le partage de photos de congrès entre les participants présents.
+   543→
+   544→### 9.6 Archivage d'une interview d'ancien (cas critique)
+   545→
+   546→Une interview d'ancien (U6) est initialement partagée en P2P depuis le téléphone de l'intervieweur. Mais l'ancien peut décéder, et l'intervieweur peut perdre son téléphone. Pour éviter la perte de ce patrimoine :
+   547→
+   548→1. Le comité culturel **archive explicitement** l'interview dans le cloud (is_archived = true).
+   549→2. Le fichier est téléversé vers S3 (ou équivalent) depuis le téléphone de l'intervieweur.
+   550→3. Le manifeste est mis à jour avec `s3_bucket` et `s3_key`.
+   551→4. Les destinataires peuvent désormais télécharger l'interview depuis le cloud (source_type = 'cloud'), indépendamment de la disponibilité de l'intervieweur.
+   552→5. L'interview est conservée de manière permanente (triple stockage, voir U6).
+   553→
+   554→---
+   555→
+   556→## 10. Impact sur les coûts d'infrastructure
+   557→
+   558→### 10.1 Comparaison avant/après
+   559→
+   560→| Poste | Sans P2P (architecture initiale) | Avec P2P (architecture révisée) | Économie |
+   561→|---|---|---|---|
+   562→| Stockage S3 (média) | 5-15 To/an (Phase 3) | ~50 Go/an (archives uniquement) | **99 % d'économie** |
+   563→| Bande passante (téléchargement média) | 10-30 To/mois (Phase 3) | ~100 Go/mois (signalisation + TURN) | **95 % d'économie** |
+   564→| Serveur de signalisation | — | 1 petit serveur (20K FCFA/mois) | +20K FCFA/mois |
+   565→| Serveur TURN | — | 1 petit serveur (20K FCFA/mois) | +20K FCFA/mois |
+   566→| **Total Phase 3** | 12-42M FCFA/mois | **10-38M FCFA/mois** | **2-4M FCFA/mois d'économie** |
+   567→
+   568→### 10.2 Nouvelle estimation des coûts (Phase 3 révisée)
+   569→
+   570→| Poste | Coût mensuel (FCFA) |
+   571→|---|---|
+   572→| Compute (ECS auto-scaling) | 2 – 4 millions |
+   573→| Base de données (RDS + read replicas) | 2 – 4 millions |
+   574→| Cache (Redis cluster) | 500 000 – 1 million |
+   575→| Elasticsearch (cluster) | 1 – 2 millions |
+   576→| **Stockage S3 (archives uniquement)** | **50 000 – 200 000** (vs 500K-2M avant) |
+   577→| **CDN (signalisation + assets, pas de média)** | **200 000 – 500 000** (vs 500K-2M avant) |
+   578→| **Serveur de signalisation P2P** | **100 000 – 200 000** (nouveau) |
+   579→| **Serveur TURN (relay)** | **100 000 – 200 000** (nouveau) |
+   580→| SMS (100 000-500 000 SMS) | 5 – 25 millions |
+   581→| E-mail | 100 000 – 300 000 |
+   582→| Monitoring | 500 000 – 1 million |
+   583→| Divers | 300 000 – 700 000 |
+   584→| **Total Phase 3 révisé** | **11,8 – 39,3 millions FCFA/mois** |
+   585→
+   586→**Économie nette** : 200 000 à 2,7 millions FCFA/mois en Phase 3, selon le volume d'archives. L'économie croît avec le nombre de familles (plus de familles = plus de média = plus d'économie relative).
+   587→
+   588→---
+   589→
+   590→## 11. Mise à jour du schéma de données PostgreSQL
+   591→
+   592→### 11.1 Tables modifiées
+   593→
+   594→Les tables suivantes du schéma PostgreSQL sont modifiées pour refléter la stratégie P2P :
+   595→
+   596→| Table | Modification |
+   597→|---|---|
+   598→| `commun.file` | **Remplacée** par `commun.file_manifest` (métadonnées uniquement) |
+   599→| `commun.file_download` | **Nouvelle table** (cache des destinataires) |
+   600→| `commun.presence` | **Nouvelle table** (statut en ligne) |
+   601→| `vie_familiale.photo` | `file_id` → `file_manifest_id` (FK vers manifeste) |
+   602→| `vie_familiale.album` | `cover_photo_id` → `cover_manifest_id` |
+   603→| `solidarite.solidarity_expense` | `justification_file_id` → `justification_manifest_id` |
+   604→| `finances.payment` | `receipt_file_id` → `receipt_manifest_id` |
+   605→| `finances.accounting_entry` | `justification_file_id` → `justification_manifest_id` |
+   606→| `memoire.testimony` | `audio_file_id` → `audio_manifest_id`, etc. |
+   607→| `memoire.document` | `file_id` → `file_manifest_id` |
+   608→| `reseau.opportunity` | Pas de changement (pas de fichier) |
+   609→
+   610→### 11.2 Nouvelles tables
+   611→
+   612→```sql
+   613→-- Voir §4 pour le DDL complet de :
+   614→-- commun.file_manifest
+   615→-- commun.file_download
+   616→-- commun.presence
+   617→```
+   618→
+   619→---
+   620→
+   621→## 12. Mise à jour du plan de test
+   622→
+   623→Les scénarios de test suivants sont ajoutés au plan de test :
+   624→
+   625→| ID | Scénario | Priorité | Critère d'acceptation |
+   626→|---|---|---|---|
+   627→| P2P-01 | Transfert P2P direct (WebRTC) | Critique | Le fichier est transféré de l'expéditeur au destinataire en moins de 30 secondes pour un fichier de 5 Mo |
+   628→| P2P-02 | Transfert via TURN (NAT bloquant) | Critique | Le fichier est transféré via le relay TURN, sans stockage sur le serveur |
+   629→| P2P-03 | Expéditeur hors-ligne | Élevée | Le manifeste affiche "hors-ligne", le destinataire peut activer une alerte |
+   630→| P2P-04 | Expéditeur supprime le fichier | Critique | Le manifeste passe en "deleted", les nouveaux téléchargements sont bloqués, les caches existants sont conservés |
+   631→| P2P-05 | Partage en cascade | Élevée | Un destinataire ayant le fichier en cache peut servir de source pour un autre destinataire |
+   632→| P2P-06 | Checksum validation | Critique | Le checksum du fichier reçu correspond au manifeste, sinon rejet |
+   633→| P2P-07 | Nettoyage automatique du cache | Moyenne | Les fichiers les moins prioritaires sont supprimés quand le cache atteint 95 % |
+   634→| P2P-08 | Archivage cloud explicite | Élevée | Le comité culturel peut archiver une interview, le fichier est téléversé vers S3, disponible indépendamment de l'expéditeur |
+   635→| P2P-09 | Mode LAN (congrès rural) | Moyenne | Le transfert P2P fonctionne en réseau local sans connexion Internet |
+   636→| P2P-10 | Reprene de téléchargement (chunks) | Élevée | Un téléchargement interrompu reprend là où il s'est arrêté |
+   637→| P2P-11 | Chiffrement en transit | Critique | Le transfert WebRTC est chiffré (DTLS), le serveur de signalisation ne voit pas le contenu |
+   638→| P2P-12 | Fichier volumineux (200 Mo vidéo) | Moyenne | Le téléchargement d'une vidéo de 200 Mo complète en moins de 5 minutes avec progression |
+   639→
+   640→---
+   641→
+   642→## 13. Conclusion
+   643→
+   644→La stratégie P2P transforme FamilleConnect d'une plateforme de stockage en une plateforme de **relais**. Les fichiers média (photos, vidéos, audio) ne sont jamais stockés sur nos serveurs : ils transitent directement entre les téléphones des membres, via WebRTC. L'application est un facilitateur, pas un dépôt.
+   645→
+   646→Cette stratégie offre trois avantages majeurs :
+   647→
+   648→1. **Coût drastiquement réduit** — pas de stockage S3 pour les média, pas de bande passante pour le transfert de fichiers. Économie estimée à 2-4 millions FCFA/mois en Phase 3.
+   649→2. **Confidentialité renforcée** — les fichiers ne quittent jamais le contrôle de leur propriétaire. L'expéditeur peut révoquer l'accès à tout moment en supprimant le fichier de son téléphone.
+   650→3. **Alignement avec le modèle mental des utilisateurs** — les membres sont habitués à WhatsApp, où les fichiers sont téléchargés à la demande. FamilleConnect reproduit ce comportement, en l'étendant à tous les types de partage.
+   651→
+   652→Les exceptions (archivage cloud explicite pour les interviews d'anciens, justificatifs de dépenses importantes, PV validés, documents officiels) sont délibérées et maîtrisées : elles concernent uniquement les fichiers à valeur patrimoniale ou légale, et nécessitent une action explicite d'un administrateur.
+   653→
+   654→Le compromis principal est la **disponibilité conditionnelle** : un fichier n'est téléchargeable que si l'expéditeur (ou un destinataire en cache, via le partage en cascade) est en ligne. Ce compromis est accepté, car il correspond au modèle WhatsApp et parce que les fichiers les plus importants (interviews d'anciens, PV, justificatifs) sont archivés explicitement dans le cloud.
+   655→
+   656→Les prochaines étapes consistent à mettre à jour l'architecture technique, le schéma PostgreSQL, et le plan de test avec cette stratégie P2P, puis à implémenter le serveur de signalisation et le serveur TURN en Phase 1.
+   657→

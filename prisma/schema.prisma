@@ -1,0 +1,163 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── U1 — La Famille (socle minimal pour l'authentification) ───
+
+model Family {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  branches  Branch[]
+  members   Member[]
+}
+
+model Branch {
+  id        String   @id @default(cuid())
+  familyId  String
+  family    Family   @relation(fields: [familyId], references: [id])
+  name      String
+  members   Member[]
+  createdAt DateTime @default(now())
+}
+
+// Profil pré-enregistré par le secrétaire / chef de famille
+model Member {
+  id          String       @id @default(cuid())
+  familyId    String
+  family      Family       @relation(fields: [familyId], references: [id])
+  branchId    String
+  branch      Branch       @relation(fields: [branchId], references: [id])
+  fullName    String
+  phone       String?
+  email       String?
+  // PATRIARCHE | CONSEIL | CHEF_BRANCHE | SECRETAIRE | ADULTE | JUNIOR
+  role        String       @default("ADULTE")
+  // PREINSCRIT | ACTIF | ARCHIVE (jamais de suppression physique)
+  status      String       @default("PREINSCRIT")
+  user        User?
+  accessCodes AccessCode[]
+  createdAt   DateTime     @default(now())
+}
+
+// Compte utilisateur (créé à la revendication du profil par code d'accès)
+model User {
+  id            String            @id @default(cuid())
+  memberId      String?           @unique
+  member        Member?           @relation(fields: [memberId], references: [id])
+  fullName      String
+  phone         String?
+  email         String?
+  role          String            @default("ADULTE")
+  pinHash       String?
+  pinSalt       String?
+  createdAt     DateTime          @default(now())
+  devices       Device[]
+  notifications Notification[]
+  preferences   NotificationPref?
+  recoveryCodes RecoveryCode[]
+  otpCodes      OtpCode[]
+}
+
+// Appareil appairé (1 refresh = 1 device) — support WebAuthn + Web Push
+model Device {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id])
+  name             String
+  type             String    @default("pwa_web") // pwa_web | android | ios
+  credentialId     String?   @unique
+  publicKey        String?
+  counter          Int       @default(0)
+  simulated        Boolean   @default(false) // biométrie simulée (mode démo)
+  pushSubscription String? // JSON subscription Web Push
+  lastSeen         DateTime  @default(now())
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+}
+
+// Code d'accès à usage unique (remis par le secrétaire, TTL 7 jours)
+model AccessCode {
+  id           String    @id @default(cuid())
+  code         String    @unique
+  memberId     String
+  member       Member    @relation(fields: [memberId], references: [id])
+  createdBy    String?
+  expiresAt    DateTime
+  usedAt       DateTime?
+  usedByDevice String?
+  createdAt    DateTime  @default(now())
+}
+
+// OTP (mode démo : le code est retourné à l'écran ; prod : envoyé par SMS/email)
+model OtpCode {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  codeHash   String
+  purpose    String    @default("LOGIN")
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+}
+
+// Code de récupération personnel (affiché une seule fois, usage unique)
+model RecoveryCode {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+// Challenges WebAuthn (passkey) — TTL court
+model Challenge {
+  id        String   @id @default(cuid())
+  kind      String // registration | authentication
+  challenge String
+  dataJson  String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+// Centre de notifications in-app (aligné catalogue : univers + type + priorité)
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  univers   String    @default("U1")
+  typeCode  String
+  // CRITIQUE | HAUTE | NORMALE | INFO
+  priority  String    @default("NORMALE")
+  title     String
+  body      String
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model NotificationPref {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id])
+  digestEnabled Boolean  @default(true)
+  quietStart    Int      @default(19)
+  quietEnd      Int      @default(7)
+  pushEnabled   Boolean  @default(true)
+  updatedAt     DateTime @updatedAt
+}
+
+// Journal de sécurité (connexions, ré-enrôlements, échecs PIN...)
+model SecurityLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  detail    String?
+  createdAt DateTime @default(now())
+}

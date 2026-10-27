@@ -1,0 +1,1470 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FamilleConnect — Maquette Interactive</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'fc-bg': '#F4F1E9',
+                        'fc-primary': '#2A4A3A',
+                        'fc-primary-light': '#3A5A4A',
+                        'fc-accent': '#C89F62',
+                        'fc-accent-light': '#D8B978',
+                        'fc-surface': '#F0EDE5',
+                        'fc-body': '#1A1A1A',
+                        'fc-secondary': '#5A5A5A',
+                        'fc-critical': '#B91C1C',
+                        'fc-urgent': '#D97706',
+                        'fc-success': '#16A34A',
+                    },
+                    fontFamily: {
+                        'sans': ['Calibri', 'Arial', 'sans-serif'],
+                        'mono': ['Consolas', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background: #F4F1E9; color: #1A1A1A; }
+        .nav-item.active { background: #2A4A3A; color: white; }
+        .nav-item.active .nav-icon { color: #C89F62; }
+        .screen { display: none; }
+        .screen.active { display: block; }
+        .progress-bar { transition: width 0.5s ease; }
+        .card-hover { transition: all 0.2s; }
+        .card-hover:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #F0EDE5; }
+        ::-webkit-scrollbar-thumb { background: #C89F62; border-radius: 3px; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 50; display: none; }
+        .modal-overlay.active { display: flex; align-items: center; justify-content: center; }
+    </style>
+</head>
+<body class="font-sans">
+
+<!-- ============ APP SHELL ============ -->
+<div class="flex h-screen overflow-hidden">
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="w-64 bg-fc-primary text-white flex flex-col flex-shrink-0">
+        <!-- Logo -->
+        <div class="p-5 border-b border-fc-primary-light">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-fc-accent rounded-lg flex items-center justify-center text-fc-primary font-bold text-xl">F</div>
+                <div>
+                    <div class="font-bold text-lg">FamilleConnect</div>
+                    <div class="text-xs text-fc-accent">Famille NDONGO</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <nav class="flex-1 overflow-y-auto py-4">
+            <div class="px-3 mb-2 text-xs text-fc-accent uppercase tracking-wider font-semibold">Vue d'ensemble</div>
+            <button onclick="showScreen('dashboard')" class="nav-item active w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-fc-primary-light transition" data-screen="dashboard">
+                <span class="nav-icon text-lg">🏠</span>
+                <span class="text-sm">Tableau de bord</span>
+            </button>
+
+            <div class="px-3 mt-4 mb-2 text-xs text-fc-accent uppercase tracking-wider font-semibold">Les 7 Univers</div>
+
+            <button onclick="showScreen('u1-famille')" class="nav-item w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-fc-primary-light transition" data-screen="u1-famille">
+                <span class="nav-icon text-lg">👨‍👩‍👧</span>
+                <span class="text-sm">U1 — La Famille</span>
+            </button>
+
+            <button onclick="showScreen('u2-vie')" class="nav-item w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-fc-primary-light transition" data-screen="u2-vie">
+                <span class="nav-icon text-lg">📅</span>
+                <span class="text-sm">U2 — Vie familiale</span>
+            </button>
+
+            <button onclick="showScreen('u3-solidarite')" class="nav-item w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-fc-primary-light transition" data-screen="u3-solidarite">
+                <span class="nav-icon text-lg">❤️</span>
+                <span class="text-sm">U3 — Solidarité</span>
+            </button>
+
+            <button onclick="showScreen('u4-finances')" class="nav-item w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-fc-primary-light transition" data-screen="u4-finances">
+                <span class="nav-icon text-lg">💰</span>
+                <span class="text-sm">U4 — Finances</span>
+            </button>
+
+            <button onclick="showScreen('u5-gouvernance')" class="nav-item w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-fc-primary-light transition" data-screen="u5-gouvernance">
+                <span class="nav-icon text-lg">🗳️</span>
+                <span class="text-sm">U5 — Gouvernance</span>
+            </button>
+
+            <button onclick="showScreen('u6-memoire')" class="nav-item w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-fc-primary-light transition" data-screen="u6-memoire">
+                <span class="nav-icon text-lg">📚</span>
+                <span class="text-sm">U6 — Mémoire</span>
+            </button>
+
+            <button onclick="showScreen('u7-reseau')" class="nav-item w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-fc-primary-light transition" data-screen="u7-reseau">
+                <span class="nav-icon text-lg">🤝</span>
+                <span class="text-sm">U7 — Réseau</span>
+            </button>
+        </nav>
+
+        <!-- User profile -->
+        <div class="p-4 border-t border-fc-primary-light">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-sm">JN</div>
+                <div class="flex-1 min-w-0">
+                    <div class="text-sm font-semibold truncate">Jean NDONGO</div>
+                    <div class="text-xs text-fc-accent">Branche Nord · Patriarche</div>
+                </div>
+                <button class="text-fc-accent hover:text-white">⚙️</button>
+            </div>
+        </div>
+    </aside>
+
+    <!-- ============ MAIN CONTENT ============ -->
+    <main class="flex-1 overflow-y-auto">
+
+        <!-- ============ DASHBOARD ============ -->
+        <div id="dashboard" class="screen active p-8">
+            <div class="mb-6">
+                <h1 class="text-3xl font-bold text-fc-primary">Tableau de bord</h1>
+                <p class="text-fc-secondary mt-1">Famille NDONGO — 247 membres · 6 branches · 9 pays</p>
+            </div>
+
+            <!-- KPI Cards -->
+            <div class="grid grid-cols-4 gap-4 mb-8">
+                <div class="bg-white rounded-xl p-5 card-hover border-l-4 border-fc-accent">
+                    <div class="text-3xl font-bold text-fc-primary">247</div>
+                    <div class="text-sm text-fc-secondary mt-1">Membres</div>
+                    <div class="text-xs text-fc-success mt-2">↑ 3 ce mois</div>
+                </div>
+                <div class="bg-white rounded-xl p-5 card-hover border-l-4 border-fc-critical">
+                    <div class="text-3xl font-bold text-fc-primary">1</div>
+                    <div class="text-sm text-fc-secondary mt-1">Solidarité en cours</div>
+                    <div class="text-xs text-fc-urgent mt-2">Décès Maman Rosine</div>
+                </div>
+                <div class="bg-white rounded-xl p-5 card-hover border-l-4 border-fc-success">
+                    <div class="text-3xl font-bold text-fc-primary">8,25M</div>
+                    <div class="text-sm text-fc-secondary mt-1">Solde caisse (FCFA)</div>
+                    <div class="text-xs text-fc-success mt-2">78% cotisation T3</div>
+                </div>
+                <div class="bg-white rounded-xl p-5 card-hover border-l-4 border-fc-accent">
+                    <div class="text-3xl font-bold text-fc-primary">4</div>
+                    <div class="text-sm text-fc-secondary mt-1">Événements à venir</div>
+                    <div class="text-xs text-fc-secondary mt-2">Prochain : 12 oct.</div>
+                </div>
+            </div>
+
+            <!-- Two columns -->
+            <div class="grid grid-cols-2 gap-6">
+                <!-- Prochains événements -->
+                <div class="bg-white rounded-xl p-6">
+                    <h2 class="text-lg font-bold text-fc-primary mb-4 flex items-center gap-2">
+                        <span>📅</span> Prochains événements
+                    </h2>
+                    <div class="space-y-3">
+                        <div class="flex items-center gap-4 p-3 bg-fc-surface rounded-lg card-hover cursor-pointer" onclick="showScreen('u2-vie')">
+                            <div class="w-12 h-12 bg-fc-accent rounded-lg flex flex-col items-center justify-center text-fc-primary">
+                                <span class="text-xs font-bold">12</span>
+                                <span class="text-xs">OCT</span>
+                            </div>
+                            <div class="flex-1">
+                                <div class="font-semibold text-sm">💍 Mariage de Marie</div>
+                                <div class="text-xs text-fc-secondary">Branche Nord · Yaoundé</div>
+                            </div>
+                            <span class="badge bg-fc-success text-white">Confirmé</span>
+                        </div>
+                        <div class="flex items-center gap-4 p-3 bg-fc-surface rounded-lg card-hover cursor-pointer" onclick="showScreen('u2-vie')">
+                            <div class="w-12 h-12 bg-fc-primary rounded-lg flex flex-col items-center justify-center text-white">
+                                <span class="text-xs font-bold">26</span>
+                                <span class="text-xs">DÉC</span>
+                            </div>
+                            <div class="flex-1">
+                                <div class="font-semibold text-sm">🏛️ Congrès NDONGO 2026</div>
+                                <div class="text-xs text-fc-secondary">Toute la famille · Bafoussam</div>
+                            </div>
+                            <span class="badge bg-fc-accent text-white">Préparation</span>
+                        </div>
+                        <div class="flex items-center gap-4 p-3 bg-fc-surface rounded-lg card-hover cursor-pointer" onclick="showScreen('u2-vie')">
+                            <div class="w-12 h-12 bg-fc-urgent rounded-lg flex flex-col items-center justify-center text-white">
+                                <span class="text-xs font-bold">08</span>
+                                <span class="text-xs">OCT</span>
+                            </div>
+                            <div class="flex-1">
+                                <div class="font-semibold text-sm">⚰️ Funérailles Maman Rosine</div>
+                                <div class="text-xs text-fc-secondary">Branche Nord · Bafoussam</div>
+                            </div>
+                            <span class="badge bg-fc-critical text-white">Urgent</span>
+                        </div>
+                        <div class="flex items-center gap-4 p-3 bg-fc-surface rounded-lg card-hover cursor-pointer" onclick="showScreen('u2-vie')">
+                            <div class="w-12 h-12 bg-fc-accent rounded-lg flex flex-col items-center justify-center text-fc-primary">
+                                <span class="text-xs font-bold">18</span>
+                                <span class="text-xs">OCT</span>
+                            </div>
+                            <div class="flex-1">
+                                <div class="font-semibold text-sm">🎂 Anniversaire Papa Jean (85 ans)</div>
+                                <div class="text-xs text-fc-secondary">Toute la famille · Yaoundé</div>
+                            </div>
+                            <span class="badge bg-fc-accent text-fc-primary">Marquant</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Solidarité en cours -->
+                <div class="bg-white rounded-xl p-6">
+                    <h2 class="text-lg font-bold text-fc-primary mb-4 flex items-center gap-2">
+                        <span>❤️</span> Solidarité en cours
+                    </h2>
+                    <div class="bg-fc-surface rounded-lg p-4 mb-3">
+                        <div class="flex justify-between items-start mb-3">
+                            <div>
+                                <div class="font-semibold text-sm">⚰️ Décès — Maman Rosine NDONGO</div>
+                                <div class="text-xs text-fc-secondary mt-1">Branche Nord · Décédée le 25/09/2026</div>
+                            </div>
+                            <span class="badge bg-fc-critical text-white">Critique</span>
+                        </div>
+                        <div class="mb-2">
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-fc-secondary">Collecte : 3 200 000 / 4 000 000 FCFA</span>
+                                <span class="font-bold text-fc-primary">80%</span>
+                            </div>
+                            <div class="w-full bg-fc-bg rounded-full h-2">
+                                <div class="bg-fc-accent h-2 rounded-full progress-bar" style="width: 80%"></div>
+                            </div>
+                        </div>
+                        <div class="flex justify-between text-xs text-fc-secondary mt-3">
+                            <span>87 / 124 contributeurs</span>
+                            <span>Workflow étape 5/8 — Logistique</span>
+                        </div>
+                        <button onclick="showScreen('u3-solidarite')" class="mt-3 w-full bg-fc-primary text-white text-sm py-2 rounded-lg hover:bg-fc-primary-light transition">Voir le dossier</button>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-4">
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <div class="font-semibold text-sm">🏥 Maladie — Paul (Branche Sud)</div>
+                                <div class="text-xs text-fc-secondary mt-1">Confidentiel · Suivi J+45</div>
+                            </div>
+                            <span class="badge bg-fc-urgent text-white">Urgent</span>
+                        </div>
+                        <div class="text-xs text-fc-secondary">Collecté : 1 200 000 FCFA · Suivi en cours</div>
+                    </div>
+                </div>
+
+                <!-- Cotisations -->
+                <div class="bg-white rounded-xl p-6">
+                    <h2 class="text-lg font-bold text-fc-primary mb-4 flex items-center gap-2">
+                        <span>💰</span> Cotisations T3 2026
+                    </h2>
+                    <div class="mb-4">
+                        <div class="flex justify-between text-sm mb-2">
+                            <span class="text-fc-secondary">Taux de cotisation à jour</span>
+                            <span class="font-bold text-fc-primary">78%</span>
+                        </div>
+                        <div class="w-full bg-fc-bg rounded-full h-3">
+                            <div class="bg-fc-success h-3 rounded-full progress-bar" style="width: 78%"></div>
+                        </div>
+                        <div class="flex justify-between text-xs text-fc-secondary mt-2">
+                            <span>178 / 220 membres à jour</span>
+                            <span>Échéance : 5 octobre</span>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 text-center">
+                        <div class="bg-fc-success bg-opacity-10 rounded-lg p-3">
+                            <div class="text-xl font-bold text-fc-success">178</div>
+                            <div class="text-xs text-fc-secondary">À jour</div>
+                        </div>
+                        <div class="bg-fc-urgent bg-opacity-10 rounded-lg p-3">
+                            <div class="text-xl font-bold text-fc-urgent">32</div>
+                            <div class="text-xs text-fc-secondary">En retard</div>
+                        </div>
+                        <div class="bg-fc-secondary bg-opacity-10 rounded-lg p-3">
+                            <div class="text-xl font-bold text-fc-secondary">10</div>
+                            <div class="text-xs text-fc-secondary">En attente</div>
+                        </div>
+                    </div>
+                    <button onclick="showScreen('u4-finances')" class="mt-4 w-full bg-fc-primary text-white text-sm py-2 rounded-lg hover:bg-fc-primary-light transition">Voir les finances</button>
+                </div>
+
+                <!-- Votes en cours -->
+                <div class="bg-white rounded-xl p-6">
+                    <h2 class="text-lg font-bold text-fc-primary mb-4 flex items-center gap-2">
+                        <span>🗳️</span> Décisions en cours
+                    </h2>
+                    <div class="space-y-3">
+                        <div class="p-3 bg-fc-surface rounded-lg card-hover cursor-pointer" onclick="showScreen('u5-gouvernance')">
+                            <div class="flex justify-between items-start mb-2">
+                                <div class="font-semibold text-sm">Lieu du congrès 2027</div>
+                                <span class="badge bg-fc-accent text-white">Consultation</span>
+                            </div>
+                            <div class="text-xs text-fc-secondary mb-2">134 / 286 votes · Clôture dans 7 jours</div>
+                            <div class="flex gap-1">
+                                <div class="flex-1 bg-fc-success rounded h-2" style="width: 45%"></div>
+                                <div class="flex-1 bg-fc-accent rounded h-2" style="width: 30%"></div>
+                                <div class="flex-1 bg-fc-primary rounded h-2" style="width: 25%"></div>
+                            </div>
+                            <div class="flex justify-between text-xs mt-2 text-fc-secondary">
+                                <span>Yaoundé 45%</span>
+                                <span>Douala 30%</span>
+                                <span>Bafoussam 25%</span>
+                            </div>
+                        </div>
+                        <div class="p-3 bg-fc-surface rounded-lg card-hover cursor-pointer" onclick="showScreen('u5-gouvernance')">
+                            <div class="flex justify-between items-start mb-2">
+                                <div class="font-semibold text-sm">Élection trésorier 2027</div>
+                                <span class="badge bg-fc-urgent text-white">Campagne</span>
+                            </div>
+                            <div class="text-xs text-fc-secondary">2 candidats · Scrutin : 20-25 octobre</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notifications récentes -->
+            <div class="bg-white rounded-xl p-6 mt-6">
+                <h2 class="text-lg font-bold text-fc-primary mb-4 flex items-center gap-2">
+                    <span>🔔</span> Notifications récentes
+                </h2>
+                <div class="space-y-2">
+                    <div class="flex items-center gap-3 p-3 hover:bg-fc-surface rounded-lg">
+                        <div class="w-2 h-2 bg-fc-critical rounded-full"></div>
+                        <div class="flex-1 text-sm"><strong>⚰️ Décès</strong> — Maman Rosine NDONGO a été marquée comme décédée. Collecte de solidarité ouverte.</div>
+                        <div class="text-xs text-fc-secondary">Il y a 2h</div>
+                    </div>
+                    <div class="flex items-center gap-3 p-3 hover:bg-fc-surface rounded-lg">
+                        <div class="w-2 h-2 bg-fc-urgent rounded-full"></div>
+                        <div class="flex-1 text-sm"><strong>💰 Cotisation</strong> — Votre cotisation T3 2026 (15 000 FCFA) arrive à échéance le 5 octobre.</div>
+                        <div class="text-xs text-fc-secondary">Il y a 5h</div>
+                    </div>
+                    <div class="flex items-center gap-3 p-3 hover:bg-fc-surface rounded-lg">
+                        <div class="w-2 h-2 bg-fc-accent rounded-full"></div>
+                        <div class="flex-1 text-sm"><strong>🗳️ Vote</strong> — Consultation ouverte : lieu du congrès 2027. Exprimez votre vote.</div>
+                        <div class="text-xs text-fc-secondary">Hier</div>
+                    </div>
+                    <div class="flex items-center gap-3 p-3 hover:bg-fc-surface rounded-lg">
+                        <div class="w-2 h-2 bg-fc-success rounded-full"></div>
+                        <div class="flex-1 text-sm"><strong>✅ Paiement reçu</strong> — Cotisation T2 2026 (15 000 FCFA). Reçu #RC-2026-089 disponible.</div>
+                        <div class="text-xs text-fc-secondary">Il y a 3 jours</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ U1 — LA FAMILLE ============ -->
+        <div id="u1-famille" class="screen p-8">
+            <div class="mb-6">
+                <h1 class="text-3xl font-bold text-fc-primary">U1 — La Famille</h1>
+                <p class="text-fc-secondary mt-1">Registre · Arbre généalogique · Branches · Rôles</p>
+            </div>
+
+            <!-- Stats -->
+            <div class="grid grid-cols-5 gap-4 mb-6">
+                <div class="bg-white rounded-xl p-4 text-center">
+                    <div class="text-2xl font-bold text-fc-primary">247</div>
+                    <div class="text-xs text-fc-secondary">Membres</div>
+                </div>
+                <div class="bg-white rounded-xl p-4 text-center">
+                    <div class="text-2xl font-bold text-fc-primary">235</div>
+                    <div class="text-xs text-fc-secondary">Vivants</div>
+                </div>
+                <div class="bg-white rounded-xl p-4 text-center">
+                    <div class="text-2xl font-bold text-fc-primary">12</div>
+                    <div class="text-xs text-fc-secondary">Décédés</div>
+                </div>
+                <div class="bg-white rounded-xl p-4 text-center">
+                    <div class="text-2xl font-bold text-fc-primary">6</div>
+                    <div class="text-xs text-fc-secondary">Branches</div>
+                </div>
+                <div class="bg-white rounded-xl p-4 text-center">
+                    <div class="text-2xl font-bold text-fc-primary">9</div>
+                    <div class="text-xs text-fc-secondary">Pays</div>
+                </div>
+            </div>
+
+            <!-- Search bar -->
+            <div class="bg-white rounded-xl p-4 mb-6 flex items-center gap-4">
+                <input type="text" placeholder="Rechercher un membre par nom, branche, profession..." class="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-fc-accent">
+                <button class="bg-fc-primary text-white px-4 py-2 rounded-lg text-sm hover:bg-fc-primary-light">Rechercher</button>
+                <button class="bg-fc-accent text-fc-primary px-4 py-2 rounded-lg text-sm font-semibold hover:bg-fc-accent-light">+ Membre</button>
+            </div>
+
+            <div class="grid grid-cols-3 gap-6">
+                <!-- Member list -->
+                <div class="col-span-1 bg-white rounded-xl p-4">
+                    <h3 class="font-bold text-fc-primary mb-3">Membres récents</h3>
+                    <div class="space-y-2">
+                        <div class="flex items-center gap-3 p-2 hover:bg-fc-surface rounded-lg cursor-pointer" onclick="showMemberDetail()">
+                            <div class="w-10 h-10 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-sm">JN</div>
+                            <div class="flex-1 min-w-0">
+                                <div class="font-semibold text-sm">Jean NDONGO</div>
+                                <div class="text-xs text-fc-secondary">Patriarche · Branche Nord</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 p-2 hover:bg-fc-surface rounded-lg cursor-pointer" onclick="showMemberDetail()">
+                            <div class="w-10 h-10 bg-fc-primary rounded-full flex items-center justify-center text-white font-bold text-sm">BN</div>
+                            <div class="flex-1 min-w-0">
+                                <div class="font-semibold text-sm">Bernard NDONGO</div>
+                                <div class="text-xs text-fc-secondary">Trésorier · Branche Nord</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 p-2 hover:bg-fc-surface rounded-lg cursor-pointer" onclick="showMemberDetail()">
+                            <div class="w-10 h-10 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-sm">MN</div>
+                            <div class="flex-1 min-w-0">
+                                <div class="font-semibold text-sm">Marie NDONGO</div>
+                                <div class="text-xs text-fc-secondary">Avocate · Branche Nord</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 p-2 hover:bg-fc-surface rounded-lg cursor-pointer" onclick="showMemberDetail()">
+                            <div class="w-10 h-10 bg-fc-primary rounded-full flex items-center justify-center text-white font-bold text-sm">PB</div>
+                            <div class="flex-1 min-w-0">
+                                <div class="font-semibold text-sm">Paul BIYA</div>
+                                <div class="text-xs text-fc-secondary">Allié · Branche Nord</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 p-2 hover:bg-fc-surface rounded-lg cursor-pointer" onclick="showMemberDetail()">
+                            <div class="w-10 h-10 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-sm">HN</div>
+                            <div class="flex-1 min-w-0">
+                                <div class="font-semibold text-sm">Hélène NDONGO</div>
+                                <div class="text-xs text-fc-secondary">Cardiologue · Branche Sud</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 p-2 hover:bg-fc-surface rounded-lg cursor-pointer" onclick="showMemberDetail()">
+                            <div class="w-10 h-10 bg-fc-primary rounded-full flex items-center justify-center text-white font-bold text-sm">JN</div>
+                            <div class="flex-1 min-w-0">
+                                <div class="font-semibold text-sm">Joseph NDONGO</div>
+                                <div class="text-xs text-fc-secondary">Développeur · Diaspora France</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Member detail -->
+                <div class="col-span-2 bg-white rounded-xl p-6" id="member-detail">
+                    <div class="flex items-start gap-4 mb-6">
+                        <div class="w-20 h-20 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-2xl">JN</div>
+                        <div class="flex-1">
+                            <h2 class="text-2xl font-bold text-fc-primary">Jean NDONGO</h2>
+                            <div class="text-fc-secondary text-sm mt-1">Branche Nord · Génération 3 · Patriarche</div>
+                            <div class="flex gap-2 mt-2">
+                                <span class="badge bg-fc-primary text-white">✓ Patriarche</span>
+                                <span class="badge bg-fc-accent text-fc-primary">85 ans</span>
+                                <span class="badge bg-fc-surface text-fc-secondary">Yaoundé, Cameroun</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4 mb-6">
+                        <div class="bg-fc-surface rounded-lg p-4">
+                            <div class="text-xs text-fc-secondary uppercase font-semibold mb-2">Identité</div>
+                            <div class="text-sm space-y-1">
+                                <div><strong>Né le :</strong> 14 mars 1941 à Bafoussam</div>
+                                <div><strong>Profession :</strong> Avocat (retraité)</div>
+                                <div><strong>État civil :</strong> Veuf de Marguerite</div>
+                            </div>
+                        </div>
+                        <div class="bg-fc-surface rounded-lg p-4">
+                            <div class="text-xs text-fc-secondary uppercase font-semibold mb-2">Filiation</div>
+                            <div class="text-sm space-y-1">
+                                <div><strong>Père :</strong> Paul NDONGO (décédé, 2018)</div>
+                                <div><strong>Mère :</strong> Marguerite NDONGO (décédée, 2020)</div>
+                                <div><strong>Enfants :</strong> 5</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-fc-surface rounded-lg p-4 mb-4">
+                        <div class="text-xs text-fc-secondary uppercase font-semibold mb-2">Contact</div>
+                        <div class="text-sm space-y-1">
+                            <div>📞 +237 6 99 12 34 56</div>
+                            <div>✉️ jean.ndongo@email.com</div>
+                            <div>📍 Yaoundé, Cameroun</div>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-2">
+                        <button class="bg-fc-primary text-white px-4 py-2 rounded-lg text-sm hover:bg-fc-primary-light">Voir dans l'arbre</button>
+                        <button class="bg-fc-surface text-fc-primary px-4 py-2 rounded-lg text-sm hover:bg-fc-bg">Contacter</button>
+                        <button class="bg-fc-surface text-fc-primary px-4 py-2 rounded-lg text-sm hover:bg-fc-bg">Voir biographie</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Branches overview -->
+            <div class="bg-white rounded-xl p-6 mt-6">
+                <h3 class="font-bold text-fc-primary mb-4">Branches familiales</h3>
+                <div class="grid grid-cols-3 gap-4">
+                    <div class="bg-fc-surface rounded-lg p-4 card-hover cursor-pointer">
+                        <div class="flex justify-between items-center mb-2">
+                            <div class="font-semibold text-fc-primary">Branche Nord</div>
+                            <span class="badge bg-fc-accent text-fc-primary">Principale</span>
+                        </div>
+                        <div class="text-3xl font-bold text-fc-primary">64</div>
+                        <div class="text-xs text-fc-secondary">52 vivants · 12 décédés</div>
+                        <div class="text-xs text-fc-secondary mt-2">Chef : Jean NDONGO</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-4 card-hover cursor-pointer">
+                        <div class="flex justify-between items-center mb-2">
+                            <div class="font-semibold text-fc-primary">Branche Sud</div>
+                            <span class="badge bg-fc-surface text-fc-secondary">Principale</span>
+                        </div>
+                        <div class="text-3xl font-bold text-fc-primary">52</div>
+                        <div class="text-xs text-fc-secondary">48 vivants · 4 décédés</div>
+                        <div class="text-xs text-fc-secondary mt-2">Chef : Pierre NDONGO</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-4 card-hover cursor-pointer">
+                        <div class="flex justify-between items-center mb-2">
+                            <div class="font-semibold text-fc-primary">Branche Est</div>
+                            <span class="badge bg-fc-surface text-fc-secondary">Principale</span>
+                        </div>
+                        <div class="text-3xl font-bold text-fc-primary">43</div>
+                        <div class="text-xs text-fc-secondary">41 vivants · 2 décédés</div>
+                        <div class="text-xs text-fc-secondary mt-2">Chef : Marie NDONGO</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Diaspora map -->
+            <div class="bg-white rounded-xl p-6 mt-6">
+                <h3 class="font-bold text-fc-primary mb-4">🌍 Diaspora — 9 pays</h3>
+                <div class="grid grid-cols-3 gap-3">
+                    <div class="flex items-center justify-between p-3 bg-fc-surface rounded-lg">
+                        <div class="flex items-center gap-2"><span>🇨🇲</span><span class="text-sm font-semibold">Cameroun</span></div>
+                        <div class="font-bold text-fc-primary">178</div>
+                    </div>
+                    <div class="flex items-center justify-between p-3 bg-fc-surface rounded-lg">
+                        <div class="flex items-center gap-2"><span>🇫🇷</span><span class="text-sm font-semibold">France</span></div>
+                        <div class="font-bold text-fc-primary">28</div>
+                    </div>
+                    <div class="flex items-center justify-between p-3 bg-fc-surface rounded-lg">
+                        <div class="flex items-center gap-2"><span>🇧🇪</span><span class="text-sm font-semibold">Belgique</span></div>
+                        <div class="font-bold text-fc-primary">14</div>
+                    </div>
+                    <div class="flex items-center justify-between p-3 bg-fc-surface rounded-lg">
+                        <div class="flex items-center gap-2"><span>🇨🇦</span><span class="text-sm font-semibold">Canada</span></div>
+                        <div class="font-bold text-fc-primary">10</div>
+                    </div>
+                    <div class="flex items-center justify-between p-3 bg-fc-surface rounded-lg">
+                        <div class="flex items-center gap-2"><span>🇺🇸</span><span class="text-sm font-semibold">États-Unis</span></div>
+                        <div class="font-bold text-fc-primary">8</div>
+                    </div>
+                    <div class="flex items-center justify-between p-3 bg-fc-surface rounded-lg">
+                        <div class="flex items-center gap-2"><span>🇬🇦</span><span class="text-sm font-semibold">Gabon</span></div>
+                        <div class="font-bold text-fc-primary">5</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ U2 — VIE FAMILIALE ============ -->
+        <div id="u2-vie" class="screen p-8">
+            <div class="mb-6">
+                <h1 class="text-3xl font-bold text-fc-primary">U2 — La Vie familiale</h1>
+                <p class="text-fc-secondary mt-1">Calendrier · Événements · Moteur workflow</p>
+            </div>
+
+            <!-- Tabs -->
+            <div class="flex gap-2 mb-6">
+                <button class="px-4 py-2 bg-fc-primary text-white rounded-lg text-sm font-semibold">Calendrier</button>
+                <button class="px-4 py-2 bg-white text-fc-primary rounded-lg text-sm hover:bg-fc-surface">Événements en cours</button>
+                <button class="px-4 py-2 bg-white text-fc-primary rounded-lg text-sm hover:bg-fc-surface">Albums</button>
+                <button class="px-4 py-2 bg-fc-accent text-fc-primary rounded-lg text-sm font-semibold ml-auto">+ Nouvel événement</button>
+            </div>
+
+            <!-- Calendar -->
+            <div class="bg-white rounded-xl p-6 mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold text-fc-primary">Octobre 2026</h2>
+                    <div class="flex gap-2">
+                        <button class="px-3 py-1 bg-fc-surface rounded text-sm hover:bg-fc-bg">‹</button>
+                        <button class="px-3 py-1 bg-fc-surface rounded text-sm hover:bg-fc-bg">Aujourd'hui</button>
+                        <button class="px-3 py-1 bg-fc-surface rounded text-sm hover:bg-fc-bg">›</button>
+                    </div>
+                </div>
+                <div class="grid grid-cols-7 gap-1 text-center text-xs text-fc-secondary font-semibold mb-2">
+                    <div>Lun</div><div>Mar</div><div>Mer</div><div>Jeu</div><div>Ven</div><div>Sam</div><div>Dim</div>
+                </div>
+                <div class="grid grid-cols-7 gap-1">
+                    <div class="h-24 bg-fc-surface rounded-lg p-1 text-xs"><div class="text-fc-secondary">28</div></div>
+                    <div class="h-24 bg-fc-surface rounded-lg p-1 text-xs"><div class="text-fc-secondary">29</div></div>
+                    <div class="h-24 bg-fc-surface rounded-lg p-1 text-xs"><div class="text-fc-secondary">30</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">1</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">2</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">3</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">4</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">5</div><div class="mt-1 text-xs bg-fc-urgent text-white rounded px-1 py-0.5">💰 Cotisation T3</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">6</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">7</div></div>
+                    <div class="h-24 bg-white border-2 border-fc-critical rounded-lg p-1 text-xs"><div class="font-bold text-fc-critical">8</div><div class="mt-1 text-xs bg-fc-critical text-white rounded px-1 py-0.5">⚰️ Funérailles</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">9</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">10</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">11</div></div>
+                    <div class="h-24 bg-white border-2 border-fc-accent rounded-lg p-1 text-xs"><div class="font-bold text-fc-accent">12</div><div class="mt-1 text-xs bg-fc-success text-white rounded px-1 py-0.5">💍 Mariage</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">13</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">14</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">15</div><div class="mt-1 text-xs bg-fc-accent text-fc-primary rounded px-1 py-0.5">🗳️ Vote clos</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">16</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">17</div></div>
+                    <div class="h-24 bg-white border-2 border-fc-accent rounded-lg p-1 text-xs"><div class="font-bold text-fc-accent">18</div><div class="mt-1 text-xs bg-fc-accent text-white rounded px-1 py-0.5">🎂 Anniversaire</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">19</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">20</div><div class="mt-1 text-xs bg-fc-primary text-white rounded px-1 py-0.5">🗳️ Scrutin</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">21</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">22</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">23</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">24</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">25</div><div class="mt-1 text-xs bg-fc-primary text-white rounded px-1 py-0.5">🗳️ Scrutin clos</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">26</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">27</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">28</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">29</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">30</div></div>
+                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">31</div></div>
+                </div>
+            </div>
+
+            <!-- Event detail with workflow -->
+            <div class="bg-white rounded-xl p-6">
+                <div class="flex justify-between items-start mb-4">
+                    <div>
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="badge bg-fc-critical text-white">⚰️ Décès</span>
+                            <span class="badge bg-fc-urgent text-white">En cours</span>
+                        </div>
+                        <h2 class="text-2xl font-bold text-fc-primary">EVT-2026-014 — Décès de Maman Rosine NDONGO</h2>
+                        <p class="text-fc-secondary text-sm mt-1">Branche Nord · Décédée le 25/09/2026 · Inhumation le 08/10/2026 à Bafoussam</p>
+                    </div>
+                    <button class="bg-fc-surface text-fc-primary px-4 py-2 rounded-lg text-sm">Partager</button>
+                </div>
+
+                <!-- Workflow steps -->
+                <div class="bg-fc-surface rounded-lg p-4 mb-4">
+                    <h3 class="font-bold text-fc-primary mb-4">Workflow décès — Étape 5/8</h3>
+                    <div class="space-y-3">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 bg-fc-success rounded-full flex items-center justify-center text-white text-sm">✓</div>
+                            <div class="flex-1"><div class="font-semibold text-sm">1. Annonce (J0)</div><div class="text-xs text-fc-secondary">Validée par Papa Jean · 25/09 14h30</div></div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 bg-fc-success rounded-full flex items-center justify-center text-white text-sm">✓</div>
+                            <div class="flex-1"><div class="font-semibold text-sm">2. Comité d'organisation (J+1)</div><div class="text-xs text-fc-secondary">5 membres désignés</div></div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 bg-fc-success rounded-full flex items-center justify-center text-white text-sm">✓</div>
+                            <div class="flex-1"><div class="font-semibold text-sm">3. Collecte de solidarité (J+1)</div><div class="text-xs text-fc-secondary">3 200 000 / 4 000 000 FCFA (80%)</div></div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 bg-fc-success rounded-full flex items-center justify-center text-white text-sm">✓</div>
+                            <div class="flex-1"><div class="font-semibold text-sm">4. Programme funéraire (J+5)</div><div class="text-xs text-fc-secondary">Veillée 07/10 · Inhumation 08/10</div></div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 bg-fc-urgent rounded-full flex items-center justify-center text-white text-sm animate-pulse">⏳</div>
+                            <div class="flex-1"><div class="font-semibold text-sm">5. Logistique (en cours)</div><div class="text-xs text-fc-secondary">Hébergement · Transport · Restauration</div></div>
+                        </div>
+                        <div class="flex items-center gap-3 opacity-50">
+                            <div class="w-8 h-8 bg-fc-surface border-2 border-gray-300 rounded-full flex items-center justify-center text-gray-400 text-sm">○</div>
+                            <div class="flex-1"><div class="font-semibold text-sm">6. Déroulé</div><div class="text-xs text-fc-secondary">Non commencé</div></div>
+                        </div>
+                        <div class="flex items-center gap-3 opacity-50">
+                            <div class="w-8 h-8 bg-fc-surface border-2 border-gray-300 rounded-full flex items-center justify-center text-gray-400 text-sm">○</div>
+                            <div class="flex-1"><div class="font-semibold text-sm">7. Album et témoignages</div><div class="text-xs text-fc-secondary">Non commencé</div></div>
+                        </div>
+                        <div class="flex items-center gap-3 opacity-50">
+                            <div class="w-8 h-8 bg-fc-surface border-2 border-gray-300 rounded-full flex items-center justify-center text-gray-400 text-sm">○</div>
+                            <div class="flex-1"><div class="font-semibold text-sm">8. Bilan et clôture</div><div class="text-xs text-fc-secondary">Non commencé</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick info -->
+                <div class="grid grid-cols-3 gap-4">
+                    <div class="bg-fc-surface rounded-lg p-4">
+                        <div class="text-xs text-fc-secondary uppercase font-semibold mb-2">Comité</div>
+                        <div class="text-sm space-y-1">
+                            <div>Référent : Bernard NDONGO</div>
+                            <div>Membres : 5</div>
+                            <div>Validateur : Papa Jean</div>
+                        </div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-4">
+                        <div class="text-xs text-fc-secondary uppercase font-semibold mb-2">Bénéficiaire</div>
+                        <div class="text-sm space-y-1">
+                            <div>Maman Rosine NDONGO</div>
+                            <div>Conjoint : Paul NDONGO (veuf)</div>
+                            <div>Enfants orphelins : 3</div>
+                        </div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-4">
+                        <div class="text-xs text-fc-secondary uppercase font-semibold mb-2">Dépenses prévues</div>
+                        <div class="text-sm space-y-1">
+                            <div>Cercueil : 800 000 FCFA</div>
+                            <div>Transport : 450 000 FCFA</div>
+                            <div>Repas : 1 200 000 FCFA</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ U3 — SOLIDARITÉ ============ -->
+        <div id="u3-solidarite" class="screen p-8">
+            <div class="mb-6">
+                <h1 class="text-3xl font-bold text-fc-primary">U3 — La Solidarité</h1>
+                <p class="text-fc-secondary mt-1">Dossiers · Collectes · Suivi · Aides sociales</p>
+            </div>
+
+            <!-- Solidarity dashboard -->
+            <div class="grid grid-cols-4 gap-4 mb-6">
+                <div class="bg-white rounded-xl p-5 border-l-4 border-fc-critical">
+                    <div class="text-3xl font-bold text-fc-primary">3</div>
+                    <div class="text-sm text-fc-secondary mt-1">Dossiers en cours</div>
+                </div>
+                <div class="bg-white rounded-xl p-5 border-l-4 border-fc-accent">
+                    <div class="text-3xl font-bold text-fc-primary">18,5M</div>
+                    <div class="text-sm text-fc-secondary mt-1">Collecté en 2026 (FCFA)</div>
+                </div>
+                <div class="bg-white rounded-xl p-5 border-l-4 border-fc-success">
+                    <div class="text-3xl font-bold text-fc-primary">14</div>
+                    <div class="text-sm text-fc-secondary mt-1">Dossiers clôturés</div>
+                </div>
+                <div class="bg-white rounded-xl p-5 border-l-4 border-fc-primary">
+                    <div class="text-3xl font-bold text-fc-primary">18</div>
+                    <div class="text-sm text-fc-secondary mt-1">Bénéficiaires aides sociales</div>
+                </div>
+            </div>
+
+            <!-- Active dossier -->
+            <div class="bg-white rounded-xl p-6 mb-6">
+                <div class="flex justify-between items-start mb-4">
+                    <div>
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="badge bg-fc-critical text-white">⚰️ Décès</span>
+                            <span class="badge bg-fc-urgent text-white">Collecte en cours</span>
+                        </div>
+                        <h2 class="text-2xl font-bold text-fc-primary">SOL-2026-007 — Décès Maman Rosine NDONGO</h2>
+                        <p class="text-fc-secondary text-sm mt-1">Branche Nord · Référent : Bernard NDONGO · Lié à EVT-2026-014</p>
+                    </div>
+                </div>
+
+                <!-- Collection progress -->
+                <div class="bg-fc-surface rounded-lg p-6 mb-4">
+                    <div class="flex justify-between items-center mb-4">
+                        <div>
+                            <div class="text-3xl font-bold text-fc-primary">3 200 000 <span class="text-lg text-fc-secondary">/ 4 000 000 FCFA</span></div>
+                            <div class="text-sm text-fc-secondary mt-1">87 contributeurs sur 124 · Montant moyen : 36 700 FCFA</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-4xl font-bold text-fc-success">80%</div>
+                            <div class="text-sm text-fc-secondary">de la cible</div>
+                        </div>
+                    </div>
+                    <div class="w-full bg-white rounded-full h-4 mb-4">
+                        <div class="bg-gradient-to-r from-fc-accent to-fc-success h-4 rounded-full progress-bar flex items-center justify-end pr-2" style="width: 80%">
+                            <span class="text-xs text-white font-bold">80%</span>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-4 gap-4 text-center text-sm">
+                        <div><div class="font-bold text-fc-primary">87/124</div><div class="text-fc-secondary text-xs">Contributeurs</div></div>
+                        <div><div class="font-bold text-fc-primary">36 700</div><div class="text-fc-secondary text-xs">Montant moyen</div></div>
+                        <div><div class="font-bold text-fc-primary">100 000</div><div class="text-fc-secondary text-xs">Plus grande contribution</div></div>
+                        <div><div class="font-bold text-fc-primary">37</div><div class="text-fc-secondary text-xs">Reste à convaincre</div></div>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="grid grid-cols-3 gap-4">
+                    <button class="bg-fc-accent text-fc-primary py-3 rounded-lg font-semibold hover:bg-fc-accent-light">📱 Contribuer (Mobile Money)</button>
+                    <button class="bg-fc-primary text-white py-3 rounded-lg font-semibold hover:bg-fc-primary-light">Voir les contributeurs</button>
+                    <button class="bg-fc-surface text-fc-primary py-3 rounded-lg font-semibold hover:bg-fc-bg">Voir le bilan prévisionnel</button>
+                </div>
+            </div>
+
+            <!-- Aides sociales -->
+            <div class="bg-white rounded-xl p-6">
+                <h3 class="font-bold text-fc-primary mb-4">Aides sociales récurrentes</h3>
+                <div class="grid grid-cols-3 gap-4">
+                    <div class="bg-fc-surface rounded-lg p-4">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-2xl">📚</span>
+                            <div class="font-semibold text-fc-primary">Bourses scolaires</div>
+                        </div>
+                        <div class="text-2xl font-bold text-fc-primary">12</div>
+                        <div class="text-xs text-fc-secondary">bénéficiaires · 1 800 000 FCFA versés en 2026</div>
+                        <div class="text-xs text-fc-urgent mt-2">Prochain versement : 05/10/2026</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-4">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-2xl">👩</span>
+                            <div class="font-semibold text-fc-primary">Soutien veuves</div>
+                        </div>
+                        <div class="text-2xl font-bold text-fc-primary">4</div>
+                        <div class="text-xs text-fc-secondary">bénéficiaires · 1 800 000 FCFA versés en 2026</div>
+                        <div class="text-xs text-fc-urgent mt-2">Prochain versement : 05/10/2026</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-4">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-2xl">⚕️</span>
+                            <div class="font-semibold text-fc-primary">Aide médicale</div>
+                        </div>
+                        <div class="text-2xl font-bold text-fc-primary">2</div>
+                        <div class="text-xs text-fc-secondary">bénéficiaires · 3 150 000 FCFA versés en 2026</div>
+                        <div class="text-xs text-fc-urgent mt-2">Prochain versement : 05/10/2026</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ U4 — FINANCES ============ -->
+        <div id="u4-finances" class="screen p-8">
+            <div class="mb-6">
+                <h1 class="text-3xl font-bold text-fc-primary">U4 — Les Finances</h1>
+                <p class="text-fc-secondary mt-1">Caisse · Cotisations · Mobile Money · Comptabilité</p>
+            </div>
+
+            <!-- Balance -->
+            <div class="bg-gradient-to-br from-fc-primary to-fc-primary-light rounded-xl p-6 mb-6 text-white">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <div class="text-sm opacity-80">Solde global de la caisse familiale</div>
+                        <div class="text-4xl font-bold mt-2">12 450 000 FCFA</div>
+                        <div class="text-sm opacity-80 mt-2">↑ 1 250 000 depuis le mois dernier</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-sm opacity-80">Cotisation T3 2026</div>
+                        <div class="text-2xl font-bold mt-1">78% à jour</div>
+                        <div class="text-sm opacity-80 mt-1">178/220 membres</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cashbox breakdown -->
+            <div class="bg-white rounded-xl p-6 mb-6">
+                <h3 class="font-bold text-fc-primary mb-4">Décomposition par caisse</h3>
+                <div class="space-y-3">
+                    <div class="flex items-center gap-4">
+                        <div class="w-32 text-sm font-semibold">Caisse principale</div>
+                        <div class="flex-1 bg-fc-surface rounded-full h-8 relative">
+                            <div class="bg-fc-primary h-8 rounded-full progress-bar flex items-center justify-end pr-3" style="width: 42%">
+                                <span class="text-xs text-white font-bold">5 200 000</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <div class="w-32 text-sm font-semibold">Caisse de réserve</div>
+                        <div class="flex-1 bg-fc-surface rounded-full h-8 relative">
+                            <div class="bg-fc-accent h-8 rounded-full progress-bar flex items-center justify-end pr-3" style="width: 39%">
+                                <span class="text-xs text-fc-primary font-bold">4 800 000</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <div class="w-32 text-sm font-semibold">Caisse solidarité</div>
+                        <div class="flex-1 bg-fc-surface rounded-full h-8 relative">
+                            <div class="bg-fc-urgent h-8 rounded-full progress-bar flex items-center justify-end pr-3" style="width: 16%">
+                                <span class="text-xs text-white font-bold">1 950 000</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <div class="w-32 text-sm font-semibold">Caisses branches</div>
+                        <div class="flex-1 bg-fc-surface rounded-full h-8 relative">
+                            <div class="bg-fc-secondary h-8 rounded-full progress-bar flex items-center justify-end pr-3" style="width: 4%">
+                                <span class="text-xs text-white font-bold">500 000</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- My contributions -->
+            <div class="grid grid-cols-2 gap-6">
+                <div class="bg-white rounded-xl p-6">
+                    <h3 class="font-bold text-fc-primary mb-4">Mes cotisations</h3>
+                    <div class="bg-fc-urgent bg-opacity-10 border border-fc-urgent border-opacity-30 rounded-lg p-4 mb-3">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <div class="font-semibold text-sm">Cotisation T3 2026</div>
+                                <div class="text-xs text-fc-secondary">Échéance : 5 octobre 2026 (J-7)</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="font-bold text-fc-urgent">15 000 FCFA</div>
+                                <div class="text-xs text-fc-urgent">⏳ À payer</div>
+                            </div>
+                        </div>
+                        <button class="mt-3 w-full bg-fc-accent text-fc-primary py-2 rounded-lg text-sm font-semibold hover:bg-fc-accent-light">📱 Payer par Mobile Money</button>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex justify-between items-center p-3 bg-fc-surface rounded-lg">
+                            <div>
+                                <div class="text-sm font-semibold">T2 2026 (juillet)</div>
+                                <div class="text-xs text-fc-secondary">Reçu #RC-2026-089</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm font-bold text-fc-success">✓ 15 000 FCFA</div>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center p-3 bg-fc-surface rounded-lg">
+                            <div>
+                                <div class="text-sm font-semibold">T1 2026 (avril)</div>
+                                <div class="text-xs text-fc-secondary">Reçu #RC-2026-031</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm font-bold text-fc-success">✓ 15 000 FCFA</div>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center p-3 bg-fc-surface rounded-lg">
+                            <div>
+                                <div class="text-sm font-semibold">Annuelle 2026</div>
+                                <div class="text-xs text-fc-secondary">Reçu #RC-2026-014</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm font-bold text-fc-success">✓ 50 000 FCFA</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Monthly report summary -->
+                <div class="bg-white rounded-xl p-6">
+                    <h3 class="font-bold text-fc-primary mb-4">Rapport mensuel — Septembre 2026</h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center pb-2 border-b border-gray-100">
+                            <span class="text-sm text-fc-secondary">Solde début de mois</span>
+                            <span class="font-semibold">11 200 000 FCFA</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm text-fc-success">Entrées</span>
+                            <span class="font-semibold text-fc-success">+ 4 850 000</span>
+                        </div>
+                        <div class="pl-4 space-y-1 text-xs text-fc-secondary">
+                            <div class="flex justify-between"><span>Cotisations T3 (156 paiements)</span><span>2 340 000</span></div>
+                            <div class="flex justify-between"><span>Contributions solidarité (47)</span><span>1 850 000</span></div>
+                            <div class="flex justify-between"><span>Dons divers</span><span>660 000</span></div>
+                        </div>
+                        <div class="flex justify-between items-center pt-2 border-t border-gray-100">
+                            <span class="text-sm text-fc-critical">Sorties</span>
+                            <span class="font-semibold text-fc-critical">- 3 600 000</span>
+                        </div>
+                        <div class="pl-4 space-y-1 text-xs text-fc-secondary">
+                            <div class="flex justify-between"><span>Aides sociales (12 versements)</span><span>850 000</span></div>
+                            <div class="flex justify-between"><span>Solidarité décès Maman Rosine</span><span>1 850 000</span></div>
+                            <div class="flex justify-between"><span>Préparation congrès</span><span>680 000</span></div>
+                            <div class="flex justify-between"><span>Fonctionnement</span><span>220 000</span></div>
+                        </div>
+                        <div class="flex justify-between items-center pt-2 border-t-2 border-fc-primary">
+                            <span class="text-sm font-bold">Solde fin de mois</span>
+                            <span class="font-bold text-fc-primary text-lg">12 450 000 FCFA</span>
+                        </div>
+                    </div>
+                    <div class="mt-4 p-3 bg-fc-surface rounded-lg">
+                        <div class="text-xs text-fc-secondary">✓ Justificatifs : 42/42 · Rapprochement Mobile Money : 38/42</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ U5 — GOUVERNANCE ============ -->
+        <div id="u5-gouvernance" class="screen p-8">
+            <div class="mb-6">
+                <h1 class="text-3xl font-bold text-fc-primary">U5 — La Gouvernance</h1>
+                <p class="text-fc-secondary mt-1">Votes · Comités · Élections · Règlement · PV</p>
+            </div>
+
+            <!-- Active votes -->
+            <div class="grid grid-cols-2 gap-6 mb-6">
+                <!-- Vote 1 -->
+                <div class="bg-white rounded-xl p-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <div class="flex gap-2 mb-2">
+                                <span class="badge bg-fc-accent text-white">Consultation</span>
+                                <span class="badge bg-fc-success text-white">Ouvert</span>
+                            </div>
+                            <h3 class="font-bold text-fc-primary">Lieu du congrès 2027</h3>
+                            <p class="text-xs text-fc-secondary mt-1">Clôture dans 7 jours · 134/286 votes</p>
+                        </div>
+                    </div>
+                    <div class="space-y-2 mb-4">
+                        <label class="flex items-center gap-3 p-3 bg-fc-surface rounded-lg cursor-pointer hover:bg-fc-bg">
+                            <input type="radio" name="vote1" class="w-4 h-4 accent-fc-primary">
+                            <span class="text-sm font-semibold">Yaoundé</span>
+                            <span class="ml-auto text-sm font-bold text-fc-success">45%</span>
+                        </label>
+                        <label class="flex items-center gap-3 p-3 bg-fc-surface rounded-lg cursor-pointer hover:bg-fc-bg">
+                            <input type="radio" name="vote1" class="w-4 h-4 accent-fc-primary">
+                            <span class="text-sm font-semibold">Douala</span>
+                            <span class="ml-auto text-sm font-bold text-fc-accent">30%</span>
+                        </label>
+                        <label class="flex items-center gap-3 p-3 bg-fc-surface rounded-lg cursor-pointer hover:bg-fc-bg">
+                            <input type="radio" name="vote1" class="w-4 h-4 accent-fc-primary">
+                            <span class="text-sm font-semibold">Bafoussam (village familial)</span>
+                            <span class="ml-auto text-sm font-bold text-fc-primary">25%</span>
+                        </label>
+                    </div>
+                    <div class="flex justify-between text-xs text-fc-secondary mb-3">
+                        <span>Quorum atteint : ✓ (50% requis)</span>
+                        <span>134/286 (47%)</span>
+                    </div>
+                    <button class="w-full bg-fc-primary text-white py-2 rounded-lg text-sm font-semibold hover:bg-fc-primary-light">Exprimer mon vote</button>
+                </div>
+
+                <!-- Election -->
+                <div class="bg-white rounded-xl p-6">
+                    <div class="flex gap-2 mb-2">
+                        <span class="badge bg-fc-urgent text-white">Élection</span>
+                        <span class="badge bg-fc-accent text-white">Campagne</span>
+                    </div>
+                    <h3 class="font-bold text-fc-primary mb-2">Élection du trésorier 2027</h3>
+                    <p class="text-xs text-fc-secondary mb-4">Scrutin : 20-25 octobre · Conseil familial (12 votants) · 2/3 quorum</p>
+
+                    <div class="space-y-3">
+                        <div class="flex items-center gap-3 p-3 bg-fc-surface rounded-lg">
+                            <div class="w-10 h-10 bg-fc-primary rounded-full flex items-center justify-center text-white font-bold text-sm">BN</div>
+                            <div class="flex-1">
+                                <div class="font-semibold text-sm">Bernard NDONGO (sortant)</div>
+                                <div class="text-xs text-fc-secondary">Expert-comptable · 22 ans d'expérience</div>
+                            </div>
+                            <span class="badge bg-fc-success text-white">✓ Vérifié</span>
+                        </div>
+                        <div class="flex items-center gap-3 p-3 bg-fc-surface rounded-lg">
+                            <div class="w-10 h-10 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-sm">PB</div>
+                            <div class="flex-1">
+                                <div class="font-semibold text-sm">Paul BIYA</div>
+                                <div class="text-xs text-fc-secondary">Banquier · 15 ans d'expérience</div>
+                            </div>
+                            <span class="badge bg-fc-success text-white">✓ Vérifié</span>
+                        </div>
+                    </div>
+                    <button class="mt-4 w-full bg-fc-surface text-fc-primary py-2 rounded-lg text-sm hover:bg-fc-bg">Voir les programmes</button>
+                </div>
+            </div>
+
+            <!-- Committees -->
+            <div class="bg-white rounded-xl p-6">
+                <h3 class="font-bold text-fc-primary mb-4">Comités familiaux</h3>
+                <div class="grid grid-cols-5 gap-3">
+                    <div class="bg-fc-surface rounded-lg p-4 text-center card-hover cursor-pointer">
+                        <div class="text-2xl mb-2">🏛️</div>
+                        <div class="font-semibold text-sm">Exécutif</div>
+                        <div class="text-xs text-fc-secondary">12 membres</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-4 text-center card-hover cursor-pointer">
+                        <div class="text-2xl mb-2">💰</div>
+                        <div class="font-semibold text-sm">Financier</div>
+                        <div class="text-xs text-fc-secondary">7 membres</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-4 text-center card-hover cursor-pointer">
+                        <div class="text-2xl mb-2">❤️</div>
+                        <div class="font-semibold text-sm">Social</div>
+                        <div class="text-xs text-fc-secondary">8 membres</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-4 text-center card-hover cursor-pointer">
+                        <div class="text-2xl mb-2">📅</div>
+                        <div class="font-semibold text-sm">Événementiel</div>
+                        <div class="text-xs text-fc-secondary">10 membres</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-4 text-center card-hover cursor-pointer">
+                        <div class="text-2xl mb-2">🌍</div>
+                        <div class="font-semibold text-sm">Diaspora</div>
+                        <div class="text-xs text-fc-secondary">9 membres</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-4 text-center card-hover cursor-pointer">
+                        <div class="text-2xl mb-2">👥</div>
+                        <div class="font-semibold text-sm">Jeunesse</div>
+                        <div class="text-xs text-fc-secondary">15 membres</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-4 text-center card-hover cursor-pointer">
+                        <div class="text-2xl mb-2">👩</div>
+                        <div class="font-semibold text-sm">Femmes</div>
+                        <div class="text-xs text-fc-secondary">11 membres</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-4 text-center card-hover cursor-pointer">
+                        <div class="text-2xl mb-2">📢</div>
+                        <div class="font-semibold text-sm">Communication</div>
+                        <div class="text-xs text-fc-secondary">6 membres</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-4 text-center card-hover cursor-pointer">
+                        <div class="text-2xl mb-2">⚖️</div>
+                        <div class="font-semibold text-sm">Médiation</div>
+                        <div class="text-xs text-fc-secondary">5 membres</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-4 text-center card-hover cursor-pointer">
+                        <div class="text-2xl mb-2">🎭</div>
+                        <div class="font-semibold text-sm">Culturel</div>
+                        <div class="text-xs text-fc-secondary">8 membres</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ U6 — MÉMOIRE ============ -->
+        <div id="u6-memoire" class="screen p-8">
+            <div class="mb-6">
+                <h1 class="text-3xl font-bold text-fc-primary">U6 — La Mémoire</h1>
+                <p class="text-fc-secondary mt-1">Bibliothèque · Albums · Anciens · Histoire · Traditions</p>
+            </div>
+
+            <!-- Tabs -->
+            <div class="flex gap-2 mb-6">
+                <button class="px-4 py-2 bg-fc-primary text-white rounded-lg text-sm font-semibold">📜 Bibliothèque</button>
+                <button class="px-4 py-2 bg-white text-fc-primary rounded-lg text-sm hover:bg-fc-surface">📷 Albums</button>
+                <button class="px-4 py-2 bg-white text-fc-primary rounded-lg text-sm hover:bg-fc-surface">🎤 Anciens</button>
+                <button class="px-4 py-2 bg-white text-fc-primary rounded-lg text-sm hover:bg-fc-surface">📜 Histoire</button>
+                <button class="px-4 py-2 bg-white text-fc-primary rounded-lg text-sm hover:bg-fc-surface">🎭 Traditions</button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-6">
+                <!-- Interviews -->
+                <div class="bg-white rounded-xl p-6">
+                    <h3 class="font-bold text-fc-primary mb-4 flex items-center gap-2">
+                        <span>🎤</span> Interviews d'anciens
+                    </h3>
+                    <div class="space-y-3">
+                        <div class="bg-fc-surface rounded-lg p-4 card-hover cursor-pointer">
+                            <div class="flex items-center gap-3 mb-2">
+                                <div class="w-12 h-12 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold">JN</div>
+                                <div class="flex-1">
+                                    <div class="font-semibold text-sm">Papa Jean NDONGO (85 ans)</div>
+                                    <div class="text-xs text-fc-secondary">Interview du 15/08/2026 · 2h47 · 9 chapitres</div>
+                                </div>
+                            </div>
+                            <div class="flex gap-2 text-xs">
+                                <span class="badge bg-fc-primary text-white">Enfance</span>
+                                <span class="badge bg-fc-primary text-white">Mariage</span>
+                                <span class="badge bg-fc-primary text-white">Patriarcat</span>
+                            </div>
+                            <button class="mt-3 w-full bg-fc-accent text-fc-primary py-2 rounded-lg text-sm font-semibold hover:bg-fc-accent-light">▶ Écouter</button>
+                        </div>
+                        <div class="bg-fc-surface rounded-lg p-4 card-hover cursor-pointer">
+                            <div class="flex items-center gap-3 mb-2">
+                                <div class="w-12 h-12 bg-fc-primary rounded-full flex items-center justify-center text-white font-bold">MN</div>
+                                <div class="flex-1">
+                                    <div class="font-semibold text-sm">Tante Marie NDONGO (78 ans)</div>
+                                    <div class="text-xs text-fc-secondary">Interview du 20/06/2026 · 1h52 · 7 chapitres</div>
+                                </div>
+                            </div>
+                            <button class="mt-3 w-full bg-fc-accent text-fc-primary py-2 rounded-lg text-sm font-semibold hover:bg-fc-accent-light">▶ Écouter</button>
+                        </div>
+                        <div class="bg-fc-surface rounded-lg p-4 card-hover cursor-pointer">
+                            <div class="flex items-center gap-3 mb-2">
+                                <div class="w-12 h-12 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold">PN</div>
+                                <div class="flex-1">
+                                    <div class="font-semibold text-sm">Oncle Pierre NDONGO (72 ans)</div>
+                                    <div class="text-xs text-fc-secondary">À enregistrer (prioritaire)</div>
+                                </div>
+                            </div>
+                            <button class="mt-3 w-full bg-fc-urgent text-white py-2 rounded-lg text-sm font-semibold">📅 Planifier</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Historical timeline -->
+                <div class="bg-white rounded-xl p-6">
+                    <h3 class="font-bold text-fc-primary mb-4 flex items-center gap-2">
+                        <span>📜</span> Frise historique
+                    </h3>
+                    <div class="space-y-4">
+                        <div class="flex gap-4">
+                            <div class="w-3 h-3 bg-fc-accent rounded-full mt-1.5 flex-shrink-0"></div>
+                            <div class="flex-1 pb-4 border-l-2 border-fc-accent border-opacity-30 pl-4">
+                                <div class="font-bold text-fc-primary text-sm">1920 — Fondation</div>
+                                <div class="text-xs text-fc-secondary">Installation au village Bafoussam par l'ancêtre NDONGO</div>
+                            </div>
+                        </div>
+                        <div class="flex gap-4">
+                            <div class="w-3 h-3 bg-fc-accent rounded-full mt-1.5 flex-shrink-0"></div>
+                            <div class="flex-1 pb-4 border-l-2 border-fc-accent border-opacity-30 pl-4">
+                                <div class="font-bold text-fc-primary text-sm">1941 — Naissance</div>
+                                <div class="text-xs text-fc-secondary">Naissance de Papa Jean, futur patriarche</div>
+                            </div>
+                        </div>
+                        <div class="flex gap-4">
+                            <div class="w-3 h-3 bg-fc-accent rounded-full mt-1.5 flex-shrink-0"></div>
+                            <div class="flex-1 pb-4 border-l-2 border-fc-accent border-opacity-30 pl-4">
+                                <div class="font-bold text-fc-primary text-sm">1985 — Premier congrès</div>
+                                <div class="text-xs text-fc-secondary">Adoption des statuts de la famille</div>
+                            </div>
+                        </div>
+                        <div class="flex gap-4">
+                            <div class="w-3 h-3 bg-fc-accent rounded-full mt-1.5 flex-shrink-0"></div>
+                            <div class="flex-1 pb-4 border-l-2 border-fc-accent border-opacity-30 pl-4">
+                                <div class="font-bold text-fc-primary text-sm">2010 — Première diaspora</div>
+                                <div class="text-xs text-fc-secondary">Paul s'installe en France, première expatriation</div>
+                            </div>
+                        </div>
+                        <div class="flex gap-4">
+                            <div class="w-3 h-3 bg-fc-critical rounded-full mt-1.5 flex-shrink-0"></div>
+                            <div class="flex-1 pb-4 border-l-2 border-fc-critical border-opacity-30 pl-4">
+                                <div class="font-bold text-fc-primary text-sm">2020 — Décès de Maman Marguerite</div>
+                                <div class="text-xs text-fc-secondary">Levée de deuil en 2021</div>
+                            </div>
+                        </div>
+                        <div class="flex gap-4">
+                            <div class="w-3 h-3 bg-fc-urgent rounded-full mt-1.5 flex-shrink-0"></div>
+                            <div class="flex-1 pl-4">
+                                <div class="font-bold text-fc-primary text-sm">2026 — Congrès de décembre (à venir)</div>
+                                <div class="text-xs text-fc-secondary">Thème : « Transmettre notre mémoire »</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Traditions -->
+            <div class="bg-white rounded-xl p-6 mt-6">
+                <h3 class="font-bold text-fc-primary mb-4 flex items-center gap-2">
+                    <span>🎭</span> Traditions documentées
+                </h3>
+                <div class="grid grid-cols-4 gap-4">
+                    <div class="bg-fc-surface rounded-lg p-4 card-hover cursor-pointer">
+                        <div class="text-3xl mb-2">💍</div>
+                        <div class="font-semibold text-sm">Dot NDONGO</div>
+                        <div class="text-xs text-fc-secondary mt-1">Coutume · Avant 1920</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-4 card-hover cursor-pointer">
+                        <div class="text-3xl mb-2">🍲</div>
+                        <div class="font-semibold text-sm">Ndolé familial</div>
+                        <div class="text-xs text-fc-secondary mt-1">Recette · Tradition</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-4 card-hover cursor-pointer">
+                        <div class="text-3xl mb-2">🎵</div>
+                        <div class="font-semibold text-sm">Chant de bienvenue</div>
+                        <div class="text-xs text-fc-secondary mt-1">Chanson · Tradition</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-4 card-hover cursor-pointer">
+                        <div class="text-3xl mb-2">💀</div>
+                        <div class="font-semibold text-sm">Levée de deuil</div>
+                        <div class="text-xs text-fc-secondary mt-1">Rite · 1 an après</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ U7 — RÉSEAU ============ -->
+        <div id="u7-reseau" class="screen p-8">
+            <div class="mb-6">
+                <h1 class="text-3xl font-bold text-fc-primary">U7 — Le Réseau</h1>
+                <p class="text-fc-secondary mt-1">Compétences · Entraide · Mentorat · Diaspora</p>
+            </div>
+
+            <!-- Skills directory -->
+            <div class="bg-white rounded-xl p-6 mb-6">
+                <h3 class="font-bold text-fc-primary mb-4 flex items-center gap-2">
+                    <span>🤝</span> Répertoire des compétences
+                </h3>
+                <div class="grid grid-cols-4 gap-3 mb-4">
+                    <div class="bg-fc-surface rounded-lg p-3 text-center cursor-pointer hover:bg-fc-bg">
+                        <div class="text-2xl">⚕️</div>
+                        <div class="text-sm font-semibold mt-1">Santé</div>
+                        <div class="text-xs text-fc-secondary">3 membres</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-3 text-center cursor-pointer hover:bg-fc-bg">
+                        <div class="text-2xl">⚖️</div>
+                        <div class="text-sm font-semibold mt-1">Droit</div>
+                        <div class="text-xs text-fc-secondary">4 membres</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-3 text-center cursor-pointer hover:bg-fc-bg">
+                        <div class="text-2xl">💰</div>
+                        <div class="text-sm font-semibold mt-1">Finance</div>
+                        <div class="text-xs text-fc-secondary">5 membres</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-3 text-center cursor-pointer hover:bg-fc-bg">
+                        <div class="text-2xl">💻</div>
+                        <div class="text-sm font-semibold mt-1">Ingénierie</div>
+                        <div class="text-xs text-fc-secondary">7 membres</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-3 text-center cursor-pointer hover:bg-fc-bg">
+                        <div class="text-2xl">📚</div>
+                        <div class="text-sm font-semibold mt-1">Éducation</div>
+                        <div class="text-xs text-fc-secondary">6 membres</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-3 text-center cursor-pointer hover:bg-fc-bg">
+                        <div class="text-2xl">🛠️</div>
+                        <div class="text-sm font-semibold mt-1">Artisanat</div>
+                        <div class="text-xs text-fc-secondary">4 membres</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-3 text-center cursor-pointer hover:bg-fc-bg">
+                        <div class="text-2xl">📢</div>
+                        <div class="text-sm font-semibold mt-1">Communication</div>
+                        <div class="text-xs text-fc-secondary">3 membres</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-3 text-center cursor-pointer hover:bg-fc-bg">
+                        <div class="text-2xl">🌾</div>
+                        <div class="text-sm font-semibold mt-1">Agriculture</div>
+                        <div class="text-xs text-fc-secondary">5 membres</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-6">
+                <!-- Mentorship -->
+                <div class="bg-white rounded-xl p-6">
+                    <h3 class="font-bold text-fc-primary mb-4 flex items-center gap-2">
+                        <span>🎓</span> Mentorat actif
+                    </h3>
+                    <div class="space-y-3">
+                        <div class="bg-fc-surface rounded-lg p-4">
+                            <div class="flex items-center gap-3 mb-2">
+                                <div class="w-10 h-10 bg-fc-primary rounded-full flex items-center justify-center text-white font-bold text-sm">BN</div>
+                                <div>→</div>
+                                <div class="w-10 h-10 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-sm">LN</div>
+                                <div class="flex-1">
+                                    <div class="font-semibold text-sm">Bernard → Lucie</div>
+                                    <div class="text-xs text-fc-secondary">Carrière en finance · Mois 7/12</div>
+                                </div>
+                            </div>
+                            <div class="w-full bg-white rounded-full h-2 mb-2">
+                                <div class="bg-fc-accent h-2 rounded-full" style="width: 58%"></div>
+                            </div>
+                            <div class="flex justify-between text-xs text-fc-secondary">
+                                <span>✓ Orientation carrière</span>
+                                <span>⏳ Préparation CFA</span>
+                            </div>
+                            <div class="text-xs text-fc-urgent mt-2">Prochaine rencontre : 18/10 · Visio</div>
+                        </div>
+                        <div class="bg-fc-surface rounded-lg p-4">
+                            <div class="flex items-center gap-3 mb-2">
+                                <div class="w-10 h-10 bg-fc-primary rounded-full flex items-center justify-center text-white font-bold text-sm">HN</div>
+                                <div>→</div>
+                                <div class="w-10 h-10 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-sm">MN</div>
+                                <div class="flex-1">
+                                    <div class="font-semibold text-sm">Hélène → Marc</div>
+                                    <div class="text-xs text-fc-secondary">Médecine · Mois 3/12</div>
+                                </div>
+                            </div>
+                            <div class="w-full bg-white rounded-full h-2 mb-2">
+                                <div class="bg-fc-accent h-2 rounded-full" style="width: 25%"></div>
+                            </div>
+                            <div class="text-xs text-fc-secondary">✓ Orientation spécialisation</div>
+                        </div>
+                    </div>
+                    <button class="mt-4 w-full bg-fc-primary text-white py-2 rounded-lg text-sm font-semibold hover:bg-fc-primary-light">+ Demander un mentorat</button>
+                </div>
+
+                <!-- Opportunities -->
+                <div class="bg-white rounded-xl p-6">
+                    <h3 class="font-bold text-fc-primary mb-4 flex items-center gap-2">
+                        <span>💼</span> Opportunités récentes
+                    </h3>
+                    <div class="space-y-3">
+                        <div class="bg-fc-surface rounded-lg p-4 card-hover cursor-pointer">
+                            <div class="flex justify-between items-start mb-2">
+                                <div class="font-semibold text-sm">Comptable senior</div>
+                                <span class="badge bg-fc-success text-white">Emploi</span>
+                            </div>
+                            <div class="text-xs text-fc-secondary mb-2">Cabinet Jean NDONGO · Yaoundé · 800K-1,2M FCFA</div>
+                            <div class="flex justify-between text-xs">
+                                <span class="text-fc-secondary">14 candidats · Échéance 31/10</span>
+                                <span class="text-fc-primary font-semibold">Postuler →</span>
+                            </div>
+                        </div>
+                        <div class="bg-fc-surface rounded-lg p-4 card-hover cursor-pointer">
+                            <div class="flex justify-between items-start mb-2">
+                                <div class="font-semibold text-sm">Stage marketing digital (3 mois)</div>
+                                <span class="badge bg-fc-accent text-fc-primary">Stage</span>
+                            </div>
+                            <div class="text-xs text-fc-secondary mb-2">Startup Bruxelles · Joseph NDONGO · Remote</div>
+                            <div class="flex justify-between text-xs">
+                                <span class="text-fc-secondary">3 candidats · Échéance 15/10</span>
+                                <span class="text-fc-primary font-semibold">Postuler →</span>
+                            </div>
+                        </div>
+                        <div class="bg-fc-surface rounded-lg p-4 card-hover cursor-pointer">
+                            <div class="flex justify-between items-start mb-2">
+                                <div class="font-semibold text-sm">Cherche associé pour agence à Douala</div>
+                                <span class="badge bg-fc-primary text-white">Affaires</span>
+                            </div>
+                            <div class="text-xs text-fc-secondary mb-2">Bernard NDONGO · Coentreprise</div>
+                            <div class="flex justify-between text-xs">
+                                <span class="text-fc-secondary">Publié le 20/09</span>
+                                <span class="text-fc-primary font-semibold">Plus d'infos →</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Diaspora relays -->
+            <div class="bg-white rounded-xl p-6 mt-6">
+                <h3 class="font-bold text-fc-primary mb-4 flex items-center gap-2">
+                    <span>🌍</span> Relais diaspora
+                </h3>
+                <div class="grid grid-cols-4 gap-4">
+                    <div class="bg-fc-surface rounded-lg p-4">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-2xl">🇫🇷</span>
+                            <div class="font-semibold text-sm">France</div>
+                        </div>
+                        <div class="text-xs text-fc-secondary">Relais : Joseph NDONGO (Paris)</div>
+                        <div class="text-xs text-fc-secondary">28 membres · 2 nouveaux arrivants</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-4">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-2xl">🇧🇪</span>
+                            <div class="font-semibold text-sm">Belgique</div>
+                        </div>
+                        <div class="text-xs text-fc-secondary">Relais : Marc NDONGO (Bruxelles)</div>
+                        <div class="text-xs text-fc-secondary">14 membres</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-4">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-2xl">🇨🇦</span>
+                            <div class="font-semibold text-sm">Canada</div>
+                        </div>
+                        <div class="text-xs text-fc-secondary">Relais : Sophie NDONGO (Montréal)</div>
+                        <div class="text-xs text-fc-secondary">10 membres</div>
+                    </div>
+                    <div class="bg-fc-surface rounded-lg p-4">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-2xl">🇺🇸</span>
+                            <div class="font-semibold text-sm">États-Unis</div>
+                        </div>
+                        <div class="text-xs text-fc-secondary">Relais : Paul NDONGO (Atlanta)</div>
+                        <div class="text-xs text-fc-secondary">8 membres</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<!-- ============ JAVASCRIPT ============ -->
+<script>
+    function showScreen(screenId) {
+        // Hide all screens
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        // Show target screen
+        document.getElementById(screenId).classList.add('active');
+        // Update nav
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        document.querySelector(`[data-screen="${screenId}"]`).classList.add('active');
+        // Scroll to top
+        document.querySelector('main').scrollTop = 0;
+    }
+
+    function showMemberDetail() {
+        // Could open a modal or navigate to a detail page
+        // For now, just scroll to the detail card
+        document.getElementById('member-detail').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // Animate progress bars on screen load
+    document.addEventListener('DOMContentLoaded', function() {
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const bar = entry.target;
+                    const width = bar.style.width;
+                    bar.style.width = '0%';
+                    setTimeout(() => bar.style.width = width, 100);
+                }
+            });
+        }, { threshold: 0.1 });
+
+        document.querySelectorAll('.progress-bar').forEach(bar => observer.observe(bar));
+    });
+</script>
+
+</body>
+</html>

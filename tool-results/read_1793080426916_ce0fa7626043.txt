@@ -1,0 +1,474 @@
+     1→     1→# FamilleConnect — Plan de Test et de Recette
+     2→     2→
+     3→     3→**Stratégie de test par univers, scénarios clés, critères d'acceptation**
+     4→     4→
+     5→     5→| Document | Plan de test et de recette de la plateforme FamilleConnect |
+     6→     6→|---|---|
+     7→     7→| Version | 1.0 |
+     8→     8→| Date | Octobre 2026 |
+     9→     9→| Statut | Pour validation |
+    10→    10→| Audience | Équipe QA, développeurs, Product Manager, comité de pilotage |
+    11→    11→| Prérequis | Spécifications fonctionnelles des 7 univers, Architecture technique, Schéma PostgreSQL |
+    12→    12→
+    13→    13→---
+    14→    14→
+    15→    15→## Synthèse exécutive
+    16→    16→
+    17→    17→Ce document définit la stratégie de test et de recette de la plateforme FamilleConnect, couvrant les 7 univers et les composants transverses. Il traduit les spécifications fonctionnelles et techniques en scénarios de test concrets, avec des critères d'acceptation mesurables, alignés sur les 3 phases de développement.
+    18→    18→
+    19→    19→La stratégie repose sur une pyramide de tests classique : tests unitaires (70 % de couverture), tests d'intégration (20 %), tests end-to-end (10 %), complétés par des tests de performance, de sécurité, et de recette utilisateur (UAT). Chaque univers possède ses propres scénarios clés, dérivés des cas d'usage les plus critiques : annonce de décès (U2), collecte de solidarité (U3), paiement Mobile Money (U4), vote en session (U5), archivage automatique (U6), mise en relation de mentorat (U7).
+    20→    20→
+    21→    21→Le document couvre également les tests transverses : sécurité (authentification, chiffrement, immutabilité), performance (latence, charge, pics), notifications (anti-saturation, multi-canal, fuseaux horaires), offline-first (synchronisation, gestion des conflits), et accessibilité. Les critères de sortie de chaque phase sont définis de manière objective, avec des seuils chiffrés (couverture de code, taux de réussite, temps de réponse, satisfaction utilisateur).
+    22→    22→
+    23→    23→---
+    24→    24→
+    25→    25→## 1. Stratégie de test globale
+    26→    26→
+    27→    27→### 1.1 Principes directeurs
+    28→    28→
+    29→    29→La stratégie de test de FamilleConnect est guidée par cinq principes :
+    30→    30→
+    31→    31→**Shift-left.** Les tests sont écrits en même temps que le code, pas après. Chaque fonctionnalité développée est accompagnée de tests unitaires et d'intégration. Les critères d'acceptation sont définis avant le développement (Behavior-Driven Development).
+    32→    32→
+    33→    33→**Risk-based.** Les efforts de test sont proportionnels au risque. Les univers critiques (U3 Solidarité, U4 Finances) reçoivent plus d'attention que les univers moins risqués (U6 Mémoire, U7 Réseau). Les fonctionnalités sensibles (paiements, décisions, données personnelles) sont testées plus en profondeur.
+    34→    34→
+    35→    35→**Automatisation maximale.** Les tests unitaires, d'intégration, et end-to-end sont automatisés. Les tests manuels sont réservés à l'exploratoire, à l'accessibilité, et à la recette utilisateur. L'objectif est de pouvoir exécuter la suite de tests complète en moins de 30 minutes en CI/CD.
+    36→    36→
+    37→    37→**Offline-first testing.** Tous les scénarios critiques sont testés en mode hors-ligne, en mode connecté, et en mode intermittent. La gestion des conflits de synchronisation est testée systématiquement.
+    38→    38→
+    39→    39→**Données réalistes.** Les tests utilisent un jeu de données de démonstration réaliste (famille NDONGO, 247 membres, 6 branches, 9 pays) qui reflète les conditions réelles d'utilisation.
+    40→    40→
+    41→    41→### 1.2 Pyramide de tests
+    42→    42→
+    43→    43→| Niveau | Part | Outil | Couverture cible | Exécution |
+    44→    44→|---|---|---|---|---|
+    45→    45→| Tests unitaires | 70 % | Jest | ≥ 80 % du code | À chaque commit |
+    46→    46→| Tests d'intégration | 20 % | Jest + Testcontainers | ≥ 70 % des modules | À chaque PR |
+    47→    47→| Tests end-to-end | 7 % | Playwright | Scénarios critiques | À chaque merge |
+    48→    48→| Tests de performance | 2 % | k6 | Points de charge | Hebdomadaire |
+    49→    49→| Tests de sécurité | 1 % | OWASP ZAP, Snyk | Vulnérabilités critiques | Hebdomadaire |
+    50→    50→| Tests manuels (UAT) | — | Recette familiale pilote | Acceptation | Par phase |
+    51→    51→
+    52→    52→### 1.3 Environnements de test
+    53→    53→
+    54→    54→| Environnement | Usage | Données | Refresh |
+    55→    55→|---|---|---|---|
+    56→    56→| **Local** | Développement et tests unitaires | Docker Compose, données synthétiques | À la demande |
+    57→    57→| **Dev** | Tests d'intégration continue | Données synthétiques auto-générées | Quotidien |
+    58→    58→| **Staging** | Tests d'intégration, e2e, performance | Anonymisé de production (Phase 2+) | Hebdomadaire |
+    59→    59→| **Pre-prod** | Recette utilisateur (UAT) | Copie de production anonymisée | Avant chaque release |
+    60→    60→| **Production** | Monitoring, tests smoke | Données réelles | — |
+    61→    61→
+    62→    62→---
+    63→    63→
+    64→    64→## 2. Tests par univers
+    65→    65→
+    66→    66→### 2.1 Univers 1 — La Famille
+    67→    67→
+    68→    68→#### Scénarios clés
+    69→    69→
+    70→    70→| ID | Scénario | Priorité | Critère d'acceptation |
+    71→    71→|---|---|---|---|
+    72→    72→| U1-01 | Ajout d'un nouveau membre par un chef de branche | Critique | Le membre est créé avec statut "en attente", le patriarche reçoit une notification, le membre apparaît dans la branche après validation |
+    73→    73→| U1-02 | Validation d'un nouveau membre par le patriarche | Critique | Le membre passe en statut "actif", une notification est envoyée à toute la famille, le membre apparaît dans l'arbre généalogique |
+    74→    74→| U1-03 | Marquage d'un décès | Critique | Le membre passe en statut "décédé", la date et le lieu de décès sont enregistrés, les notifications U2/U3 sont déclenchées automatiquement |
+    75→    75→| U1-04 | Gestion de la polygamie | Élevée | Un père peut avoir plusieurs épouses simultanées, chaque enfant identifie sa mère biologique, l'arbre affiche les unions multiples |
+    76→    76→| U1-05 | Recherche de membre par nom (recherche floue) | Élevée | La recherche tolère les fautes de frappe et les accents, retourne les résultats en moins de 500 ms |
+    77→    77→| U1-06 | Arbre généalogique sur 3 générations | Élevée | L'arbre s'affiche correctement avec navigation par nœud, chargement en moins de 2 secondes |
+    78→    78→| U1-07 | Transition de patriarche | Critique | La transition est tracée, les accès sont transférés, la famille est notifiée, le nouveau patriarche peut exercer ses prérogatives |
+    79→    79→| U1-08 | Membre diaspora signale son installation | Moyenne | Le relais diaspora du pays est notifié, un guide d'accueil est fourni, une rencontre est planifiée |
+    80→    80→| U1-09 | Exonération confidentielle de cotisation | Critique | Le membre exonéré apparaît comme "à jour", aucune mention d'exonération n'est visible publiquement, le comité médiation a accès |
+    81→    81→| U1-10 | Consultation du journal d'audit | Moyenne | Un membre peut voir qui a consulté ses données sensibles, le journal est immuable |
+    82→    82→
+    83→    83→#### Tests spécifiques U1
+    84→    84→
+    85→    85→- **Recherche full-text** : tester les trigrammes PostgreSQL avec noms camerounais (accents, tirets, particules).
+    86→    86→- **Arbre récursif** : tester la requête CTE récursive avec une famille de 500 membres sur 5 générations.
+    87→    87→- **Permissions RBAC** : tester que chaque rôle ne voit que ce qu'il est autorisé à voir.
+    88→    88→- **Immutabilité** : vérifier qu'une écriture comptable validée ne peut pas être modifiée (trigger PostgreSQL).
+    89→    89→
+    90→    90→---
+    91→    91→
+    92→    92→### 2.2 Univers 2 — La Vie familiale
+    93→    93→
+    94→    94→#### Scénarios clés
+    95→    95→
+    96→    96→| ID | Scénario | Priorité | Critère d'acceptation |
+    97→    97→|---|---|---|---|
+    98→    98→| U2-01 | Annonce de décès avec double validation | Critique | L'annonce est envoyée à toute la famille en moins de 30 minutes, multi-canal (push + SMS + vocal), le ciblage est correct |
+    99→    99→| U2-02 | Déclenchement automatique du workflow décès | Critique | Les 8 étapes sont créées automatiquement, chaque étape a un responsable, la première étape (annonce) est complétée |
+   100→   100→| U2-03 | Progression d'une étape de workflow | Élevée | L'étape passe de "pending" à "completed" avec validation, l'étape suivante est déclenchée, les notifications sont envoyées |
+   101→   101→| U2-04 | Détection d'étape en retard | Élevée | Une étape non complétée après J+3 passe en "overdue", une notification Urgent est envoyée au responsable |
+   102→   102→| U2-05 | Inscription à un congrès | Élevée | Le membre peut confirmer sa présence, indiquer ses accompagnants, le compteur d'inscrits est mis à jour en temps réel |
+   103→   103→| U2-06 | Création d'un album photo collaboratif | Moyenne | Plusieurs membres peuvent téléverser des photos, le tagging automatique propose des tags, les photos sont visibles par les participants |
+   104→   104→| U2-07 | Conflit de dates détecté | Moyenne | La création d'un événement sur une date existante déclenche un avertissement, l'organisateur peut maintenir ou déplacer |
+   105→   105→| U2-08 | Clôture d'un événement avec bilan | Élevée | Le bilan est généré automatiquement, transmis aux contributeurs, l'événement est archivé dans U6 |
+   106→   106→| U2-09 | Calendrier — respect des fuseaux horaires | Critique | Un membre à Paris reçoit les rappels en heure locale, pas en heure de Yaoundé |
+   107→   107→| U2-10 | Mode hors-ligne — saisie d'événement | Élevée | Un événement peut être créé hors-ligne, synchronisé au retour de connexion, sans perte de données |
+   108→   108→
+   109→   109→#### Tests spécifiques U2
+   110→   110→
+   111→   111→- **Workflow engine** : tester avec une définition de workflow modifiée (ajout/suppression d'étapes) sans modification de code.
+   112→   112→- **Notifications temps réel** : vérifier que les notifications push sont reçues en moins de 30 secondes via WebSocket.
+   113→   113→- **Calendrier** : tester la synchronisation avec Google Calendar, Apple Calendar, Outlook.
+   114→   114→- **Albums** : tester le téléversement de 100 photos simultanées, vérifier le tagging automatique.
+   115→   115→
+   116→   116→---
+   117→   117→
+   118→   118→### 2.3 Univers 3 — La Solidarité
+   119→   119→
+   120→   120→#### Scénarios clés
+   121→   121→
+   122→   122→| ID | Scénario | Priorité | Critère d'acceptation |
+   123→   123→|---|---|---|---|
+   124→   124→| U3-01 | Déclenchement automatique d'un dossier de solidarité | Critique | Un décès déclaré en U2 crée automatiquement un dossier U3, la collecte est ouverte en moins de 4 heures |
+   125→   125→| U3-02 | Contribution via Mobile Money | Critique | Le paiement MTN MoMo est initié, le webhook confirme, l'écriture comptable est créée, le reçu PDF est généré |
+   126→   126→| U3-03 | Double validation d'une dépense | Critique | Une dépense > 50 000 FCFA requiert deux validateurs, le paiement n'est effectué qu'après double validation |
+   127→   127→| U3-04 | Justificatif obligatoire | Élevée | Une dépense > 10 000 FCFA sans justificatif est signalée, le trésorier est notifié |
+   128→   128→| U3-05 | Clôture d'un dossier avec bilan | Élevée | Le bilan financier est généré, transmis à tous les contributeurs, le dossier est archivé dans U6 |
+   129→   129→| U3-06 | Relances automatiques respectant les exonérations | Critique | Un membre exonéré ne reçoit aucune relance, les autres reçoivent les relances J+3, J+7, J+14 |
+   130→   130→| U3-07 | Confidentialité d'un dossier sensible | Critique | Un dossier marqué "confidentiel" n'est visible que par le comité médiation et le référent, les autres membres n'en voient pas l'existence |
+   131→   131→| U3-08 | Aide sociale récurrente — versement mensuel | Élevée | Le versement est effectué automatiquement à la date prévue, le bénéficiaire reçoit une notification silencieuse |
+   132→   132→| U3-09 | Suivi de maladie longue | Moyenne | Les jalons sont enregistrés, les visites sont planifiées, le comité médiation est informé |
+   133→   133→| U3-10 | Journal immutable des transactions | Critique | Aucune transaction ne peut être modifiée après création, les corrections se font par écriture compensatoire |
+   134→   134→
+   135→   135→#### Tests spécifiques U3
+   136→   136→
+   137→   137→- **Immutabilité** : tenter de modifier une transaction validée doit lever une exception.
+   138→   138→- **Confidentialité** : tester avec différents rôles (membre ordinaire, chef de branche, comité médiation) que les données sensibles sont correctement masquées.
+   139→   139→- **Mobile Money** : tester en sandbox MTN MoMo et Orange Money, simuler les webhooks de paiement.
+   140→   140→- **Barème gradué** : tester le calcul des montants attendus par membre selon la branche, la génération, la diaspora.
+   141→   141→
+   142→   142→---
+   143→   143→
+   144→   144→### 2.4 Univers 4 — Les Finances
+   145→   145→
+   146→   146→#### Scénarios clés
+   147→   147→
+   148→   148→| ID | Scénario | Priorité | Critère d'acceptation |
+   149→   149→|---|---|---|---|
+   150→   150→| U4-01 | Paiement cotisation via Mobile Money | Critique | Le paiement est initié, confirmé par webhook, rapproché automatiquement, le reçu est généré, le solde est mis à jour |
+   151→   151→| U4-02 | Rapprochement automatique Mobile Money | Critique | Chaque paiement Mobile Money est rapproché avec une écriture comptable, les écarts sont signalés |
+   152→   152→| U4-03 | Double validation des dépenses | Critique | Dépense > 50 000 FCFA : double validation, > 500 000 FCFA : triple validation, paiement impossible sans validation |
+   153→   153→| U4-04 | Journal comptable immutable | Critique | Aucune écriture validée ne peut être modifiée, les corrections se font par écriture compensatoire |
+   154→   154→| U4-05 | Balance comptable et états financiers | Élevée | La balance est générée correctement, le compte de résultat et le bilan sont équilibrés (partie double) |
+   155→   155→| U4-06 | Rapport mensuel automatique | Élevée | Le rapport est généré le 1er du mois, transmis à tous les membres, les montants sont agrégés sans détail nominatif |
+   156→   156→| U4-07 | Caisse en déficit — alerte | Critique | Un solde négatif déclenche une alerte Critique multi-canal au trésorier et au patriarche |
+   157→   157→| U4-08 | Budget annuel — suivi d'exécution | Moyenne | L'exécution est suivie par poste, les écarts > 15 % sont signalés |
+   158→   158→| U4-09 | Mode espèces — saisie manuelle | Élevée | Un paiement en espèces est saisi par le trésorier, un reçu est généré, l'écriture est créée |
+   159→   159→| U4-10 | Multi-devises (diaspora) | Moyenne | Un paiement en euros est converti en FCFA au taux du jour, le montant en devise est conservé |
+   160→   160→
+   161→   161→#### Tests spécifiques U4
+   162→   162→
+   163→   163→- **Partie double** : vérifier que pour chaque écriture, débit = crédit (trigger PostgreSQL).
+   164→   164→- **Rapprochement** : simuler 100 paiements Mobile Money, vérifier que 100 % sont rapprochés.
+   165→   165→- **Immutabilité** : tenter de UPDATE une écriture validée doit échouer.
+   166→   166→- **Clôture annuelle** : tester la clôture d'un exercice complet avec 1 000 écritures.
+   167→   167→- **Mode hors-ligne** : saisir un paiement en espèces hors-ligne, vérifier la synchronisation au retour.
+   168→   168→
+   169→   169→---
+   170→   170→
+   171→   171→### 2.5 Univers 5 — La Gouvernance
+   172→   172→
+   173→   173→#### Scénarios clés
+   174→   174→
+   175→   175→| ID | Scénario | Priorité | Critère d'acceptation |
+   176→   176→|---|---|---|---|
+   177→   177→| U5-01 | Création et clôture d'un vote simple | Critique | Le vote est créé avec ses paramètres, les votants sont notifiés, les bulletins sont chiffrés, les résultats sont publiés après clôture |
+   178→   178→| U5-02 | Quorum non atteint | Élevée | Si le quorum n'est pas atteint à la clôture, le vote est marqué "non valide", le conseil est notifié |
+   179→   179→| U5-03 | Vote anonyme — vérifiabilité | Critique | Le bulletin est chiffré, le votant reçoit un reçu avec hash, le choix n'est jamais visible individuellement |
+   180→   180→| U5-04 | Élection complète (5 étapes) | Critique | Annonce → candidatures → campagne → scrutin → proclamation, chaque étape envoie les bonnes notifications |
+   181→   181→| U5-05 | PV immutable après validation | Critique | Un PV validé ne peut pas être modifié, les corrections se font par avenant |
+   182→   182→| U5-06 | Recours et médiation | Élevée | Un recours peut être déposé, le comité médiation l'examine sous 14 jours, la décision est motivée |
+   183→   183→| U5-07 | Assemblée hybride (présentiel + visio) | Moyenne | Les votes des deux populations sont synchronisés, le quorum global est calculé correctement |
+   184→   184→| U5-08 | Règlement intérieur — amendement | Moyenne | Un amendement est proposé, voté à majorité qualifiée 2/3, la nouvelle version est publiée avec historique |
+   185→   185→| U5-09 | Conformité des décisions au règlement | Élevée | Chaque décision est rattachée à un article du règlement, la non-conformité est signalée |
+   186→   186→| U5-10 | Transition de patriarche — traçabilité | Critique | La transition est enregistrée avec date, prédécesseur, successeur, validateur, les accès sont transférés |
+   187→   187→
+   188→   188→#### Tests spécifiques U5
+   189→   189→
+   190→   190→- **Chiffrement des bulletins** : vérifier que les bulletins sont chiffrés jusqu'à la clôture, déchiffrables uniquement après.
+   191→   191→- **Égalité** : tester la procédure en cas d'égalité (nouveau vote, puis arbitrage du patriarche).
+   192→   192→- **Fraude électorale** : tenter un double vote, vérifier le rejet et le signalement.
+   193→   193→- **PV** : tester la génération automatique du PV à partir des votes et motions.
+   194→   194→
+   195→   195→---
+   196→   196→
+   197→   197→### 2.6 Univers 6 — La Mémoire
+   198→   198→
+   199→   199→#### Scénarios clés
+   200→   200→
+   201→   201→| ID | Scénario | Priorité | Critère d'acceptation |
+   202→   202→|---|---|---|---|
+   203→   203→| U6-01 | Archivage automatique d'un dossier clôturé | Critique | Un dossier U2/U3/U4/U5 clôturé est automatiquement archivé dans U6, avec toutes ses métadonnées et cross-références |
+   204→   204→| U6-02 | Interview d'ancien — enregistrement et transcription | Élevée | L'interview audio/vidéo est enregistrée, la transcription automatique est générée, les chapitres sont créés |
+   205→   205→| U6-03 | Recherche full-text dans les archives | Élevée | La recherche retourne des résultats pertinents en moins de 2 secondes, avec extraits mis en évidence |
+   206→   206→| U6-04 | Document scellé — accès conditionnel | Critique | Un document scellé n'est pas visible avant la date définie, l'accès requiert validation du patriarche |
+   207→   207→| U6-05 | Triple stockage des fichiers | Critique | Chaque fichier est stocké sur 3 supports (S3, sauvegarde, archive froide), la restauration est testée |
+   208→   208→| U6-06 | Droit à l'oubli — retrait d'informations | Élevée | Un membre peut demander le retrait de ses données nominatives, l'archive anonymisée est conservée |
+   209→   209→| U6-07 | Tradition restreinte — confidentialité | Élevée | Une tradition restreinte n'est visible que par les membres autorisés, la documentation allégée est affichée aux autres |
+   210→   210→| U6-08 | Frise chronologique — navigation | Moyenne | La frise est navigable, filtrable par type et par branche, les liens vers les archives sont fonctionnels |
+   211→   211→| U6-09 | Migration de formats (tous les 5 ans) | Moyenne | La migration est planifiée, les formats sont vérifiés, les fichiers migrés sont consultables |
+   212→   212→| U6-10 | Sauvegarde externe trimestrielle | Critique | L'export chiffré est généré, transféré vers un lieu distant, l'intégrité est vérifiée |
+   213→   213→
+   214→   214→#### Tests spécifiques U6
+   215→   215→
+   216→   216→- **Volume** : tester avec 10 000 photos, 500 documents, 100 interviews, vérifier les performances.
+   217→   217→- **Restauration** : simuler une perte de données, restaurer depuis la sauvegarde externe, vérifier l'intégrité.
+   218→   218→- **Full-text** : tester la recherche avec des requêtes en français et en langues locales.
+   219→   219→- **URLs signées** : vérifier que les URLs signées expirent après leur durée de validité.
+   220→   220→
+   221→   221→---
+   222→   222→
+   223→   223→### 2.7 Univers 7 — Le Réseau
+   224→   224→
+   225→   225→#### Scénarios clés
+   226→   226→
+   227→   227→| ID | Scénario | Priorité | Critère d'acceptation |
+   228→   228→|---|---|---|---|
+   229→   229→| U7-01 | Publication d'un profil de compétences | Élevée | Le profil est publié, visible par les membres autorisés, la vérification par le chef de branche est proposée |
+   230→   230→| U7-02 | Demande de mentorat et appariement | Élevée | Le mentor reçoit la demande, peut accepter ou refuser, le mentorat est créé avec plan et objectifs |
+   231→   231→| U7-03 | Opportunité professionnelle — modération a priori | Élevée | L'opportunité est soumise à modération, validée, diffusée aux membres avec compétences correspondantes |
+   232→   232→| U7-04 | Messagerie — anti-harcèlement | Critique | Après 3 messages sans réponse, l'expéditeur est bloqué, le comité médiation est notifié |
+   233→   233→| U7-05 | Blocage d'un membre | Critique | Un membre peut bloquer un autre membre, aucune communication n'est possible, le blocage est réversible |
+   234→   234→| U7-06 | Recommandation — vérification d'interaction | Élevée | Une recommandation ne peut être publiée que par un membre ayant effectivement interagi avec le destinataire |
+   235→   235→| U7-07 | Accueil d'un nouvel arrivant diaspora | Moyenne | Le relais diaspora est notifié, un guide d'accueil est fourni, une rencontre est planifiée dans les 30 jours |
+   236→   236→| U7-08 | Plafond de mentorés par mentor | Moyenne | Un mentor ne peut pas avoir plus de 3 mentorés simultanés (configurable) |
+   237→   237→| U7-09 | Opportunité frauduleuse — modération | Critique | Une opportunité signalée est retirée temporairement, examinée par le comité médiation, retirée définitivement si fraude |
+   238→   238→| U7-10 | Prévention de l'épuisement (entraide) | Moyenne | Un membre ayant reçu plus de 5 demandes par mois est alerté, peut mettre en pause ses propositions |
+   239→   239→
+   240→   240→#### Tests spécifiques U7
+   241→   241→
+   242→   242→- **Anti-harcèlement** : simuler 3 messages sans réponse, vérifier le blocage automatique.
+   243→   243→- **Matching** : tester la suggestion automatique de mentors basée sur les compétences et préférences.
+   244→   244→- **Modération** : soumettre une opportunité avec contenu inapproprié, vérifier le rejet par le modérateur.
+   245→   245→- **Confidentialité** : vérifier qu'un membre peut masquer ses coordonnées et n'accepter que la messagerie interne.
+   246→   246→
+   247→   247→---
+   248→   248→
+   249→   249→## 3. Tests transverses
+   250→   250→
+   251→   251→### 3.1 Sécurité
+   252→   252→
+   253→   253→| ID | Scénario | Priorité | Critère d'acceptation |
+   254→   254→|---|---|---|---|
+   255→   255→| SEC-01 | Authentification 2FA pour opérations sensibles | Critique | Le 2FA est requis pour paiement > 50 000, vote, modification de rôles |
+   256→   256→| SEC-02 | Chiffrement au repos et en transit | Critique | Toutes les données sont chiffrées (AES-256 au repos, TLS 1.3 en transit) |
+   257→   257→| SEC-03 | Base SQLite locale chiffrée (mobile) | Critique | La base mobile est chiffrée (SQLCipher), inaccessible sans le jeton |
+   258→   258→| SEC-04 | Prévention injection SQL et XSS | Critique | Toutes les entrées sont validées et sanitizées, aucun payload malveillant ne passe |
+   259→   259→| SEC-05 | Rate limiting API | Élevée | Un client dépassant 100 requêtes/minute est bloqué (429) |
+   260→   260→| SEC-06 | Jeton JWT révocable | Élevée | Un jeton révoqué n'est plus accepté, même avant expiration |
+   261→   261→| SEC-07 | Audit des accès aux données sensibles | Élevée | Toute consultation de dossier sensible est journalisée, consultable par le membre |
+   262→   262→| SEC-08 | Conformité RGPD-like | Élevée | Droit d'accès, rectification, effacement partiel, portabilité fonctionnels |
+   263→   263→
+   264→   264→### 3.2 Performance
+   265→   265→
+   266→   266→| ID | Scénario | Priorité | Critère d'acceptation |
+   267→   267→|---|---|---|---|
+   268→   268→| PERF-01 | Latence API REST | Critique | 95 % des requêtes en moins de 500 ms |
+   269→   269→| PERF-02 | Latence WebSocket | Élevée | 95 % des messages en moins de 2 secondes |
+   270→   270→| PERF-03 | Charge — 500 utilisateurs simultanés | Critique | Aucune dégradation sous 500 utilisateurs concurrents |
+   271→   271→| PERF-04 | Pic — décès simultanés | Critique | 10 décès simultanés n'entrainent pas de perte de notifications |
+   272→   272→| PERF-05 | Recherche full-text | Élevée | Résultats en moins de 2 secondes avec 100 000 documents indexés |
+   273→   273→| PERF-06 | Synchronisation mobile | Moyenne | Synchronisation de 1 000 modifications en moins de 30 secondes |
+   274→   274→| PERF-07 | Génération de rapport mensuel | Moyenne | Génération en moins de 60 secondes pour 1 000 transactions |
+   275→   275→
+   276→   276→### 3.3 Notifications
+   277→   277→
+   278→   278→| ID | Scénario | Priorité | Critère d'acceptation |
+   279→   279→|---|---|---|---|
+   280→   280→| NOTIF-01 | Notification critique multi-canal | Critique | Push + SMS + Vocal envoyés en moins de 5 minutes |
+   281→   281→| NOTIF-02 | Anti-saturation — plafond quotidien | Critique | Au-delà de 5 notifications standard/jour, les suivantes sont regroupées en digest |
+   282→   282→| NOTIF-03 | Respect des fuseaux horaires | Critique | Une notification standard envoyée à 23h UTC+1 est différée à 7h pour un membre à UTC-5 |
+   283→   283→| NOTIF-04 | Digest quotidien | Élevée | Le digest est envoyé à 19h locale, regroupe les notifications excédentaires et silencieuses |
+   284→   284→| NOTIF-05 | Désactivation par catégorie | Élevée | Un membre peut désactiver une catégorie, les notifications critiques restent obligatoires |
+   285→   285→| NOTIF-06 | Rapprochement paiement → notification reçu | Élevée | La notification "Paiement reçu" est envoyée en moins de 30 secondes après le webhook |
+   286→   286→
+   287→   287→### 3.4 Offline-first
+   288→   288→
+   289→   289→| ID | Scénario | Priorité | Critère d'acceptation |
+   290→   290→|---|---|---|---|
+   291→   291→| OFF-01 | Consultation du registre hors-ligne | Critique | Le registre est consultable sans connexion, les données sont à jour de la dernière sync |
+   292→   292→| OFF-02 | Saisie d'un paiement en espèces hors-ligne | Critique | Le paiement est saisi, un reçu est généré, synchronisé au retour de connexion |
+   293→   293→| OFF-03 | Gestion des conflits de synchronisation | Élevée | Deux modifications concurrentes sont détectées, la dernière gagne ou résolution manuelle |
+   294→   294→| OFF-04 | Reprise de synchronisation après coupure | Élevée | La sync reprend là où elle s'est arrêtée, sans perte ni doublon |
+   295→   295→| OFF-05 | Mode hors-ligne prolongé (congrès en brousse) | Moyenne | L'application fonctionne 48h hors-ligne, sync au retour avec toutes les données |
+   296→   296→
+   297→   297→### 3.5 Accessibilité
+   298→   298→
+   299→   299→| ID | Scénario | Priorité | Critère d'acceptation |
+   300→   300→|---|---|---|---|
+   301→   301→| A11Y-01 | Navigation au clavier | Élevée | Toutes les actions atteignables au clavier, focus visible |
+   302→   302→| A11Y-02 | Lecteur d'écran | Élevée | Sémantique HTML correcte, ARIA sur les composants complexes |
+   303→   303→| A11Y-03 | Gros caractères | Moyenne | Tailles de police ajustables, pas de débordement |
+   304→   304→| A11Y-04 | Contrastes | Moyenne | Respect des ratios WCAG 2.1 AA |
+   305→   305→| A11Y-05 | Multi-langue | Moyenne | Interface disponible en français et anglais, architecture i18n en place |
+   306→   306→
+   307→   307→---
+   308→   308→
+   309→   309→## 4. Critères d'acceptation par phase
+   310→   310→
+   311→   311→### 4.1 Phase 1 — MVP (mois 1-9)
+   312→   312→
+   313→   313→| Critère | Cible | Mesure |
+   314→   314→|---|---|---|
+   315→   315→| Couverture de code (tests unitaires) | ≥ 80 % | Jest coverage report |
+   316→   316→| Tests d'intégration réussis | 100 % | CI/CD pipeline |
+   317→   317→| Tests e2e réussis (scénarios critiques) | 100 % | Playwright |
+   318→   318→| Tests de performance | PERF-01 à PERF-04 validés | k6 |
+   319→   319→| Tests de sécurité | SEC-01 à SEC-04 validés | OWASP ZAP |
+   320→   320→| Scénarios U1 | U1-01 à U1-07 validés | Recette |
+   321→   321→| Scénarios U2 | U2-01 à U2-04 validés | Recette |
+   322→   322→| Scénarios U4 | U4-01 à U4-06 validés | Recette |
+   323→   323→| Scénarios transverses | NOTIF-01 à NOTIF-03, OFF-01 à OFF-03, SEC-01 à SEC-04 | Recette |
+   324→   324→| Recette famille pilote | ≥ 4/5 satisfaction | Questionnaire |
+   325→   325→| Bugs critiques ouverts | 0 | Bug tracker |
+   326→   326→| Bugs majeurs ouverts | ≤ 5 | Bug tracker |
+   327→   327→
+   328→   328→### 4.2 Phase 2 — Enrichissement (mois 10-18)
+   329→   329→
+   330→   330→| Critère | Cible |
+   331→   331→|---|---|
+   332→   332→| Couverture de code | ≥ 80 % |
+   333→   333→| Tests e2e réussis | 100 % |
+   334→   334→| Scénarios U1 | U1-01 à U1-10 validés |
+   335→   335→| Scénarios U2 | U2-01 à U2-10 validés |
+   336→   336→| Scénarios U3 | U3-01 à U3-10 validés |
+   337→   337→| Scénarios U4 | U4-01 à U4-10 validés |
+   338→   338→| Scénarios U5 | U5-01 à U5-06 validés |
+   339→   339→| Scénarios transverses | Tous validés |
+   340→   340→| Performance sous charge | 1 000 utilisateurs simultanés |
+   341→   341→| Recette 5 familles pilotes | ≥ 4/5 satisfaction |
+   342→   342→| Bugs critiques ouverts | 0 |
+   343→   343→| Bugs majeurs ouverts | ≤ 10 |
+   344→   344→
+   345→   345→### 4.3 Phase 3 — Maturité (mois 19-30)
+   346→   346→
+   347→   347→| Critère | Cible |
+   348→   348→|---|---|
+   349→   349→| Couverture de code | ≥ 80 % |
+   350→   350→| Tous les scénarios (70+) | 100 % validés |
+   351→   351→| Performance sous charge | 5 000 utilisateurs simultanés |
+   352→   352→| Tests de sécurité complets | Pen-test externe passé |
+   353→   353→| Recette 10+ familles | ≥ 4/5 satisfaction |
+   354→   354→| Bugs critiques ouverts | 0 |
+   355→   355→| Bugs majeurs ouverts | ≤ 5 |
+   356→   356→
+   357→   357→---
+   358→   358→
+   359→   359→## 5. Gestion des bugs
+   360→   360→
+   361→   361→### 5.1 Sévérités
+   362→   362→
+   363→   363→| Sévérité | Définition | Délai de correction | Blocage release ? |
+   364→   364→|---|---|---|---|
+   365→   365→| **Critique (S1)** | Perte de données, sécurité compromise, fonctionnalité critique indisponible | 24 heures | Oui |
+   366→   366→| **Majeur (S2)** | Fonctionnalité importante dégradée, contournement possible | 7 jours | Oui si > 5 |
+   367→   367→| **Mineur (S3)** | Fonctionnalité secondaire dégradée, impact limité | 30 jours | Non |
+   368→   368→| **Cosmétique (S4)** | Problème visuel, typo, alignement | Au prochain sprint | Non |
+   369→   369→
+   370→   370→### 5.2 Cycle de vie des bugs
+   371→   371→
+   372→   372→```
+   373→   373→Nouveau → Assigné → En cours → Résolu → Vérifié → Fermé
+   374→   374→                ↓                    ↓
+   375→   375→            Rejeté              Réouvert
+   376→   376→```
+   377→   377→
+   378→   378→### 5.3 Outils
+   379→   379→
+   380→   380→- **Bug tracker** : GitHub Issues (intégré au CI/CD)
+   381→   381→- **Suivi des tests** : Jest coverage report, Playwright HTML report
+   382→   382→- **Monitoring production** : Datadog, Sentry (pour les erreurs runtime)
+   383→   383→
+   384→   384→---
+   385→   385→
+   386→   386→## 6. Stratégie d'automatisation
+   387→   387→
+   388→   388→### 6.1 Tests automatisés en CI/CD
+   389→   389→
+   390→   390→| Étape | Outil | Fréquence | Durée cible |
+   391→   391→|---|---|---|---|
+   392→   392→| Lint | ESLint + Prettier | À chaque commit | < 30s |
+   393→   393→| Tests unitaires | Jest | À chaque commit | < 5 min |
+   394→   394→| Tests d'intégration | Jest + Testcontainers | À chaque PR | < 10 min |
+   395→   395→| Build | Docker | À chaque PR | < 5 min |
+   396→   396→| Tests e2e | Playwright | À chaque merge | < 15 min |
+   397→   397→| Tests de sécurité | Snyk + OWASP ZAP | Hebdomadaire | < 30 min |
+   398→   398→| Tests de charge | k6 | Hebdomadaire | < 30 min |
+   399→   399→
+   400→   400→### 6.2 Données de test
+   401→   401→
+   402→   402→- **Jeu de données de référence** : famille NDONGO (247 membres, 6 branches, 9 pays, 3 générations d'historique).
+   403→   403→- **Génération automatique** : script de génération de données synthétiques pour les tests de charge.
+   404→   404→- **Anonymisation** : script d'anonymisation des données de production pour staging (Phase 2+).
+   405→   405→- **Seed** : script de seed pour les environnements de dev et staging.
+   406→   406→
+   407→   407→### 6.3 Tests de régression
+   408→   408→
+   409→   409→- **Suite de régression** : tous les scénarios e2e sont exécutés à chaque merge sur main.
+   410→   410→- **Smoke tests** : 10 scénarios critiques exécutés après chaque déploiement en production.
+   411→   411→- **Tests de non-régression** : les bugs corrigés sont accompagnés d'un test de non-régression automatisé.
+   412→   412→
+   413→   413→---
+   414→   414→
+   415→   415→## 7. Plan de test par phase
+   416→   416→
+   417→   417→### 7.1 Phase 1 — MVP (mois 1-9)
+   418→   418→
+   419→   419→| Mois | Activité de test |
+   420→   420→|---|---|
+   421→   421→| M1-M3 | Tests unitaires et d'intégration des modules U1 et U4 |
+   422→   422→| M4-M5 | Tests e2e des scénarios U1-01 à U1-07 et U4-01 à U4-06 |
+   423→   423→| M6 | Tests de performance et de sécurité initiaux |
+   424→   424→| M7 | Tests offline-first (OFF-01 à OFF-05) |
+   425→   425→| M8 | Recette interne (équipe) sur environnement pre-prod |
+   426→   426→| M9 | Recette famille pilote (1-2 familles), correction des bugs, release |
+   427→   427→
+   428→   428→### 7.2 Phase 2 — Enrichissement (mois 10-18)
+   429→   429→
+   430→   430→| Mois | Activité de test |
+   431→   431→|---|---|
+   432→   432→| M10-M12 | Tests des modules U2, U3, U5 |
+   433→   433→| M13-M14 | Tests e2e des scénarios complets U2, U3, U5 |
+   434→   434→| M15 | Tests de performance sous charge (1 000 utilisateurs) |
+   435→   435→| M16 | Tests de sécurité approfondis (pen-test interne) |
+   436→   436→| M17 | Recette 5 familles pilotes |
+   437→   437→| M18 | Correction, optimisation, release Phase 2 |
+   438→   438→
+   439→   439→### 7.3 Phase 3 — Maturité (mois 19-30)
+   440→   440→
+   441→   441→| Mois | Activité de test |
+   442→   442→|---|---|
+   443→   443→| M19-M22 | Tests des modules U6, U7 |
+   444→   444→| M23-M24 | Tests e2e des scénarios complets U6, U7 |
+   445→   445→| M25 | Tests de performance sous charge (5 000 utilisateurs) |
+   446→   446→| M26 | Pen-test externe par un cabinet indépendant |
+   447→   447→| M27-M28 | Recette 10+ familles, optimisation |
+   448→   448→| M29-M30 | Release Phase 3, monitoring, support |
+   449→   449→
+   450→   450→---
+   451→   451→
+   452→   452→## 8. Risques de test et mitigations
+   453→   453→
+   454→   454→| Risque | Mitigation |
+   455→   455→|---|---|
+   456→   456→| Données de test insuffisantes | Jeu de données NDONGO réaliste + génération automatique |
+   457→   457→| Environnement Mobile Money sandbox instable | Mock des webhooks + tests en sandbox avec monitoring |
+   458→   458→| Tests offline difficiles à automatiser | Utilisation de Playwright avec simulation réseau |
+   459→   459→| Recette famille pilote retardée | Prévoir 2 familles de secours, recette interne préalable |
+   460→   460→| Couverture de code insuffisante | Seuil de 80 % bloquant en CI/CD |
+   461→   461→| Bugs de production non détectés | Monitoring Datadog + Sentry + smoke tests post-déploiement |
+   462→   462→
+   463→   463→---
+   464→   464→
+   465→   465→## 9. Conclusion
+   466→   466→
+   467→   467→Le plan de test et de recette de FamilleConnect couvre l'intégralité des 7 univers et des composants transverses, avec plus de 70 scénarios clés, des critères d'acceptation mesurables, et une stratégie d'automatisation alignée sur le CI/CD. La pyramide de tests (70 % unitaires, 20 % intégration, 10 % e2e) garantit une couverture exhaustive tout en maintenant des temps d'exécution compatibles avec un développement agile.
+   468→   468→
+   469→   469→L'accent est mis sur les scénarios critiques : annonce de décès en moins de 30 minutes, paiement Mobile Money avec rapprochement automatique, immutabilité des écritures comptables, chiffrement des bulletins de vote, archivage automatique des dossiers clôturés, anti-harcèlement dans la messagerie. Ces scénarios sont testés en profondeur, en mode connecté et hors-ligne, avec des données réalistes.
+   470→   470→
+   471→   471→La recette par les familles pilotes est l'étape ultime de validation. Elle permet de vérifier que l'application répond aux besoins réels des grandes familles camerounaises, dans leurs conditions d'utilisation quotidiennes. Le retour de ces familles pilotes est intégré dans le processus d'amélioration continue, et leur satisfaction (cible ≥ 4/5) est le critère d'acceptation final de chaque phase.
+   472→   472→
+   473→   473→Les prochaines étapes consistent à mettre en place l'infrastructure de test (CI/CD, environnements, jeu de données), à écrire les premiers tests unitaires pour les modules U1 et U4, et à préparer la recette avec les familles pilotes sélectionnées.
+   474→   474→

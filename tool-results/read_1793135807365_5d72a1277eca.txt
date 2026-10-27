@@ -1,0 +1,865 @@
+     1→"use client";
+     2→
+     3→import { useCallback, useEffect, useRef, useState } from "react";
+     4→import { toast } from "sonner";
+     5→import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
+     6→import { api, deviceName, ensureDeviceSuffix } from "@/lib/fc-client";
+     7→import { FcButton, FcCard, FcDivider, FcInput, FcSpinner, FcWatermark } from "./ui";
+     8→import { Fingerprint, KeyRound, LifeBuoy, Lock, ShieldCheck, ArrowLeft, MailCheck, Copy, Check, RefreshCw } from "lucide-react";
+     9→
+    10→const UNIVERSES: { icon: string; label: string; wide?: boolean }[] = [
+    11→  { icon: "👨‍👩‍👧‍👦", label: "U1 · La Famille" },
+    12→  { icon: "📅", label: "U2 · Vie familiale" },
+    13→  { icon: "🤝", label: "U3 · Solidarité" },
+    14→  { icon: "💰", label: "U4 · Finances" },
+    15→  { icon: "🗳️", label: "U5 · Gouvernance" },
+    16→  { icon: "📜", label: "U6 · La Mémoire" },
+    17→  { icon: "🌐", label: "U7 · Réseau & Diaspora", wide: true },
+    18→];
+    19→
+    20→type MemberInfo = { fullName: string; branch: string; role: string; phone: string | null; reenroll: boolean };
+    21→
+    22→type Step =
+    23→  | { k: "welcome" }
+    24→  | { k: "code-entry" }
+    25→  | { k: "claim-confirm"; claimToken: string; member: MemberInfo }
+    26→  | { k: "otp"; claimToken: string; member: MemberInfo; demoCode?: string }
+    27→  | { k: "recovery-entry" }
+    28→  | { k: "pin-login"; uid: string; name: string; hasPasskey: boolean }
+    29→  | { k: "setup"; recoveryCode: string; userName: string; reenroll: boolean };
+    30→
+    31→export function AuthFlow({ onReady }: { onReady: (name: string) => void }) {
+    32→  const [step, setStep] = useState<Step>({ k: "welcome" });
+    33→  const [busy, setBusy] = useState(false);
+    34→  const [remembered, setRemembered] = useState<{ uid: string; name: string; hasPasskey: boolean } | null>(null);
+    35→
+    36→  useEffect(() => {
+    37→    const t = setTimeout(() => {
+    38→      const uid = localStorage.getItem("fc_uid");
+    39→      const name = localStorage.getItem("fc_name");
+    40→      if (uid && name) {
+    41→        setRemembered({ uid, name, hasPasskey: localStorage.getItem("fc_has_passkey") === "1" });
+    42→      }
+    43→      ensureDeviceSuffix();
+    44→    }, 0);
+    45→    return () => clearTimeout(t);
+    46→  }, []);
+    47→
+    48→  return (
+    49→    <div className="relative flex w-full flex-1 flex-col lg:flex-row">
+    50→      {/* ══════════ Panneau gauche — branding (desktop) ══════════ */}
+    51→      <aside className="relative hidden w-[46%] shrink-0 flex-col justify-between overflow-hidden bg-[#2A4A3A] p-10 text-white lg:flex xl:p-12">
+    52→        {/* Motif décoratif — arbre généalogique */}
+    53→        <svg
+    54→          className="pointer-events-none absolute -bottom-24 -right-24 opacity-10"
+    55→          width="520"
+    56→          height="520"
+    57→          viewBox="0 0 200 200"
+    58→          fill="currentColor"
+    59→          aria-hidden="true"
+    60→        >
+    61→          <circle cx="100" cy="35" r="16" />
+    62→          <circle cx="50" cy="100" r="16" />
+    63→          <circle cx="150" cy="100" r="16" />
+    64→          <circle cx="100" cy="165" r="16" />
+    65→          <line x1="100" y1="51" x2="100" y2="84" stroke="currentColor" strokeWidth="6" />
+    66→          <line x1="100" y1="84" x2="55" y2="96" stroke="currentColor" strokeWidth="6" />
+    67→          <line x1="100" y1="84" x2="145" y2="96" stroke="currentColor" strokeWidth="6" />
+    68→          <line x1="100" y1="116" x2="100" y2="149" stroke="currentColor" strokeWidth="6" />
+    69→        </svg>
+    70→
+    71→        <div className="relative z-10">
+    72→          {/* LE logo — en vedette */}
+    73→          <div className="mb-12 flex items-center gap-4">
+    74→            <img
+    75→              src="/logo-famille.png"
+    76→              alt="Armoiries de la famille Mbeutetsa"
+    77→              className="h-16 w-16 rounded-2xl bg-[#FBF7EA] p-1.5 shadow-lg ring-1 ring-[#C89F62]/70"
+    78→            />
+    79→            <div>
+    80→              <p className="fc-serif text-2xl font-bold tracking-tight">Famille.Mbeutetsa</p>
+    81→              <p className="text-sm text-white/60">Espace numérique de la famille</p>
+    82→            </div>
+    83→          </div>
+    84→
+    85→          <h1 className="fc-serif mb-4 max-w-md text-4xl font-bold leading-tight">
+    86→            « Une famille unie est une force inébranlable. »
+    87→          </h1>
+    88→          <p className="mb-10 max-w-md text-lg text-white/70">
+    89→            Retrouvez vos proches, la caisse familiale, les votes et la mémoire des Mbeutetsa — réunis dans une
+    90→            seule application.
+    91→          </p>
+    92→
+    93→          <div className="grid max-w-md grid-cols-2 gap-3">
+    94→            {UNIVERSES.map((u) => (
+    95→              <div
+    96→                key={u.label}
+    97→                className={`flex items-center gap-3 rounded-lg bg-white/10 px-4 py-2.5 ${
+    98→                  u.wide ? "col-span-2 justify-center" : ""
+    99→                }`}
+   100→              >
+   101→                <span className="text-xl" aria-hidden="true">{u.icon}</span>
+   102→                <span className="text-sm">{u.label}</span>
+   103→              </div>
+   104→            ))}
+   105→          </div>
+   106→        </div>
+   107→
+   108→        <p className="relative z-10 text-sm text-white/40">© Famille.Mbeutetsa · 2026 · Cameroun</p>
+   109→      </aside>
+   110→
+   111→      {/* ══════════ Panneau droit — parcours de connexion ══════════ */}
+   112→      <div className="relative flex min-h-full flex-1 flex-col items-center px-4 py-8 sm:py-12">
+   113→        <FcWatermark />
+   114→
+   115→        {/* En-tête mobile — le logo en vedette quand le panneau latéral est masqué */}
+   116→        <div className="relative z-10 mb-2 flex w-full max-w-md items-center justify-center gap-3 lg:hidden">
+   117→          <img
+   118→            src="/logo-famille.png"
+   119→            alt="Armoiries de la famille Mbeutetsa"
+   120→            className="h-16 w-auto drop-shadow-sm"
+   121→          />
+   122→          <div>
+   123→            <p className="fc-serif text-xl font-bold leading-tight text-[#1E4D2B]">Famille.Mbeutetsa</p>
+   124→            <p className="text-[11px] text-[#8A9288]">Espace numérique de la famille</p>
+   125→          </div>
+   126→        </div>
+   127→
+   128→        <div className="relative z-10 w-full max-w-md space-y-4">
+   129→        {step.k === "welcome" && (
+   130→          <WelcomeScreen
+   131→            remembered={remembered}
+   132→            busy={busy}
+   133→            setBusy={setBusy}
+   134→            onReady={onReady}
+   135→            goto={setStep}
+   136→          />
+   137→        )}
+   138→        {step.k === "code-entry" && (
+   139→          <CodeEntryScreen busy={busy} setBusy={setBusy} goto={setStep} />
+   140→        )}
+   141→        {step.k === "claim-confirm" && (
+   142→          <ClaimConfirmScreen
+   143→            state={step}
+   144→            busy={busy}
+   145→            setBusy={setBusy}
+   146→            goto={setStep}
+   147→          />
+   148→        )}
+   149→        {step.k === "otp" && (
+   150→          <OtpScreen state={step} busy={busy} setBusy={setBusy} goto={setStep} onReady={onReady} />
+   151→        )}
+   152→        {step.k === "recovery-entry" && (
+   153→          <RecoveryEntryScreen busy={busy} setBusy={setBusy} goto={setStep} onReady={onReady} />
+   154→        )}
+   155→        {step.k === "pin-login" && (
+   156→          <PinLoginScreen state={step} busy={busy} setBusy={setBusy} goto={setStep} onReady={onReady} />
+   157→        )}
+   158→        {step.k === "setup" && (
+   159→          <SetupScreen state={step} busy={busy} setBusy={setBusy} onReady={onReady} />
+   160→        )}
+   161→        </div>
+   162→      </div>
+   163→    </div>
+   164→  );
+   165→}
+   166→
+   167→/* ───────────────────────── Écran d'accueil ───────────────────────── */
+   168→
+   169→function WelcomeScreen({
+   170→  remembered,
+   171→  busy,
+   172→  setBusy,
+   173→  onReady,
+   174→  goto,
+   175→}: {
+   176→  remembered: { uid: string; name: string; hasPasskey: boolean } | null;
+   177→  busy: boolean;
+   178→  setBusy: (b: boolean) => void;
+   179→  onReady: (name: string) => void;
+   180→  goto: (s: Step) => void;
+   181→}) {
+   182→  const handleRealPasskey = useCallback(async () => {
+   183→    if (!remembered) return;
+   184→    setBusy(true);
+   185→    try {
+   186→      const { options } = await api<{ options: unknown }>("/api/auth/passkey", {
+   187→        body: { action: "auth-options" },
+   188→      });
+   189→      const response = await startAuthentication({ optionsJSON: options as never });
+   190→      const result = await api<{ user: { fullName: string } }>("/api/auth/passkey", {
+   191→        body: { action: "auth-verify", response },
+   192→      });
+   193→      if (!result.ok) throw new Error(result.error);
+   194→      localStorage.setItem("fc_uid", remembered.uid);
+   195→      localStorage.setItem("fc_name", result.user.fullName);
+   196→      toast.success(`Content de vous revoir, ${result.user.fullName.split(" ")[0]} !`);
+   197→      onReady(result.user.fullName);
+   198→    } catch (e) {
+   199→      toast.error(e instanceof Error ? e.message : "Connexion biométrique impossible sur cet appareil.");
+   200→    } finally {
+   201→      setBusy(false);
+   202→    }
+   203→  }, [remembered, onReady, setBusy]);
+   204→
+   205→  const handleSimulatedPasskey = useCallback(async () => {
+   206→    if (!remembered) return;
+   207→    setBusy(true);
+   208→    try {
+   209→      const result = await api<{ user: { fullName: string } }>("/api/auth/passkey", {
+   210→        body: { action: "simulate", uid: remembered.uid },
+   211→      });
+   212→      if (!result.ok) throw new Error(result.error);
+   213→      localStorage.setItem("fc_uid", remembered.uid);
+   214→      localStorage.setItem("fc_name", result.user.fullName);
+   215→      toast.success(`Content de vous revoir, ${result.user.fullName.split(" ")[0]} ! (biométrie simulée)`);
+   216→      onReady(result.user.fullName);
+   217→    } catch (e) {
+   218→      toast.error(e instanceof Error ? e.message : "Échec de la connexion simulée.");
+   219→    } finally {
+   220→      setBusy(false);
+   221→    }
+   222→  }, [remembered, onReady, setBusy]);
+   223→
+   224→  return (
+   225→    <>
+   226→      <FcCard className="p-6 sm:p-8">
+   227→      <h2 className="fc-serif mb-1 text-center text-3xl font-bold text-[#1E4D2B]">Bon retour 👋</h2>
+   228→      <p className="mb-6 text-center text-[15px] text-[#5C6B60]">
+   229→        Connectez-vous pour accéder à votre espace familial.
+   230→      </p>
+   231→
+   232→      {remembered && (
+   233→        <div className="mb-5 rounded-2xl border border-[#C89F62]/40 bg-[#C89F62]/10 p-4 text-center">
+   234→          <p className="text-sm text-[#7A5B2E]">
+   235→            Bon retour parmi nous, <span className="font-bold">{remembered.name}</span>
+   236→          </p>
+   237→        </div>
+   238→      )}
+   239→
+   240→      {remembered && remembered.hasPasskey && (
+   241→        <div className="mb-3 space-y-2">
+   242→          <FcButton onClick={handleRealPasskey} disabled={busy}>
+   243→            {busy ? <FcSpinner /> : <Fingerprint className="h-5 w-5" />}
+   244→            Se connecter avec mon empreinte
+   245→          </FcButton>
+   246→          <FcButton variant="ghost" className="text-sm" onClick={handleSimulatedPasskey} disabled={busy}>
+   247→            <ShieldCheck className="h-4 w-4" /> Biométrie simulée (démo)
+   248→          </FcButton>
+   249→          <FcDivider label="ou" />
+   250→        </div>
+   251→      )}
+   252→
+   253→      {remembered && (
+   254→        <div className="mb-3 space-y-2">
+   255→          <FcButton
+   256→            variant="outline"
+   257→            onClick={() => goto({ k: "pin-login", uid: remembered.uid, name: remembered.name, hasPasskey: remembered.hasPasskey })}
+   258→          >
+   259→            <Lock className="h-5 w-5" /> Mon code PIN
+   260→          </FcButton>
+   261→          <FcDivider label="nouvel appareil" />
+   262→        </div>
+   263→      )}
+   264→
+   265→      <div className="space-y-2">
+   266→        <FcButton onClick={() => goto({ k: "code-entry" })} disabled={busy}>
+   267→          <KeyRound className="h-5 w-5" /> J&apos;ai un code d&apos;accès
+   268→        </FcButton>
+   269→        <FcButton variant="ghost" className="text-sm" onClick={() => goto({ k: "recovery-entry" })} disabled={busy}>
+   270→          <LifeBuoy className="h-4 w-4" /> Récupérer mon accès (code personnel)
+   271→        </FcButton>
+   272→      </div>
+   273→
+   274→      <p className="mt-5 rounded-xl bg-[#3D6B52]/5 p-3 text-center text-[13px] leading-relaxed text-[#5C6B60]">
+   275→        Pas encore de code ? Le <strong>secrétaire de famille</strong> pré-enregistre chaque membre et remet
+   276→        un code d&apos;accès. Rendez-vous à la prochaine réunion, ou contactez-le.
+   277→      </p>
+   278→      </FcCard>
+   279→
+   280→      {/* Encart sécurité — fidèle à la maquette validée */}
+   281→      <div className="flex gap-3 rounded-2xl border border-[#C89F62]/30 bg-[#C89F62]/10 p-4 text-[13px] leading-relaxed text-[#5C6B60]">
+   282→        <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#B98F50]" />
+   283→        <p>
+   284→          Vos données familiales sont chiffrées et hébergées en toute sécurité. L&apos;accès est réservé aux
+   285→          membres invités par le <strong className="text-[#1E4D2B]">Conseil des Anciens</strong>.
+   286→        </p>
+   287→      </div>
+   288→    </>
+   289→  );
+   290→}
+   291→
+   292→/* ───────────────────────── Saisie du code d'accès ───────────────────────── */
+   293→
+   294→function CodeEntryScreen({
+   295→  busy,
+   296→  setBusy,
+   297→  goto,
+   298→}: {
+   299→  busy: boolean;
+   300→  setBusy: (b: boolean) => void;
+   301→  goto: (s: Step) => void;
+   302→}) {
+   303→  const [code, setCode] = useState("");
+   304→  const handle = async () => {
+   305→    if (code.trim().length < 4) {
+   306→      toast.error("Entrez le code d'accès remis par le secrétaire (ex : FC-XXXX-XXXX).");
+   307→      return;
+   308→    }
+   309→    setBusy(true);
+   310→    try {
+   311→      const res = await api<{ claimToken: string; member: MemberInfo }>("/api/auth/verify-code", {
+   312→        body: { code, deviceName: deviceName() },
+   313→      });
+   314→      if (!res.ok) throw new Error(res.error);
+   315→      toast.success("Code validé ✓");
+   316→      goto({ k: "claim-confirm", claimToken: res.claimToken, member: res.member });
+   317→    } catch (e) {
+   318→      toast.error(e instanceof Error ? e.message : "Code invalide.");
+   319→    } finally {
+   320→      setBusy(false);
+   321→    }
+   322→  };
+   323→  return (
+   324→    <FcCard className="p-6 sm:p-8">
+   325→      <BackButton onClick={() => goto({ k: "welcome" })} />
+   326→      <h2 className="fc-serif mb-1 text-center text-2xl font-bold text-[#1E4D2B]">Code d&apos;accès</h2>
+   327→      <p className="mb-6 text-center text-[14px] text-[#5C6B60]">
+   328→        Saisissez le code remis par le secrétaire de famille.
+   329→      </p>
+   330→      <FcInput
+   331→        icon={<KeyRound className="h-5 w-5" />}
+   332→        placeholder="FC-XXXX-XXXX"
+   333→        value={code}
+   334→        onChange={(e) => setCode(e.target.value.toUpperCase())}
+   335→        onKeyDown={(e) => e.key === "Enter" && handle()}
+   336→        autoCapitalize="characters"
+   337→        autoComplete="one-time-code"
+   338→        className="mb-4"
+   339→        aria-label="Code d'accès"
+   340→      />
+   341→      <FcButton onClick={handle} disabled={busy}>
+   342→        {busy ? <FcSpinner /> : "Vérifier mon code"}
+   343→      </FcButton>
+   344→    </FcCard>
+   345→  );
+   346→}
+   347→
+   348→/* ───────────────────────── Confirmation du profil pré-enregistré ───────────────────────── */
+   349→
+   350→function ClaimConfirmScreen({
+   351→  state,
+   352→  busy,
+   353→  setBusy,
+   354→  goto,
+   355→}: {
+   356→  state: Extract<Step, { k: "claim-confirm" }>;
+   357→  busy: boolean;
+   358→  setBusy: (b: boolean) => void;
+   359→  goto: (s: Step) => void;
+   360→}) {
+   361→  const m = state.member;
+   362→  const confirm = async () => {
+   363→    setBusy(true);
+   364→    try {
+   365→      goto({ k: "otp", claimToken: state.claimToken, member: m });
+   366→    } finally {
+   367→      setBusy(false);
+   368→    }
+   369→  };
+   370→  return (
+   371→    <FcCard className="p-6 sm:p-8">
+   372→      <BackButton onClick={() => goto({ k: "code-entry" })} />
+   373→      <h2 className="fc-serif mb-1 text-center text-2xl font-bold text-[#1E4D2B]">
+   374→        {m.reenroll ? "Réactiver mon accès" : "C'est vous ?"}
+   375→      </h2>
+   376→      <p className="mb-5 text-center text-[14px] text-[#5C6B60]">
+   377→        {m.reenroll
+   378→          ? "Nouvel appareil détecté. Vos anciens appareils seront déconnectés."
+   379→          : "Le secrétaire a pré-enregistré ce profil. Confirmez votre identité."}
+   380→      </p>
+   381→      <div className="mb-6 space-y-2 rounded-2xl border border-[#E5DCC0] bg-[#FFFDF6] p-4">
+   382→        <Row label="Nom" value={m.fullName} strong />
+   383→        <Row label="Branche" value={m.branch} />
+   384→        <Row label="Rôle" value={roleLabel(m.role)} />
+   385→        {m.phone && <Row label="Téléphone" value={m.phone} />}
+   386→      </div>
+   387→      <FcButton onClick={confirm} disabled={busy}>
+   388→        {busy ? <FcSpinner /> : <MailCheck className="h-5 w-5" />}
+   389→        Oui, c&apos;est moi — continuer
+   390→      </FcButton>
+   391→      <button
+   392→        className="mt-3 w-full text-center text-sm text-[#B91C1C] hover:underline"
+   393→        onClick={() => {
+   394→          toast.info("Ce n'est pas vous ? Ne poursuivez pas et signalez-le au secrétaire de famille.");
+   395→          goto({ k: "welcome" });
+   396→        }}
+   397→      >
+   398→        Ce n&apos;est pas moi
+   399→      </button>
+   400→    </FcCard>
+   401→  );
+   402→}
+   403→
+   404→/* ───────────────────────── Vérification OTP (mode démo) ───────────────────────── */
+   405→
+   406→function OtpScreen({
+   407→  state,
+   408→  busy,
+   409→  setBusy,
+   410→  goto,
+   411→  onReady,
+   412→}: {
+   413→  state: Extract<Step, { k: "otp" }>;
+   414→  busy: boolean;
+   415→  setBusy: (b: boolean) => void;
+   416→  goto: (s: Step) => void;
+   417→  onReady: (name: string) => void;
+   418→}) {
+   419→  const [code, setCode] = useState("");
+   420→  const [demoCode, setDemoCode] = useState<string | undefined>(state.demoCode);
+   421→  const requested = useRef(false);
+   422→
+   423→  const requestCode = useCallback(async () => {
+   424→    setBusy(true);
+   425→    try {
+   426→      const res = await api<{ demoMode: boolean; demoCode?: string }>("/api/auth/otp", {
+   427→        body: { action: "request", claimToken: state.claimToken },
+   428→      });
+   429→      if (!res.ok) throw new Error(res.error);
+   430→      if (res.demoCode) {
+   431→        setDemoCode(res.demoCode);
+   432→        toast.info(`Mode démo — votre code de vérification : ${res.demoCode}`);
+   433→      } else {
+   434→        toast.success("Code de vérification envoyé par SMS.");
+   435→      }
+   436→    } catch (e) {
+   437→      toast.error(e instanceof Error ? e.message : "Envoi du code impossible.");
+   438→    } finally {
+   439→      setBusy(false);
+   440→    }
+   441→  }, [state.claimToken, setBusy]);
+   442→
+   443→  useEffect(() => {
+   444→    if (!requested.current) {
+   445→      requested.current = true;
+   446→      requestCode();
+   447→    }
+   448→  }, [requestCode]);
+   449→
+   450→  const verify = async () => {
+   451→    setBusy(true);
+   452→    try {
+   453→      const res = await api<{ activateToken: string }>("/api/auth/otp", {
+   454→        body: { action: "verify", claimToken: state.claimToken, code },
+   455→      });
+   456→      if (!res.ok) throw new Error(res.error);
+   457→      const activation = await api<{ recoveryCode: string; user: { fullName: string }; reenroll: boolean }>(
+   458→        "/api/auth/activate",
+   459→        { body: { activateToken: res.activateToken } }
+   460→      );
+   461→      if (!activation.ok) throw new Error(activation.error);
+   462→      localStorage.setItem("fc_uid", activation.user.id);
+   463→      localStorage.setItem("fc_name", activation.user.fullName);
+   464→      localStorage.removeItem("fc_has_passkey");
+   465→      toast.success(activation.reenroll ? "Accès réactivé ✓" : "Compte activé ✓ Bienvenue !");
+   466→      goto({ k: "setup", recoveryCode: activation.recoveryCode, userName: activation.user.fullName, reenroll: activation.reenroll });
+   467→    } catch (e) {
+   468→      toast.error(e instanceof Error ? e.message : "Code incorrect.");
+   469→    } finally {
+   470→      setBusy(false);
+   471→    }
+   472→  };
+   473→
+   474→  return (
+   475→    <FcCard className="p-6 sm:p-8">
+   476→      <BackButton onClick={() => goto({ k: "code-entry" })} />
+   477→      <h2 className="fc-serif mb-1 text-center text-2xl font-bold text-[#1E4D2B]">Vérification</h2>
+   478→      <p className="mb-5 text-center text-[14px] text-[#5C6B60]">
+   479→        Entrez le code à 6 chiffres envoyé pour {state.member.fullName}.
+   480→      </p>
+   481→
+   482→      {demoCode && (
+   483→        <div className="mb-4 rounded-2xl border border-dashed border-[#C89F62] bg-[#C89F62]/10 p-4 text-center">
+   484→          <p className="text-xs font-semibold uppercase tracking-wide text-[#7A5B2E]">Mode démo — votre code</p>
+   485→          <p className="fc-serif text-3xl font-bold tracking-[0.35em] text-[#1E4D2B]">{demoCode}</p>
+   486→        </div>
+   487→      )}
+   488→
+   489→      <FcInput
+   490→        icon={<MailCheck className="h-5 w-5" />}
+   491→        placeholder="● ● ● ● ● ●"
+   492→        value={code}
+   493→        onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+   494→        onKeyDown={(e) => e.key === "Enter" && code.length === 6 && verify()}
+   495→        inputMode="numeric"
+   496→        autoComplete="one-time-code"
+   497→        maxLength={6}
+   498→        className="mb-4 text-center tracking-[0.4em]"
+   499→        aria-label="Code de vérification à 6 chiffres"
+   500→      />
+   501→      <FcButton onClick={verify} disabled={busy || code.length !== 6}>
+   502→        {busy ? <FcSpinner /> : "Vérifier"}
+   503→      </FcButton>
+   504→      <button
+   505→        className="mt-3 flex w-full items-center justify-center gap-1.5 text-sm text-[#C89F62] hover:underline"
+   506→        onClick={() => {
+   507→          setCode("");
+   508→          requestCode();
+   509→        }}
+   510→        disabled={busy}
+   511→      >
+   512→        <RefreshCw className="h-3.5 w-3.5" /> Renvoyer un nouveau code
+   513→      </button>
+   514→    </FcCard>
+   515→  );
+   516→}
+   517→
+   518→/* ───────────────────────── Code de récupération ───────────────────────── */
+   519→
+   520→function RecoveryEntryScreen({
+   521→  busy,
+   522→  setBusy,
+   523→  goto,
+   524→  onReady,
+   525→}: {
+   526→  busy: boolean;
+   527→  setBusy: (b: boolean) => void;
+   528→  goto: (s: Step) => void;
+   529→  onReady: (name: string) => void;
+   530→}) {
+   531→  const [code, setCode] = useState("");
+   532→  const handle = async () => {
+   533→    setBusy(true);
+   534→    try {
+   535→      const res = await api<{
+   536→        user: { id: string; fullName: string };
+   537→        newRecoveryCode: string;
+   538→      }>("/api/auth/recovery", { body: { code, deviceName: deviceName() } });
+   539→      if (!res.ok) throw new Error(res.error);
+   540→      localStorage.setItem("fc_uid", res.user.id);
+   541→      localStorage.setItem("fc_name", res.user.fullName);
+   542→      localStorage.removeItem("fc_has_passkey");
+   543→      toast.success("Accès récupéré ✓ Anciens appareils déconnectés.");
+   544→      goto({ k: "setup", recoveryCode: res.newRecoveryCode, userName: res.user.fullName, reenroll: true });
+   545→    } catch (e) {
+   546→      toast.error(e instanceof Error ? e.message : "Code invalide.");
+   547→    } finally {
+   548→      setBusy(false);
+   549→    }
+   550→  };
+   551→  return (
+   552→    <FcCard className="p-6 sm:p-8">
+   553→      <BackButton onClick={() => goto({ k: "welcome" })} />
+   554→      <h2 className="fc-serif mb-1 text-center text-2xl font-bold text-[#1E4D2B]">Récupérer mon accès</h2>
+   555→      <p className="mb-6 text-center text-[14px] text-[#5C6B60]">
+   556→        Saisissez votre <strong>code de récupération personnel</strong> (format MBTE-XXXX-XXXX). Il a été affiché
+   557→        une seule fois à votre première inscription.
+   558→      </p>
+   559→      <FcInput
+   560→        icon={<LifeBuoy className="h-5 w-5" />}
+   561→        placeholder="MBTE-XXXX-XXXX"
+   562→        value={code}
+   563→        onChange={(e) => setCode(e.target.value.toUpperCase())}
+   564→        onKeyDown={(e) => e.key === "Enter" && handle()}
+   565→        autoCapitalize="characters"
+   566→        className="mb-4"
+   567→        aria-label="Code de récupération"
+   568→      />
+   569→      <FcButton onClick={handle} disabled={busy}>
+   570→        {busy ? <FcSpinner /> : "Récupérer mon accès"}
+   571→      </FcButton>
+   572→      <p className="mt-4 text-center text-[13px] text-[#8A9288]">
+   573→        Code perdu ? Le secrétaire de famille peut régénérer un code d&apos;accès pour vous.
+   574→      </p>
+   575→    </FcCard>
+   576→  );
+   577→}
+   578→
+   579→/* ───────────────────────── Connexion par PIN ───────────────────────── */
+   580→
+   581→function PinLoginScreen({
+   582→  state,
+   583→  busy,
+   584→  setBusy,
+   585→  goto,
+   586→  onReady,
+   587→}: {
+   588→  state: Extract<Step, { k: "pin-login" }>;
+   589→  busy: boolean;
+   590→  setBusy: (b: boolean) => void;
+   591→  goto: (s: Step) => void;
+   592→  onReady: (name: string) => void;
+   593→}) {
+   594→  const [pin, setPin] = useState("");
+   595→  const handle = async () => {
+   596→    setBusy(true);
+   597→    try {
+   598→      const res = await api<{ user: { id: string; fullName: string } }>("/api/auth/pin", {
+   599→        body: { action: "verify", uid: state.uid, pin, deviceName: deviceName() },
+   600→      });
+   601→      if (!res.ok) throw new Error(res.error);
+   602→      localStorage.setItem("fc_uid", res.user.id);
+   603→      localStorage.setItem("fc_name", res.user.fullName);
+   604→      toast.success(`Content de vous revoir, ${res.user.fullName.split(" ")[0]} !`);
+   605→      onReady(res.user.fullName);
+   606→    } catch (e) {
+   607→      toast.error(e instanceof Error ? e.message : "PIN incorrect.");
+   608→      setPin("");
+   609→    } finally {
+   610→      setBusy(false);
+   611→    }
+   612→  };
+   613→  return (
+   614→    <FcCard className="p-6 sm:p-8">
+   615→      <BackButton onClick={() => goto({ k: "welcome" })} />
+   616→      <h2 className="fc-serif mb-1 text-center text-2xl font-bold text-[#1E4D2B]">Code PIN</h2>
+   617→      <p className="mb-6 text-center text-[14px] text-[#5C6B60]">
+   618→        Votre PIN de secours, {state.name.split(" ")[0]}.
+   619→      </p>
+   620→      <FcInput
+   621→        icon={<Lock className="h-5 w-5" />}
+   622→        placeholder="● ● ● ●"
+   623→        value={pin}
+   624→        onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+   625→        onKeyDown={(e) => e.key === "Enter" && pin.length >= 4 && handle()}
+   626→        inputMode="numeric"
+   627→        type="password"
+   628→        maxLength={6}
+   629→        className="mb-4 text-center tracking-[0.4em]"
+   630→        aria-label="Code PIN"
+   631→      />
+   632→      <FcButton onClick={handle} disabled={busy || pin.length < 4}>
+   633→        {busy ? <FcSpinner /> : "Se connecter"}
+   634→      </FcButton>
+   635→      <p className="mt-4 text-center text-[13px] text-[#8A9288]">
+   636→        5 tentatives maximum, puis verrouillage de 30 minutes.
+   637→      </p>
+   638→    </FcCard>
+   639→  );
+   640→}
+   641→
+   642→/* ───────────────────────── Écran de premières étapes (post-activation) ───────────────────────── */
+   643→
+   644→function SetupScreen({
+   645→  state,
+   646→  busy,
+   647→  setBusy,
+   648→  onReady,
+   649→}: {
+   650→  state: Extract<Step, { k: "setup" }>;
+   651→  busy: boolean;
+   652→  setBusy: (b: boolean) => void;
+   653→  onReady: (name: string) => void;
+   654→}) {
+   655→  const [ack, setAck] = useState(false);
+   656→  const [copied, setCopied] = useState(false);
+   657→  const [pin, setPin] = useState("");
+   658→  const [pinDone, setPinDone] = useState(false);
+   659→  const [bioDone, setBioDone] = useState(false);
+   660→  const [bioSimulated, setBioSimulated] = useState(false);
+   661→
+   662→  const copyRecovery = async () => {
+   663→    await navigator.clipboard.writeText(state.recoveryCode).catch(() => {});
+   664→    setCopied(true);
+   665→    toast.success("Code de récupération copié — collez-le dans un endroit sûr.");
+   666→  };
+   667→
+   668→  const savePin = async () => {
+   669→    setBusy(true);
+   670→    try {
+   671→      const res = await api("/api/auth/pin", { body: { action: "setup", pin } });
+   672→      if (!res.ok) throw new Error(res.error);
+   673→      setPinDone(true);
+   674→      toast.success("Code PIN enregistré ✓");
+   675→    } catch (e) {
+   676→      toast.error(e instanceof Error ? e.message : "Échec de l'enregistrement du PIN.");
+   677→    } finally {
+   678→      setBusy(false);
+   679→    }
+   680→  };
+   681→
+   682→  const enrollBiometry = async () => {
+   683→    setBusy(true);
+   684→    try {
+   685→      const { options } = await api<{ options: unknown }>("/api/auth/passkey", {
+   686→        body: { action: "register-options" },
+   687→      });
+   688→      const response = await startRegistration({ optionsJSON: options as never });
+   689→      const result = await api("/api/auth/passkey", {
+   690→        body: { action: "register-verify", response, deviceLabel: deviceName() },
+   691→      });
+   692→      if (!result.ok) throw new Error(result.error);
+   693→      setBioDone(true);
+   694→      localStorage.setItem("fc_has_passkey", "1");
+   695→      toast.success("Biométrie activée ✓ Vous vous connecterez d'un simple geste.");
+   696→    } catch (e) {
+   697→      toast.error(
+   698→        e instanceof Error
+   699→          ? `Biométrie indisponible ici (${e.message.slice(0, 60)}). Utilisez le mode démo ci-dessous.`
+   700→          : "Biométrie indisponible."
+   701→      );
+   702→    } finally {
+   703→      setBusy(false);
+   704→    }
+   705→  };
+   706→
+   707→  const simulateBiometry = async () => {
+   708→    setBusy(true);
+   709→    try {
+   710→      const result = await api("/api/auth/passkey", { body: { action: "simulate-register" } });
+   711→      if (!result.ok) throw new Error(result.error);
+   712→      setBioDone(true);
+   713→      setBioSimulated(true);
+   714→      localStorage.setItem("fc_has_passkey", "0");
+   715→      toast.success("Appareil biométrique simulé enregistré (mode démo) ✓");
+   716→    } catch (e) {
+   717→      toast.error(e instanceof Error ? e.message : "Simulation impossible.");
+   718→    } finally {
+   719→      setBusy(false);
+   720→    }
+   721→  };
+   722→
+   723→  const enter = () => {
+   724→    if (!ack) {
+   725→      toast.error("Confirmez d'abord avoir noté votre code de récupération.");
+   726→      return;
+   727→    }
+   728→    onReady(state.userName);
+   729→  };
+   730→
+   731→  return (
+   732→    <div className="space-y-4">
+   733→      {/* 1. Code de récupération */}
+   734→      <FcCard className="p-6">
+   735→        <div className="mb-2 flex items-center gap-2">
+   736→          <LifeBuoy className="h-5 w-5 text-[#D97706]" />
+   737→          <h2 className="fc-serif text-xl font-bold text-[#1E4D2B]">Votre code de récupération</h2>
+   738→        </div>
+   739→        <p className="mb-3 text-[13px] leading-relaxed text-[#5C6B60]">
+   740→          {state.reenroll
+   741→            ? "Un NOUVEAU code vous a été attribué (l'ancien est invalidé)."
+   742→            : "C'est la seule fois où il sera affiché."}{" "}
+   743→          Notez-le sur papier ou envoyez-le-vous par WhatsApp. Il permet de récupérer votre accès si vous perdez
+   744→          votre téléphone.
+   745→        </p>
+   746→        <div className="mb-3 flex items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-[#D97706] bg-[#D97706]/5 p-4">
+   747→          <span className="fc-serif text-2xl font-bold tracking-wider text-[#7A5B2E]">{state.recoveryCode}</span>
+   748→          <button
+   749→            onClick={copyRecovery}
+   750→            className="rounded-lg p-2 text-[#C89F62] hover:bg-[#C89F62]/10"
+   751→            aria-label="Copier le code de récupération"
+   752→          >
+   753→            {copied ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
+   754→          </button>
+   755→        </div>
+   756→        <label className="flex cursor-pointer items-start gap-2 text-[14px] text-[#2B3530]">
+   757→          <input
+   758→            type="checkbox"
+   759→            checked={ack}
+   760→            onChange={(e) => setAck(e.target.checked)}
+   761→            className="mt-0.5 h-4 w-4 accent-[#1F5B3F]"
+   762→          />
+   763→          <span>J&apos;ai noté mon code de récupération en lieu sûr.</span>
+   764→        </label>
+   765→      </FcCard>
+   766→
+   767→      {/* 2. PIN de secours */}
+   768→      <FcCard className="p-6">
+   769→        <div className="mb-2 flex items-center gap-2">
+   770→          <Lock className="h-5 w-5 text-[#2A4A3A]" />
+   771→          <h2 className="fc-serif text-xl font-bold text-[#1E4D2B]">Code PIN de secours</h2>
+   772→        </div>
+   773→        {pinDone ? (
+   774→          <p className="text-sm font-medium text-[#16A34A]">✓ PIN défini — il déverrouille cet appareil.</p>
+   775→        ) : (
+   776→          <>
+   777→            <p className="mb-3 text-[13px] text-[#5C6B60]">
+   778→              4 à 6 chiffres, mémorisable. Sert quand la biométrie est indisponible. (Recommandé, mais optionnel.)
+   779→            </p>
+   780→            <div className="flex gap-2">
+   781→              <FcInput
+   782→                placeholder="● ● ● ●"
+   783→                value={pin}
+   784→                onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+   785→                inputMode="numeric"
+   786→                type="password"
+   787→                maxLength={6}
+   788→                className="flex-1"
+   789→                aria-label="Nouveau code PIN"
+   790→              />
+   791→              <FcButton onClick={savePin} disabled={busy || pin.length < 4} className="w-auto px-6">
+   792→                Définir
+   793→              </FcButton>
+   794→            </div>
+   795→          </>
+   796→        )}
+   797→      </FcCard>
+   798→
+   799→      {/* 3. Biométrie */}
+   800→      <FcCard className="p-6">
+   801→        <div className="mb-2 flex items-center gap-2">
+   802→          <Fingerprint className="h-5 w-5 text-[#2A4A3A]" />
+   803→          <h2 className="fc-serif text-xl font-bold text-[#1E4D2B]">Connexion par empreinte</h2>
+   804→        </div>
+   805→        {bioDone ? (
+   806→          <p className="text-sm font-medium text-[#16A34A]">
+   807→            ✓ {bioSimulated ? "Appareil simulé enregistré (démo)" : "Biométrie active sur cet appareil"}
+   808→          </p>
+   809→        ) : (
+   810→          <div className="space-y-2">
+   811→            <p className="mb-2 text-[13px] text-[#5C6B60]">
+   812→              Un geste = connecté, pour toujours. Zéro mot de passe à retenir.
+   813→            </p>
+   814→            <FcButton onClick={enrollBiometry} disabled={busy}>
+   815→              {busy ? <FcSpinner /> : <Fingerprint className="h-5 w-5" />} Activer mon empreinte
+   816→            </FcButton>
+   817→            <FcButton variant="outline" onClick={simulateBiometry} disabled={busy}>
+   818→              <ShieldCheck className="h-4 w-4" /> Simuler sur cet appareil (démo)
+   819→            </FcButton>
+   820→          </div>
+   821→        )}
+   822→      </FcCard>
+   823→
+   824→      <FcButton onClick={enter} className="h-[54px] text-[17px]">
+   825→        Entrer dans Famille.Mbeutetsa
+   826→      </FcButton>
+   827→    </div>
+   828→  );
+   829→}
+   830→
+   831→/* ───────────────────────── Utilitaires partagés ───────────────────────── */
+   832→
+   833→function BackButton({ onClick }: { onClick: () => void }) {
+   834→  return (
+   835→    <button
+   836→      onClick={onClick}
+   837→      className="mb-2 inline-flex items-center gap-1 text-sm text-[#5C6B60] hover:text-[#2A4A3A]"
+   838→      aria-label="Retour"
+   839→    >
+   840→      <ArrowLeft className="h-4 w-4" /> Retour
+   841→    </button>
+   842→  );
+   843→}
+   844→
+   845→function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+   846→  return (
+   847→    <div className="flex items-center justify-between gap-4 text-[14px]">
+   848→      <span className="text-[#8A9288]">{label}</span>
+   849→      <span className={strong ? "font-bold text-[#1E4D2B]" : "font-medium text-[#2B3530]"}>{value}</span>
+   850→    </div>
+   851→  );
+   852→}
+   853→
+   854→export function roleLabel(role: string): string {
+   855→  const map: Record<string, string> = {
+   856→    PATRIARCHE: "Patriarche",
+   857→    CONSEIL: "Conseil de famille",
+   858→    CHEF_BRANCHE: "Chef de branche",
+   859→    SECRETAIRE: "Secrétaire de famille",
+   860→    ADULTE: "Adulte (18+)",
+   861→    JUNIOR: "Junior (moins de 18 ans)",
+   862→  };
+   863→  return map[role] ?? role;
+   864→}
+   865→

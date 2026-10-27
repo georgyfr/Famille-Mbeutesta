@@ -1,0 +1,752 @@
+     1→<!DOCTYPE html>
+     2→<html lang="fr">
+     3→<head>
+     4→    <meta charset="UTF-8">
+     5→    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+     6→    <title>FamilleConnect — Maquette Interactive</title>
+     7→    <script src="https://cdn.tailwindcss.com"></script>
+     8→    <script>
+     9→        tailwind.config = {
+    10→            theme: {
+    11→                extend: {
+    12→                    colors: {
+    13→                        'fc-bg': '#F4F1E9',
+    14→                        'fc-primary': '#2A4A3A',
+    15→                        'fc-primary-light': '#3A5A4A',
+    16→                        'fc-accent': '#C89F62',
+    17→                        'fc-accent-light': '#D8B978',
+    18→                        'fc-surface': '#F0EDE5',
+    19→                        'fc-body': '#1A1A1A',
+    20→                        'fc-secondary': '#5A5A5A',
+    21→                        'fc-critical': '#B91C1C',
+    22→                        'fc-urgent': '#D97706',
+    23→                        'fc-success': '#16A34A',
+    24→                    },
+    25→                    fontFamily: {
+    26→                        'sans': ['Calibri', 'Arial', 'sans-serif'],
+    27→                        'mono': ['Consolas', 'monospace'],
+    28→                    }
+    29→                }
+    30→            }
+    31→        }
+    32→    </script>
+    33→    <style>
+    34→        body { background: #F4F1E9; color: #1A1A1A; }
+    35→        .nav-item.active { background: #2A4A3A; color: white; }
+    36→        .nav-item.active .nav-icon { color: #C89F62; }
+    37→        .screen { display: none; }
+    38→        .screen.active { display: block; }
+    39→        .progress-bar { transition: width 0.5s ease; }
+    40→        .card-hover { transition: all 0.2s; }
+    41→        .card-hover:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    42→        .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+    43→        ::-webkit-scrollbar { width: 6px; }
+    44→        ::-webkit-scrollbar-track { background: #F0EDE5; }
+    45→        ::-webkit-scrollbar-thumb { background: #C89F62; border-radius: 3px; }
+    46→        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 50; display: none; }
+    47→        .modal-overlay.active { display: flex; align-items: center; justify-content: center; }
+    48→    </style>
+    49→</head>
+    50→<body class="font-sans">
+    51→
+    52→<!-- ============ APP SHELL ============ -->
+    53→<div class="flex h-screen overflow-hidden">
+    54→
+    55→    <!-- ============ SIDEBAR ============ -->
+    56→    <aside class="w-64 bg-fc-primary text-white flex flex-col flex-shrink-0">
+    57→        <!-- Logo -->
+    58→        <div class="p-5 border-b border-fc-primary-light">
+    59→            <div class="flex items-center gap-3">
+    60→                <div class="w-10 h-10 bg-fc-accent rounded-lg flex items-center justify-center text-fc-primary font-bold text-xl">F</div>
+    61→                <div>
+    62→                    <div class="font-bold text-lg">FamilleConnect</div>
+    63→                    <div class="text-xs text-fc-accent">Famille NDONGO</div>
+    64→                </div>
+    65→            </div>
+    66→        </div>
+    67→
+    68→        <!-- Navigation -->
+    69→        <nav class="flex-1 overflow-y-auto py-4">
+    70→            <div class="px-3 mb-2 text-xs text-fc-accent uppercase tracking-wider font-semibold">Vue d'ensemble</div>
+    71→            <button onclick="showScreen('dashboard')" class="nav-item active w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-fc-primary-light transition" data-screen="dashboard">
+    72→                <span class="nav-icon text-lg">🏠</span>
+    73→                <span class="text-sm">Tableau de bord</span>
+    74→            </button>
+    75→
+    76→            <div class="px-3 mt-4 mb-2 text-xs text-fc-accent uppercase tracking-wider font-semibold">Les 7 Univers</div>
+    77→
+    78→            <button onclick="showScreen('u1-famille')" class="nav-item w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-fc-primary-light transition" data-screen="u1-famille">
+    79→                <span class="nav-icon text-lg">👨‍👩‍👧</span>
+    80→                <span class="text-sm">U1 — La Famille</span>
+    81→            </button>
+    82→
+    83→            <button onclick="showScreen('u2-vie')" class="nav-item w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-fc-primary-light transition" data-screen="u2-vie">
+    84→                <span class="nav-icon text-lg">📅</span>
+    85→                <span class="text-sm">U2 — Vie familiale</span>
+    86→            </button>
+    87→
+    88→            <button onclick="showScreen('u3-solidarite')" class="nav-item w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-fc-primary-light transition" data-screen="u3-solidarite">
+    89→                <span class="nav-icon text-lg">❤️</span>
+    90→                <span class="text-sm">U3 — Solidarité</span>
+    91→            </button>
+    92→
+    93→            <button onclick="showScreen('u4-finances')" class="nav-item w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-fc-primary-light transition" data-screen="u4-finances">
+    94→                <span class="nav-icon text-lg">💰</span>
+    95→                <span class="text-sm">U4 — Finances</span>
+    96→            </button>
+    97→
+    98→            <button onclick="showScreen('u5-gouvernance')" class="nav-item w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-fc-primary-light transition" data-screen="u5-gouvernance">
+    99→                <span class="nav-icon text-lg">🗳️</span>
+   100→                <span class="text-sm">U5 — Gouvernance</span>
+   101→            </button>
+   102→
+   103→            <button onclick="showScreen('u6-memoire')" class="nav-item w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-fc-primary-light transition" data-screen="u6-memoire">
+   104→                <span class="nav-icon text-lg">📚</span>
+   105→                <span class="text-sm">U6 — Mémoire</span>
+   106→            </button>
+   107→
+   108→            <button onclick="showScreen('u7-reseau')" class="nav-item w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-fc-primary-light transition" data-screen="u7-reseau">
+   109→                <span class="nav-icon text-lg">🤝</span>
+   110→                <span class="text-sm">U7 — Réseau</span>
+   111→            </button>
+   112→        </nav>
+   113→
+   114→        <!-- User profile -->
+   115→        <div class="p-4 border-t border-fc-primary-light">
+   116→            <div class="flex items-center gap-3">
+   117→                <div class="w-9 h-9 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-sm">JN</div>
+   118→                <div class="flex-1 min-w-0">
+   119→                    <div class="text-sm font-semibold truncate">Jean NDONGO</div>
+   120→                    <div class="text-xs text-fc-accent">Branche Nord · Patriarche</div>
+   121→                </div>
+   122→                <button class="text-fc-accent hover:text-white">⚙️</button>
+   123→            </div>
+   124→        </div>
+   125→    </aside>
+   126→
+   127→    <!-- ============ MAIN CONTENT ============ -->
+   128→    <main class="flex-1 overflow-y-auto">
+   129→
+   130→        <!-- ============ DASHBOARD ============ -->
+   131→        <div id="dashboard" class="screen active p-8">
+   132→            <div class="mb-6">
+   133→                <h1 class="text-3xl font-bold text-fc-primary">Tableau de bord</h1>
+   134→                <p class="text-fc-secondary mt-1">Famille NDONGO — 247 membres · 6 branches · 9 pays</p>
+   135→            </div>
+   136→
+   137→            <!-- KPI Cards -->
+   138→            <div class="grid grid-cols-4 gap-4 mb-8">
+   139→                <div class="bg-white rounded-xl p-5 card-hover border-l-4 border-fc-accent">
+   140→                    <div class="text-3xl font-bold text-fc-primary">247</div>
+   141→                    <div class="text-sm text-fc-secondary mt-1">Membres</div>
+   142→                    <div class="text-xs text-fc-success mt-2">↑ 3 ce mois</div>
+   143→                </div>
+   144→                <div class="bg-white rounded-xl p-5 card-hover border-l-4 border-fc-critical">
+   145→                    <div class="text-3xl font-bold text-fc-primary">1</div>
+   146→                    <div class="text-sm text-fc-secondary mt-1">Solidarité en cours</div>
+   147→                    <div class="text-xs text-fc-urgent mt-2">Décès Maman Rosine</div>
+   148→                </div>
+   149→                <div class="bg-white rounded-xl p-5 card-hover border-l-4 border-fc-success">
+   150→                    <div class="text-3xl font-bold text-fc-primary">8,25M</div>
+   151→                    <div class="text-sm text-fc-secondary mt-1">Solde caisse (FCFA)</div>
+   152→                    <div class="text-xs text-fc-success mt-2">78% cotisation T3</div>
+   153→                </div>
+   154→                <div class="bg-white rounded-xl p-5 card-hover border-l-4 border-fc-accent">
+   155→                    <div class="text-3xl font-bold text-fc-primary">4</div>
+   156→                    <div class="text-sm text-fc-secondary mt-1">Événements à venir</div>
+   157→                    <div class="text-xs text-fc-secondary mt-2">Prochain : 12 oct.</div>
+   158→                </div>
+   159→            </div>
+   160→
+   161→            <!-- Two columns -->
+   162→            <div class="grid grid-cols-2 gap-6">
+   163→                <!-- Prochains événements -->
+   164→                <div class="bg-white rounded-xl p-6">
+   165→                    <h2 class="text-lg font-bold text-fc-primary mb-4 flex items-center gap-2">
+   166→                        <span>📅</span> Prochains événements
+   167→                    </h2>
+   168→                    <div class="space-y-3">
+   169→                        <div class="flex items-center gap-4 p-3 bg-fc-surface rounded-lg card-hover cursor-pointer" onclick="showScreen('u2-vie')">
+   170→                            <div class="w-12 h-12 bg-fc-accent rounded-lg flex flex-col items-center justify-center text-fc-primary">
+   171→                                <span class="text-xs font-bold">12</span>
+   172→                                <span class="text-xs">OCT</span>
+   173→                            </div>
+   174→                            <div class="flex-1">
+   175→                                <div class="font-semibold text-sm">💍 Mariage de Marie</div>
+   176→                                <div class="text-xs text-fc-secondary">Branche Nord · Yaoundé</div>
+   177→                            </div>
+   178→                            <span class="badge bg-fc-success text-white">Confirmé</span>
+   179→                        </div>
+   180→                        <div class="flex items-center gap-4 p-3 bg-fc-surface rounded-lg card-hover cursor-pointer" onclick="showScreen('u2-vie')">
+   181→                            <div class="w-12 h-12 bg-fc-primary rounded-lg flex flex-col items-center justify-center text-white">
+   182→                                <span class="text-xs font-bold">26</span>
+   183→                                <span class="text-xs">DÉC</span>
+   184→                            </div>
+   185→                            <div class="flex-1">
+   186→                                <div class="font-semibold text-sm">🏛️ Congrès NDONGO 2026</div>
+   187→                                <div class="text-xs text-fc-secondary">Toute la famille · Bafoussam</div>
+   188→                            </div>
+   189→                            <span class="badge bg-fc-accent text-white">Préparation</span>
+   190→                        </div>
+   191→                        <div class="flex items-center gap-4 p-3 bg-fc-surface rounded-lg card-hover cursor-pointer" onclick="showScreen('u2-vie')">
+   192→                            <div class="w-12 h-12 bg-fc-urgent rounded-lg flex flex-col items-center justify-center text-white">
+   193→                                <span class="text-xs font-bold">08</span>
+   194→                                <span class="text-xs">OCT</span>
+   195→                            </div>
+   196→                            <div class="flex-1">
+   197→                                <div class="font-semibold text-sm">⚰️ Funérailles Maman Rosine</div>
+   198→                                <div class="text-xs text-fc-secondary">Branche Nord · Bafoussam</div>
+   199→                            </div>
+   200→                            <span class="badge bg-fc-critical text-white">Urgent</span>
+   201→                        </div>
+   202→                        <div class="flex items-center gap-4 p-3 bg-fc-surface rounded-lg card-hover cursor-pointer" onclick="showScreen('u2-vie')">
+   203→                            <div class="w-12 h-12 bg-fc-accent rounded-lg flex flex-col items-center justify-center text-fc-primary">
+   204→                                <span class="text-xs font-bold">18</span>
+   205→                                <span class="text-xs">OCT</span>
+   206→                            </div>
+   207→                            <div class="flex-1">
+   208→                                <div class="font-semibold text-sm">🎂 Anniversaire Papa Jean (85 ans)</div>
+   209→                                <div class="text-xs text-fc-secondary">Toute la famille · Yaoundé</div>
+   210→                            </div>
+   211→                            <span class="badge bg-fc-accent text-fc-primary">Marquant</span>
+   212→                        </div>
+   213→                    </div>
+   214→                </div>
+   215→
+   216→                <!-- Solidarité en cours -->
+   217→                <div class="bg-white rounded-xl p-6">
+   218→                    <h2 class="text-lg font-bold text-fc-primary mb-4 flex items-center gap-2">
+   219→                        <span>❤️</span> Solidarité en cours
+   220→                    </h2>
+   221→                    <div class="bg-fc-surface rounded-lg p-4 mb-3">
+   222→                        <div class="flex justify-between items-start mb-3">
+   223→                            <div>
+   224→                                <div class="font-semibold text-sm">⚰️ Décès — Maman Rosine NDONGO</div>
+   225→                                <div class="text-xs text-fc-secondary mt-1">Branche Nord · Décédée le 25/09/2026</div>
+   226→                            </div>
+   227→                            <span class="badge bg-fc-critical text-white">Critique</span>
+   228→                        </div>
+   229→                        <div class="mb-2">
+   230→                            <div class="flex justify-between text-xs mb-1">
+   231→                                <span class="text-fc-secondary">Collecte : 3 200 000 / 4 000 000 FCFA</span>
+   232→                                <span class="font-bold text-fc-primary">80%</span>
+   233→                            </div>
+   234→                            <div class="w-full bg-fc-bg rounded-full h-2">
+   235→                                <div class="bg-fc-accent h-2 rounded-full progress-bar" style="width: 80%"></div>
+   236→                            </div>
+   237→                        </div>
+   238→                        <div class="flex justify-between text-xs text-fc-secondary mt-3">
+   239→                            <span>87 / 124 contributeurs</span>
+   240→                            <span>Workflow étape 5/8 — Logistique</span>
+   241→                        </div>
+   242→                        <button onclick="showScreen('u3-solidarite')" class="mt-3 w-full bg-fc-primary text-white text-sm py-2 rounded-lg hover:bg-fc-primary-light transition">Voir le dossier</button>
+   243→                    </div>
+   244→                    <div class="bg-fc-surface rounded-lg p-4">
+   245→                        <div class="flex justify-between items-start mb-2">
+   246→                            <div>
+   247→                                <div class="font-semibold text-sm">🏥 Maladie — Paul (Branche Sud)</div>
+   248→                                <div class="text-xs text-fc-secondary mt-1">Confidentiel · Suivi J+45</div>
+   249→                            </div>
+   250→                            <span class="badge bg-fc-urgent text-white">Urgent</span>
+   251→                        </div>
+   252→                        <div class="text-xs text-fc-secondary">Collecté : 1 200 000 FCFA · Suivi en cours</div>
+   253→                    </div>
+   254→                </div>
+   255→
+   256→                <!-- Cotisations -->
+   257→                <div class="bg-white rounded-xl p-6">
+   258→                    <h2 class="text-lg font-bold text-fc-primary mb-4 flex items-center gap-2">
+   259→                        <span>💰</span> Cotisations T3 2026
+   260→                    </h2>
+   261→                    <div class="mb-4">
+   262→                        <div class="flex justify-between text-sm mb-2">
+   263→                            <span class="text-fc-secondary">Taux de cotisation à jour</span>
+   264→                            <span class="font-bold text-fc-primary">78%</span>
+   265→                        </div>
+   266→                        <div class="w-full bg-fc-bg rounded-full h-3">
+   267→                            <div class="bg-fc-success h-3 rounded-full progress-bar" style="width: 78%"></div>
+   268→                        </div>
+   269→                        <div class="flex justify-between text-xs text-fc-secondary mt-2">
+   270→                            <span>178 / 220 membres à jour</span>
+   271→                            <span>Échéance : 5 octobre</span>
+   272→                        </div>
+   273→                    </div>
+   274→                    <div class="grid grid-cols-3 gap-2 text-center">
+   275→                        <div class="bg-fc-success bg-opacity-10 rounded-lg p-3">
+   276→                            <div class="text-xl font-bold text-fc-success">178</div>
+   277→                            <div class="text-xs text-fc-secondary">À jour</div>
+   278→                        </div>
+   279→                        <div class="bg-fc-urgent bg-opacity-10 rounded-lg p-3">
+   280→                            <div class="text-xl font-bold text-fc-urgent">32</div>
+   281→                            <div class="text-xs text-fc-secondary">En retard</div>
+   282→                        </div>
+   283→                        <div class="bg-fc-secondary bg-opacity-10 rounded-lg p-3">
+   284→                            <div class="text-xl font-bold text-fc-secondary">10</div>
+   285→                            <div class="text-xs text-fc-secondary">En attente</div>
+   286→                        </div>
+   287→                    </div>
+   288→                    <button onclick="showScreen('u4-finances')" class="mt-4 w-full bg-fc-primary text-white text-sm py-2 rounded-lg hover:bg-fc-primary-light transition">Voir les finances</button>
+   289→                </div>
+   290→
+   291→                <!-- Votes en cours -->
+   292→                <div class="bg-white rounded-xl p-6">
+   293→                    <h2 class="text-lg font-bold text-fc-primary mb-4 flex items-center gap-2">
+   294→                        <span>🗳️</span> Décisions en cours
+   295→                    </h2>
+   296→                    <div class="space-y-3">
+   297→                        <div class="p-3 bg-fc-surface rounded-lg card-hover cursor-pointer" onclick="showScreen('u5-gouvernance')">
+   298→                            <div class="flex justify-between items-start mb-2">
+   299→                                <div class="font-semibold text-sm">Lieu du congrès 2027</div>
+   300→                                <span class="badge bg-fc-accent text-white">Consultation</span>
+   301→                            </div>
+   302→                            <div class="text-xs text-fc-secondary mb-2">134 / 286 votes · Clôture dans 7 jours</div>
+   303→                            <div class="flex gap-1">
+   304→                                <div class="flex-1 bg-fc-success rounded h-2" style="width: 45%"></div>
+   305→                                <div class="flex-1 bg-fc-accent rounded h-2" style="width: 30%"></div>
+   306→                                <div class="flex-1 bg-fc-primary rounded h-2" style="width: 25%"></div>
+   307→                            </div>
+   308→                            <div class="flex justify-between text-xs mt-2 text-fc-secondary">
+   309→                                <span>Yaoundé 45%</span>
+   310→                                <span>Douala 30%</span>
+   311→                                <span>Bafoussam 25%</span>
+   312→                            </div>
+   313→                        </div>
+   314→                        <div class="p-3 bg-fc-surface rounded-lg card-hover cursor-pointer" onclick="showScreen('u5-gouvernance')">
+   315→                            <div class="flex justify-between items-start mb-2">
+   316→                                <div class="font-semibold text-sm">Élection trésorier 2027</div>
+   317→                                <span class="badge bg-fc-urgent text-white">Campagne</span>
+   318→                            </div>
+   319→                            <div class="text-xs text-fc-secondary">2 candidats · Scrutin : 20-25 octobre</div>
+   320→                        </div>
+   321→                    </div>
+   322→                </div>
+   323→            </div>
+   324→
+   325→            <!-- Notifications récentes -->
+   326→            <div class="bg-white rounded-xl p-6 mt-6">
+   327→                <h2 class="text-lg font-bold text-fc-primary mb-4 flex items-center gap-2">
+   328→                    <span>🔔</span> Notifications récentes
+   329→                </h2>
+   330→                <div class="space-y-2">
+   331→                    <div class="flex items-center gap-3 p-3 hover:bg-fc-surface rounded-lg">
+   332→                        <div class="w-2 h-2 bg-fc-critical rounded-full"></div>
+   333→                        <div class="flex-1 text-sm"><strong>⚰️ Décès</strong> — Maman Rosine NDONGO a été marquée comme décédée. Collecte de solidarité ouverte.</div>
+   334→                        <div class="text-xs text-fc-secondary">Il y a 2h</div>
+   335→                    </div>
+   336→                    <div class="flex items-center gap-3 p-3 hover:bg-fc-surface rounded-lg">
+   337→                        <div class="w-2 h-2 bg-fc-urgent rounded-full"></div>
+   338→                        <div class="flex-1 text-sm"><strong>💰 Cotisation</strong> — Votre cotisation T3 2026 (15 000 FCFA) arrive à échéance le 5 octobre.</div>
+   339→                        <div class="text-xs text-fc-secondary">Il y a 5h</div>
+   340→                    </div>
+   341→                    <div class="flex items-center gap-3 p-3 hover:bg-fc-surface rounded-lg">
+   342→                        <div class="w-2 h-2 bg-fc-accent rounded-full"></div>
+   343→                        <div class="flex-1 text-sm"><strong>🗳️ Vote</strong> — Consultation ouverte : lieu du congrès 2027. Exprimez votre vote.</div>
+   344→                        <div class="text-xs text-fc-secondary">Hier</div>
+   345→                    </div>
+   346→                    <div class="flex items-center gap-3 p-3 hover:bg-fc-surface rounded-lg">
+   347→                        <div class="w-2 h-2 bg-fc-success rounded-full"></div>
+   348→                        <div class="flex-1 text-sm"><strong>✅ Paiement reçu</strong> — Cotisation T2 2026 (15 000 FCFA). Reçu #RC-2026-089 disponible.</div>
+   349→                        <div class="text-xs text-fc-secondary">Il y a 3 jours</div>
+   350→                    </div>
+   351→                </div>
+   352→            </div>
+   353→        </div>
+   354→
+   355→        <!-- ============ U1 — LA FAMILLE ============ -->
+   356→        <div id="u1-famille" class="screen p-8">
+   357→            <div class="mb-6">
+   358→                <h1 class="text-3xl font-bold text-fc-primary">U1 — La Famille</h1>
+   359→                <p class="text-fc-secondary mt-1">Registre · Arbre généalogique · Branches · Rôles</p>
+   360→            </div>
+   361→
+   362→            <!-- Stats -->
+   363→            <div class="grid grid-cols-5 gap-4 mb-6">
+   364→                <div class="bg-white rounded-xl p-4 text-center">
+   365→                    <div class="text-2xl font-bold text-fc-primary">247</div>
+   366→                    <div class="text-xs text-fc-secondary">Membres</div>
+   367→                </div>
+   368→                <div class="bg-white rounded-xl p-4 text-center">
+   369→                    <div class="text-2xl font-bold text-fc-primary">235</div>
+   370→                    <div class="text-xs text-fc-secondary">Vivants</div>
+   371→                </div>
+   372→                <div class="bg-white rounded-xl p-4 text-center">
+   373→                    <div class="text-2xl font-bold text-fc-primary">12</div>
+   374→                    <div class="text-xs text-fc-secondary">Décédés</div>
+   375→                </div>
+   376→                <div class="bg-white rounded-xl p-4 text-center">
+   377→                    <div class="text-2xl font-bold text-fc-primary">6</div>
+   378→                    <div class="text-xs text-fc-secondary">Branches</div>
+   379→                </div>
+   380→                <div class="bg-white rounded-xl p-4 text-center">
+   381→                    <div class="text-2xl font-bold text-fc-primary">9</div>
+   382→                    <div class="text-xs text-fc-secondary">Pays</div>
+   383→                </div>
+   384→            </div>
+   385→
+   386→            <!-- Search bar -->
+   387→            <div class="bg-white rounded-xl p-4 mb-6 flex items-center gap-4">
+   388→                <input type="text" placeholder="Rechercher un membre par nom, branche, profession..." class="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-fc-accent">
+   389→                <button class="bg-fc-primary text-white px-4 py-2 rounded-lg text-sm hover:bg-fc-primary-light">Rechercher</button>
+   390→                <button class="bg-fc-accent text-fc-primary px-4 py-2 rounded-lg text-sm font-semibold hover:bg-fc-accent-light">+ Membre</button>
+   391→            </div>
+   392→
+   393→            <div class="grid grid-cols-3 gap-6">
+   394→                <!-- Member list -->
+   395→                <div class="col-span-1 bg-white rounded-xl p-4">
+   396→                    <h3 class="font-bold text-fc-primary mb-3">Membres récents</h3>
+   397→                    <div class="space-y-2">
+   398→                        <div class="flex items-center gap-3 p-2 hover:bg-fc-surface rounded-lg cursor-pointer" onclick="showMemberDetail()">
+   399→                            <div class="w-10 h-10 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-sm">JN</div>
+   400→                            <div class="flex-1 min-w-0">
+   401→                                <div class="font-semibold text-sm">Jean NDONGO</div>
+   402→                                <div class="text-xs text-fc-secondary">Patriarche · Branche Nord</div>
+   403→                            </div>
+   404→                        </div>
+   405→                        <div class="flex items-center gap-3 p-2 hover:bg-fc-surface rounded-lg cursor-pointer" onclick="showMemberDetail()">
+   406→                            <div class="w-10 h-10 bg-fc-primary rounded-full flex items-center justify-center text-white font-bold text-sm">BN</div>
+   407→                            <div class="flex-1 min-w-0">
+   408→                                <div class="font-semibold text-sm">Bernard NDONGO</div>
+   409→                                <div class="text-xs text-fc-secondary">Trésorier · Branche Nord</div>
+   410→                            </div>
+   411→                        </div>
+   412→                        <div class="flex items-center gap-3 p-2 hover:bg-fc-surface rounded-lg cursor-pointer" onclick="showMemberDetail()">
+   413→                            <div class="w-10 h-10 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-sm">MN</div>
+   414→                            <div class="flex-1 min-w-0">
+   415→                                <div class="font-semibold text-sm">Marie NDONGO</div>
+   416→                                <div class="text-xs text-fc-secondary">Avocate · Branche Nord</div>
+   417→                            </div>
+   418→                        </div>
+   419→                        <div class="flex items-center gap-3 p-2 hover:bg-fc-surface rounded-lg cursor-pointer" onclick="showMemberDetail()">
+   420→                            <div class="w-10 h-10 bg-fc-primary rounded-full flex items-center justify-center text-white font-bold text-sm">PB</div>
+   421→                            <div class="flex-1 min-w-0">
+   422→                                <div class="font-semibold text-sm">Paul BIYA</div>
+   423→                                <div class="text-xs text-fc-secondary">Allié · Branche Nord</div>
+   424→                            </div>
+   425→                        </div>
+   426→                        <div class="flex items-center gap-3 p-2 hover:bg-fc-surface rounded-lg cursor-pointer" onclick="showMemberDetail()">
+   427→                            <div class="w-10 h-10 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-sm">HN</div>
+   428→                            <div class="flex-1 min-w-0">
+   429→                                <div class="font-semibold text-sm">Hélène NDONGO</div>
+   430→                                <div class="text-xs text-fc-secondary">Cardiologue · Branche Sud</div>
+   431→                            </div>
+   432→                        </div>
+   433→                        <div class="flex items-center gap-3 p-2 hover:bg-fc-surface rounded-lg cursor-pointer" onclick="showMemberDetail()">
+   434→                            <div class="w-10 h-10 bg-fc-primary rounded-full flex items-center justify-center text-white font-bold text-sm">JN</div>
+   435→                            <div class="flex-1 min-w-0">
+   436→                                <div class="font-semibold text-sm">Joseph NDONGO</div>
+   437→                                <div class="text-xs text-fc-secondary">Développeur · Diaspora France</div>
+   438→                            </div>
+   439→                        </div>
+   440→                    </div>
+   441→                </div>
+   442→
+   443→                <!-- Member detail -->
+   444→                <div class="col-span-2 bg-white rounded-xl p-6" id="member-detail">
+   445→                    <div class="flex items-start gap-4 mb-6">
+   446→                        <div class="w-20 h-20 bg-fc-accent rounded-full flex items-center justify-center text-fc-primary font-bold text-2xl">JN</div>
+   447→                        <div class="flex-1">
+   448→                            <h2 class="text-2xl font-bold text-fc-primary">Jean NDONGO</h2>
+   449→                            <div class="text-fc-secondary text-sm mt-1">Branche Nord · Génération 3 · Patriarche</div>
+   450→                            <div class="flex gap-2 mt-2">
+   451→                                <span class="badge bg-fc-primary text-white">✓ Patriarche</span>
+   452→                                <span class="badge bg-fc-accent text-fc-primary">85 ans</span>
+   453→                                <span class="badge bg-fc-surface text-fc-secondary">Yaoundé, Cameroun</span>
+   454→                            </div>
+   455→                        </div>
+   456→                    </div>
+   457→
+   458→                    <div class="grid grid-cols-2 gap-4 mb-6">
+   459→                        <div class="bg-fc-surface rounded-lg p-4">
+   460→                            <div class="text-xs text-fc-secondary uppercase font-semibold mb-2">Identité</div>
+   461→                            <div class="text-sm space-y-1">
+   462→                                <div><strong>Né le :</strong> 14 mars 1941 à Bafoussam</div>
+   463→                                <div><strong>Profession :</strong> Avocat (retraité)</div>
+   464→                                <div><strong>État civil :</strong> Veuf de Marguerite</div>
+   465→                            </div>
+   466→                        </div>
+   467→                        <div class="bg-fc-surface rounded-lg p-4">
+   468→                            <div class="text-xs text-fc-secondary uppercase font-semibold mb-2">Filiation</div>
+   469→                            <div class="text-sm space-y-1">
+   470→                                <div><strong>Père :</strong> Paul NDONGO (décédé, 2018)</div>
+   471→                                <div><strong>Mère :</strong> Marguerite NDONGO (décédée, 2020)</div>
+   472→                                <div><strong>Enfants :</strong> 5</div>
+   473→                            </div>
+   474→                        </div>
+   475→                    </div>
+   476→
+   477→                    <div class="bg-fc-surface rounded-lg p-4 mb-4">
+   478→                        <div class="text-xs text-fc-secondary uppercase font-semibold mb-2">Contact</div>
+   479→                        <div class="text-sm space-y-1">
+   480→                            <div>📞 +237 6 99 12 34 56</div>
+   481→                            <div>✉️ jean.ndongo@email.com</div>
+   482→                            <div>📍 Yaoundé, Cameroun</div>
+   483→                        </div>
+   484→                    </div>
+   485→
+   486→                    <div class="flex gap-2">
+   487→                        <button class="bg-fc-primary text-white px-4 py-2 rounded-lg text-sm hover:bg-fc-primary-light">Voir dans l'arbre</button>
+   488→                        <button class="bg-fc-surface text-fc-primary px-4 py-2 rounded-lg text-sm hover:bg-fc-bg">Contacter</button>
+   489→                        <button class="bg-fc-surface text-fc-primary px-4 py-2 rounded-lg text-sm hover:bg-fc-bg">Voir biographie</button>
+   490→                    </div>
+   491→                </div>
+   492→            </div>
+   493→
+   494→            <!-- Branches overview -->
+   495→            <div class="bg-white rounded-xl p-6 mt-6">
+   496→                <h3 class="font-bold text-fc-primary mb-4">Branches familiales</h3>
+   497→                <div class="grid grid-cols-3 gap-4">
+   498→                    <div class="bg-fc-surface rounded-lg p-4 card-hover cursor-pointer">
+   499→                        <div class="flex justify-between items-center mb-2">
+   500→                            <div class="font-semibold text-fc-primary">Branche Nord</div>
+   501→                            <span class="badge bg-fc-accent text-fc-primary">Principale</span>
+   502→                        </div>
+   503→                        <div class="text-3xl font-bold text-fc-primary">64</div>
+   504→                        <div class="text-xs text-fc-secondary">52 vivants · 12 décédés</div>
+   505→                        <div class="text-xs text-fc-secondary mt-2">Chef : Jean NDONGO</div>
+   506→                    </div>
+   507→                    <div class="bg-fc-surface rounded-lg p-4 card-hover cursor-pointer">
+   508→                        <div class="flex justify-between items-center mb-2">
+   509→                            <div class="font-semibold text-fc-primary">Branche Sud</div>
+   510→                            <span class="badge bg-fc-surface text-fc-secondary">Principale</span>
+   511→                        </div>
+   512→                        <div class="text-3xl font-bold text-fc-primary">52</div>
+   513→                        <div class="text-xs text-fc-secondary">48 vivants · 4 décédés</div>
+   514→                        <div class="text-xs text-fc-secondary mt-2">Chef : Pierre NDONGO</div>
+   515→                    </div>
+   516→                    <div class="bg-fc-surface rounded-lg p-4 card-hover cursor-pointer">
+   517→                        <div class="flex justify-between items-center mb-2">
+   518→                            <div class="font-semibold text-fc-primary">Branche Est</div>
+   519→                            <span class="badge bg-fc-surface text-fc-secondary">Principale</span>
+   520→                        </div>
+   521→                        <div class="text-3xl font-bold text-fc-primary">43</div>
+   522→                        <div class="text-xs text-fc-secondary">41 vivants · 2 décédés</div>
+   523→                        <div class="text-xs text-fc-secondary mt-2">Chef : Marie NDONGO</div>
+   524→                    </div>
+   525→                </div>
+   526→            </div>
+   527→
+   528→            <!-- Diaspora map -->
+   529→            <div class="bg-white rounded-xl p-6 mt-6">
+   530→                <h3 class="font-bold text-fc-primary mb-4">🌍 Diaspora — 9 pays</h3>
+   531→                <div class="grid grid-cols-3 gap-3">
+   532→                    <div class="flex items-center justify-between p-3 bg-fc-surface rounded-lg">
+   533→                        <div class="flex items-center gap-2"><span>🇨🇲</span><span class="text-sm font-semibold">Cameroun</span></div>
+   534→                        <div class="font-bold text-fc-primary">178</div>
+   535→                    </div>
+   536→                    <div class="flex items-center justify-between p-3 bg-fc-surface rounded-lg">
+   537→                        <div class="flex items-center gap-2"><span>🇫🇷</span><span class="text-sm font-semibold">France</span></div>
+   538→                        <div class="font-bold text-fc-primary">28</div>
+   539→                    </div>
+   540→                    <div class="flex items-center justify-between p-3 bg-fc-surface rounded-lg">
+   541→                        <div class="flex items-center gap-2"><span>🇧🇪</span><span class="text-sm font-semibold">Belgique</span></div>
+   542→                        <div class="font-bold text-fc-primary">14</div>
+   543→                    </div>
+   544→                    <div class="flex items-center justify-between p-3 bg-fc-surface rounded-lg">
+   545→                        <div class="flex items-center gap-2"><span>🇨🇦</span><span class="text-sm font-semibold">Canada</span></div>
+   546→                        <div class="font-bold text-fc-primary">10</div>
+   547→                    </div>
+   548→                    <div class="flex items-center justify-between p-3 bg-fc-surface rounded-lg">
+   549→                        <div class="flex items-center gap-2"><span>🇺🇸</span><span class="text-sm font-semibold">États-Unis</span></div>
+   550→                        <div class="font-bold text-fc-primary">8</div>
+   551→                    </div>
+   552→                    <div class="flex items-center justify-between p-3 bg-fc-surface rounded-lg">
+   553→                        <div class="flex items-center gap-2"><span>🇬🇦</span><span class="text-sm font-semibold">Gabon</span></div>
+   554→                        <div class="font-bold text-fc-primary">5</div>
+   555→                    </div>
+   556→                </div>
+   557→            </div>
+   558→        </div>
+   559→
+   560→        <!-- ============ U2 — VIE FAMILIALE ============ -->
+   561→        <div id="u2-vie" class="screen p-8">
+   562→            <div class="mb-6">
+   563→                <h1 class="text-3xl font-bold text-fc-primary">U2 — La Vie familiale</h1>
+   564→                <p class="text-fc-secondary mt-1">Calendrier · Événements · Moteur workflow</p>
+   565→            </div>
+   566→
+   567→            <!-- Tabs -->
+   568→            <div class="flex gap-2 mb-6">
+   569→                <button class="px-4 py-2 bg-fc-primary text-white rounded-lg text-sm font-semibold">Calendrier</button>
+   570→                <button class="px-4 py-2 bg-white text-fc-primary rounded-lg text-sm hover:bg-fc-surface">Événements en cours</button>
+   571→                <button class="px-4 py-2 bg-white text-fc-primary rounded-lg text-sm hover:bg-fc-surface">Albums</button>
+   572→                <button class="px-4 py-2 bg-fc-accent text-fc-primary rounded-lg text-sm font-semibold ml-auto">+ Nouvel événement</button>
+   573→            </div>
+   574→
+   575→            <!-- Calendar -->
+   576→            <div class="bg-white rounded-xl p-6 mb-6">
+   577→                <div class="flex justify-between items-center mb-4">
+   578→                    <h2 class="text-xl font-bold text-fc-primary">Octobre 2026</h2>
+   579→                    <div class="flex gap-2">
+   580→                        <button class="px-3 py-1 bg-fc-surface rounded text-sm hover:bg-fc-bg">‹</button>
+   581→                        <button class="px-3 py-1 bg-fc-surface rounded text-sm hover:bg-fc-bg">Aujourd'hui</button>
+   582→                        <button class="px-3 py-1 bg-fc-surface rounded text-sm hover:bg-fc-bg">›</button>
+   583→                    </div>
+   584→                </div>
+   585→                <div class="grid grid-cols-7 gap-1 text-center text-xs text-fc-secondary font-semibold mb-2">
+   586→                    <div>Lun</div><div>Mar</div><div>Mer</div><div>Jeu</div><div>Ven</div><div>Sam</div><div>Dim</div>
+   587→                </div>
+   588→                <div class="grid grid-cols-7 gap-1">
+   589→                    <div class="h-24 bg-fc-surface rounded-lg p-1 text-xs"><div class="text-fc-secondary">28</div></div>
+   590→                    <div class="h-24 bg-fc-surface rounded-lg p-1 text-xs"><div class="text-fc-secondary">29</div></div>
+   591→                    <div class="h-24 bg-fc-surface rounded-lg p-1 text-xs"><div class="text-fc-secondary">30</div></div>
+   592→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">1</div></div>
+   593→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">2</div></div>
+   594→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">3</div></div>
+   595→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">4</div></div>
+   596→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">5</div><div class="mt-1 text-xs bg-fc-urgent text-white rounded px-1 py-0.5">💰 Cotisation T3</div></div>
+   597→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">6</div></div>
+   598→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">7</div></div>
+   599→                    <div class="h-24 bg-white border-2 border-fc-critical rounded-lg p-1 text-xs"><div class="font-bold text-fc-critical">8</div><div class="mt-1 text-xs bg-fc-critical text-white rounded px-1 py-0.5">⚰️ Funérailles</div></div>
+   600→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">9</div></div>
+   601→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">10</div></div>
+   602→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">11</div></div>
+   603→                    <div class="h-24 bg-white border-2 border-fc-accent rounded-lg p-1 text-xs"><div class="font-bold text-fc-accent">12</div><div class="mt-1 text-xs bg-fc-success text-white rounded px-1 py-0.5">💍 Mariage</div></div>
+   604→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">13</div></div>
+   605→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">14</div></div>
+   606→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">15</div><div class="mt-1 text-xs bg-fc-accent text-fc-primary rounded px-1 py-0.5">🗳️ Vote clos</div></div>
+   607→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">16</div></div>
+   608→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">17</div></div>
+   609→                    <div class="h-24 bg-white border-2 border-fc-accent rounded-lg p-1 text-xs"><div class="font-bold text-fc-accent">18</div><div class="mt-1 text-xs bg-fc-accent text-white rounded px-1 py-0.5">🎂 Anniversaire</div></div>
+   610→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">19</div></div>
+   611→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">20</div><div class="mt-1 text-xs bg-fc-primary text-white rounded px-1 py-0.5">🗳️ Scrutin</div></div>
+   612→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">21</div></div>
+   613→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">22</div></div>
+   614→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">23</div></div>
+   615→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">24</div></div>
+   616→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">25</div><div class="mt-1 text-xs bg-fc-primary text-white rounded px-1 py-0.5">🗳️ Scrutin clos</div></div>
+   617→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">26</div></div>
+   618→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">27</div></div>
+   619→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">28</div></div>
+   620→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">29</div></div>
+   621→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">30</div></div>
+   622→                    <div class="h-24 bg-white border border-gray-100 rounded-lg p-1 text-xs"><div class="font-bold">31</div></div>
+   623→                </div>
+   624→            </div>
+   625→
+   626→            <!-- Event detail with workflow -->
+   627→            <div class="bg-white rounded-xl p-6">
+   628→                <div class="flex justify-between items-start mb-4">
+   629→                    <div>
+   630→                        <div class="flex items-center gap-2 mb-2">
+   631→                            <span class="badge bg-fc-critical text-white">⚰️ Décès</span>
+   632→                            <span class="badge bg-fc-urgent text-white">En cours</span>
+   633→                        </div>
+   634→                        <h2 class="text-2xl font-bold text-fc-primary">EVT-2026-014 — Décès de Maman Rosine NDONGO</h2>
+   635→                        <p class="text-fc-secondary text-sm mt-1">Branche Nord · Décédée le 25/09/2026 · Inhumation le 08/10/2026 à Bafoussam</p>
+   636→                    </div>
+   637→                    <button class="bg-fc-surface text-fc-primary px-4 py-2 rounded-lg text-sm">Partager</button>
+   638→                </div>
+   639→
+   640→                <!-- Workflow steps -->
+   641→                <div class="bg-fc-surface rounded-lg p-4 mb-4">
+   642→                    <h3 class="font-bold text-fc-primary mb-4">Workflow décès — Étape 5/8</h3>
+   643→                    <div class="space-y-3">
+   644→                        <div class="flex items-center gap-3">
+   645→                            <div class="w-8 h-8 bg-fc-success rounded-full flex items-center justify-center text-white text-sm">✓</div>
+   646→                            <div class="flex-1"><div class="font-semibold text-sm">1. Annonce (J0)</div><div class="text-xs text-fc-secondary">Validée par Papa Jean · 25/09 14h30</div></div>
+   647→                        </div>
+   648→                        <div class="flex items-center gap-3">
+   649→                            <div class="w-8 h-8 bg-fc-success rounded-full flex items-center justify-center text-white text-sm">✓</div>
+   650→                            <div class="flex-1"><div class="font-semibold text-sm">2. Comité d'organisation (J+1)</div><div class="text-xs text-fc-secondary">5 membres désignés</div></div>
+   651→                        </div>
+   652→                        <div class="flex items-center gap-3">
+   653→                            <div class="w-8 h-8 bg-fc-success rounded-full flex items-center justify-center text-white text-sm">✓</div>
+   654→                            <div class="flex-1"><div class="font-semibold text-sm">3. Collecte de solidarité (J+1)</div><div class="text-xs text-fc-secondary">3 200 000 / 4 000 000 FCFA (80%)</div></div>
+   655→                        </div>
+   656→                        <div class="flex items-center gap-3">
+   657→                            <div class="w-8 h-8 bg-fc-success rounded-full flex items-center justify-center text-white text-sm">✓</div>
+   658→                            <div class="flex-1"><div class="font-semibold text-sm">4. Programme funéraire (J+5)</div><div class="text-xs text-fc-secondary">Veillée 07/10 · Inhumation 08/10</div></div>
+   659→                        </div>
+   660→                        <div class="flex items-center gap-3">
+   661→                            <div class="w-8 h-8 bg-fc-urgent rounded-full flex items-center justify-center text-white text-sm animate-pulse">⏳</div>
+   662→                            <div class="flex-1"><div class="font-semibold text-sm">5. Logistique (en cours)</div><div class="text-xs text-fc-secondary">Hébergement · Transport · Restauration</div></div>
+   663→                        </div>
+   664→                        <div class="flex items-center gap-3 opacity-50">
+   665→                            <div class="w-8 h-8 bg-fc-surface border-2 border-gray-300 rounded-full flex items-center justify-center text-gray-400 text-sm">○</div>
+   666→                            <div class="flex-1"><div class="font-semibold text-sm">6. Déroulé</div><div class="text-xs text-fc-secondary">Non commencé</div></div>
+   667→                        </div>
+   668→                        <div class="flex items-center gap-3 opacity-50">
+   669→                            <div class="w-8 h-8 bg-fc-surface border-2 border-gray-300 rounded-full flex items-center justify-center text-gray-400 text-sm">○</div>
+   670→                            <div class="flex-1"><div class="font-semibold text-sm">7. Album et témoignages</div><div class="text-xs text-fc-secondary">Non commencé</div></div>
+   671→                        </div>
+   672→                        <div class="flex items-center gap-3 opacity-50">
+   673→                            <div class="w-8 h-8 bg-fc-surface border-2 border-gray-300 rounded-full flex items-center justify-center text-gray-400 text-sm">○</div>
+   674→                            <div class="flex-1"><div class="font-semibold text-sm">8. Bilan et clôture</div><div class="text-xs text-fc-secondary">Non commencé</div></div>
+   675→                        </div>
+   676→                    </div>
+   677→                </div>
+   678→
+   679→                <!-- Quick info -->
+   680→                <div class="grid grid-cols-3 gap-4">
+   681→                    <div class="bg-fc-surface rounded-lg p-4">
+   682→                        <div class="text-xs text-fc-secondary uppercase font-semibold mb-2">Comité</div>
+   683→                        <div class="text-sm space-y-1">
+   684→                            <div>Référent : Bernard NDONGO</div>
+   685→                            <div>Membres : 5</div>
+   686→                            <div>Validateur : Papa Jean</div>
+   687→                        </div>
+   688→                    </div>
+   689→                    <div class="bg-fc-surface rounded-lg p-4">
+   690→                        <div class="text-xs text-fc-secondary uppercase font-semibold mb-2">Bénéficiaire</div>
+   691→                        <div class="text-sm space-y-1">
+   692→                            <div>Maman Rosine NDONGO</div>
+   693→                            <div>Conjoint : Paul NDONGO (veuf)</div>
+   694→                            <div>Enfants orphelins : 3</div>
+   695→                        </div>
+   696→                    </div>
+   697→                    <div class="bg-fc-surface rounded-lg p-4">
+   698→                        <div class="text-xs text-fc-secondary uppercase font-semibold mb-2">Dépenses prévues</div>
+   699→                        <div class="text-sm space-y-1">
+   700→                            <div>Cercueil : 800 000 FCFA</div>
+   701→                            <div>Transport : 450 000 FCFA</div>
+   702→                            <div>Repas : 1 200 000 FCFA</div>
+   703→                        </div>
+   704→                    </div>
+   705→                </div>
+   706→            </div>
+   707→        </div>
+   708→
+   709→        <!-- ============ U3 — SOLIDARITÉ ============ -->
+   710→        <div id="u3-solidarite" class="screen p-8">
+   711→            <div class="mb-6">
+   712→                <h1 class="text-3xl font-bold text-fc-primary">U3 — La Solidarité</h1>
+   713→                <p class="text-fc-secondary mt-1">Dossiers · Collectes · Suivi · Aides sociales</p>
+   714→            </div>
+   715→
+   716→            <!-- Solidarity dashboard -->
+   717→            <div class="grid grid-cols-4 gap-4 mb-6">
+   718→                <div class="bg-white rounded-xl p-5 border-l-4 border-fc-critical">
+   719→                    <div class="text-3xl font-bold text-fc-primary">3</div>
+   720→                    <div class="text-sm text-fc-secondary mt-1">Dossiers en cours</div>
+   721→                </div>
+   722→                <div class="bg-white rounded-xl p-5 border-l-4 border-fc-accent">
+   723→                    <div class="text-3xl font-bold text-fc-primary">18,5M</div>
+   724→                    <div class="text-sm text-fc-secondary mt-1">Collecté en 2026 (FCFA)</div>
+   725→                </div>
+   726→                <div class="bg-white rounded-xl p-5 border-l-4 border-fc-success">
+   727→                    <div class="text-3xl font-bold text-fc-primary">14</div>
+   728→                    <div class="text-sm text-fc-secondary mt-1">Dossiers clôturés</div>
+   729→                </div>
+   730→                <div class="bg-white rounded-xl p-5 border-l-4 border-fc-primary">
+   731→                    <div class="text-3xl font-bold text-fc-primary">18</div>
+   732→                    <div class="text-sm text-fc-secondary mt-1">Bénéficiaires aides sociales</div>
+   733→                </div>
+   734→            </div>
+   735→
+   736→            <!-- Active dossier -->
+   737→            <div class="bg-white rounded-xl p-6 mb-6">
+   738→                <div class="flex justify-between items-start mb-4">
+   739→                    <div>
+   740→                        <div class="flex items-center gap-2 mb-2">
+   741→                            <span class="badge bg-fc-critical text-white">⚰️ Décès</span>
+   742→                            <span class="badge bg-fc-urgent text-white">Collecte en cours</span>
+   743→                        </div>
+   744→                        <h2 class="text-2xl font-bold text-fc-primary">SOL-2026-007 — Décès Maman Rosine NDONGO</h2>
+   745→                        <p class="text-fc-secondary text-sm mt-1">Branche Nord · Référent : Bernard NDONGO · Lié à EVT-2026-014</p>
+   746→                    </div>
+   747→                </div>
+   748→
+   749→                <!-- Collection progress -->
+   750→                <div class="bg-fc-surface rounded-lg p-6 mb-4">
+
+[showing lines 1-750 of 1471; use offset=751 with limit to continue reading]
