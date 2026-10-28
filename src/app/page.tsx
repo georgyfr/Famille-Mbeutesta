@@ -1,4 +1,4 @@
-import { DevAccess } from "@/components/fc/dev-access";
+import { DevAccess, DevFooterLink } from "@/components/fc/dev-access";
 import { LegacyApp } from "@/components/fc/legacy-app";
 import { MainApp } from "@/components/fc/main-app";
 
@@ -26,6 +26,7 @@ export default function Page() {
       >
         <p className="pt-3">
           Famille.Mbeutetsa © 2026 — Le registre vivant des grandes familles
+          <DevFooterLink />
         </p>
       </footer>
 
