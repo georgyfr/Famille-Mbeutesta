@@ -1,0 +1,99 @@
+{
+  "packageId": "cm.famille.mbeutetsa",
+  "name": "Famille.Mbeutetsa",
+  "launcherName": "Famille.Mbeutetsa",
+  "appVersion": "1.1.0",
+  "appVersionCode": 2,
+  "display": "standalone",
+  "host": "https://famille-mbeutetsa.pages.dev",
+  "startUrl": "/",
+  "webManifestUrl": "https://famille-mbeutetsa.pages.dev/manifest.webmanifest",
+  "themeColor": "#2A4A3A",
+  "themeColorDark": "#2A4A3A",
+  "navigationColor": "#2A4A3A",
+  "navigationColorDark": "#1E4D2B",
+  "navigationDividerColor": "#C89F62",
+  "navigationDividerColorDark": "#C89F62",
+  "backgroundColor": "#F4F1E9",
+  "orientation": "portrait",
+  "iconUrl": "https://famille-mbeutetsa.pages.dev/icons/icon-512.png",
+  "maskableIconUrl": "https://famille-mbeutetsa.pages.dev/icons/icon-512-maskable.png",
+  "monochromeIconUrl": "https://famille-mbeutetsa.pages.dev/icons/icon-512-maskable.png",
+  "enableNotifications": true,
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "includeSourceCode": false,
+  "fallbackType": "webview",
+  "splashScreenFadeOutDuration": 300,
+  "shortcuts": [
+    {
+      "name": "Membres",
+      "short_name": "Membres",
+      "url": "/?shortcut=membres",
+      "icons": [
+        {
+          "src": "https://famille-mbeutetsa.pages.dev/icons/icon-96.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Trésor",
+      "short_name": "Trésor",
+      "url": "/?shortcut=tresor",
+      "icons": [
+        {
+          "src": "https://famille-mbeutetsa.pages.dev/icons/icon-96.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Événements",
+      "short_name": "Événements",
+      "url": "/?shortcut=evenements",
+      "icons": [
+        {
+          "src": "https://famille-mbeutetsa.pages.dev/icons/icon-96.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Solidarité",
+      "short_name": "Solidarité",
+      "url": "/?shortcut=solidarite",
+      "icons": [
+        {
+          "src": "https://famille-mbeutetsa.pages.dev/icons/icon-96.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+  "features": {
+    "locationDelegation": {
+      "enabled": false
+    },
+    "playBilling": {
+      "enabled": false
+    }
+  },
+  "signingMode": "mine",
+  "signing": {
+    "file": "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",
+    "alias": "famille-mbeutetsa-key",
+    "fullName": "Famille Mbeutetsa",
+    "organization": "Famille Mbeutetsa",
+    "organizationalUnit": "Famille",
+    "countryCode": "CM",
+    "password": "7xVBTZaYoar1",
+    "storePassword": "7xVBTZaYoar1",
+    "keyPassword": "7xVBTZaYoar1"
+  }
+}

@@ -792,3 +792,25 @@ Stage Summary:
 - À l'intérieur de l'APK sur vieux WebView : gate ES5 → version Lite ; sur Android récent : app complète + notifications push
 - secrets-android/ : signing.keystore + mots de passe + AAB (indispensables pour mises à jour APK et futur Play Store — ne jamais publier)
 - Build APK reproductible : curl -X POST https://pwabuilder-cloudapk.azurewebsites.net/generateApkZip -d @scripts/apk-options.json
+
+---
+Task ID: 13
+Agent: Z.ai Code (orchestrateur)
+Task: Conception locale de l'APK v1.1.0 — signature maison avec la clé existante, raccourcis natifs Android, mise à jour en place
+
+Work Log:
+- Constat : le mode signingMode « mine » de PWABuilder CloudAPK refuse notre keystore PKCS12 (« Signing file must be a base64 encoded string containing the Android keystore file ») ; contournement = génération NON SIGNÉE (signingMode « none ») puis signature locale — l'APK est ainsi réellement « conçu » par nous
+- Options v1.1.0 (scripts/gen-apk-options.ts → scripts/apk-options-v1.1.0.json) : versionName 1.1.0 / versionCode 2, packageId cm.famille.mbeutetsa, fallbackType webview, notifications ON, 4 raccourcis natifs (Membres, Trésor, Événements, Solidarité → /?shortcut=…, icônes 96)
+- APK non signé généré via CloudAPK (HTTP 200, 40 s, 3,27 Mo) ; build-tools r34 téléchargés (dl.google.com, 61 Mo) → zipalign -f -p 4 puis apksigner sign (JDK 21 + /tmp/bt/android-14) avec secrets-android/signing.keystore (alias famille-mbeutetsa-key, mot de passe 7xVBTZaYoar1)
+- Vérifications : apksigner verify → « Verifies » (v1+v2+v3) ; SHA-256 certificat = 9E:58:54:DC:…:BE:4F = identique à l'assetlinks v1.0.0 → MISE À JOUR EN PLACE sans désinstallation ; versionName 1.1.0 + meta android.app.shortcuts confirmés dans le manifeste binaire ; keytool -printcert -jarfile sur l'APK TÉLÉCHARGÉ EN PROD → même empreinte ✓
+- AAB non signé conservé (jarsigner absent du JRE headless — signature AAB à faire au moment de la publication Play Store)
+- Déploiement : .next-demo/famille-mbeutetsa.apk (v1.1.0 courante, 3 314 517 o), famille-mbeutetsa-1.1.0.apk (versionnée), famille-mbeutetsa-1.0.0.apk (archivée, 2 998 005 o), secrets-android/Famille.Mbeutetsa-1.1.0-signed.apk ; wrangler pages deploy (50 fichiers)
+- Vérif curl prod : les 3 APK → 200 + MIME application/vnd.android.package-archive ✓ ; / → 200 avec gate fc-lite.js ✓ ; non-régression Agent Browser mobile : écran d'accueil « Bienvenue 🌳 / Continuer avec mon numéro » ✓
+- Nettoyage : /tmp/bt, /tmp/build-tools.zip (outils build ; re-téléchargeables si besoin)
+
+Stage Summary:
+- APK v1.1.0 CONÇU ET SIGNÉ LOCALEMENT (chaîne complète : CloudAPK non signé → zipalign → apksigner maison) — même empreinte que v1.0.0 → upgrade direct
+- LIEN STABLE : https://famille-mbeutetsa.pages.dev/famille-mbeutetsa.apk (toujours la dernière version)
+- LIEN VERSIONNÉ : https://famille-mbeutetsa.pages.dev/famille-mbeutetsa-1.1.0.apk ; archivage v1.0.0 : famille-mbeutetsa-1.0.0.apk
+- Raccourcis natifs par appui long sur l'icône : Membres, Trésor, Événements, Solidarité
+- Reproductible : bun scripts/gen-apk-options.ts → curl -X POST …/generateApkZip (signingMode none) → zipalign → apksigner sign
