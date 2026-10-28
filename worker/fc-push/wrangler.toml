@@ -1,0 +1,8 @@
+name = "fc-push"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+account_id = "ead74f172a86c9debb937c356976260f"
+
+[[kv_namespaces]]
+binding = "PUSH_SUBS"
+id = "9b41fcb029524a22b65e155d3796243b"

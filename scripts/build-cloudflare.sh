@@ -16,7 +16,8 @@ echo "→ 1/3 Stash des API routes (non exportables en statique)…"
 mv src/app/api /home/z/.fc-api-stash
 
 echo "→ 2/3 Build statique (DEMO_BUILD=1, NEXT_PUBLIC_DEMO_MODE=1)…"
-DEMO_BUILD=1 NEXT_PUBLIC_DEMO_MODE=1 bunx next build
+# NEXT_PUBLIC_FC_PUSH_URL : Worker Cloudflare qui envoie les vraies notifications push
+DEMO_BUILD=1 NEXT_PUBLIC_DEMO_MODE=1 NEXT_PUBLIC_FC_PUSH_URL="https://fc-push.famille-mbeutetsa.workers.dev" bunx next build
 
 echo "→ 3/3 Restauration des API routes…"
 mv /home/z/.fc-api-stash src/app/api

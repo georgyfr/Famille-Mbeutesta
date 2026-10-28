@@ -36,6 +36,12 @@ self.addEventListener("push", (event) => {
       { action: "open", title: "Ouvrir" },
     ],
   };
+  // Vérification E2E : la page peut lire window.__lastPush (tests automatisés)
+  self.clients.matchAll({ includeUncontrolled: true, type: "window" }).then(function (cs) {
+    cs.forEach(function (c) {
+      c.postMessage({ type: "fc-push-received", data: data });
+    });
+  });
   event.waitUntil(self.registration.showNotification(data.title, options));
 });
 
