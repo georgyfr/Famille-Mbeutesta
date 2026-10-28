@@ -1,0 +1,904 @@
+     1→"use client";
+     2→
+     3→import { useCallback, useEffect, useState } from "react";
+     4→import { toast } from "sonner";
+     5→import { api, deviceName, timeAgo, urlBase64ToUint8Array } from "@/lib/fc-client";
+     6→import { FcButton, FcCard, PriorityBadge } from "./ui";
+     7→import { roleLabel } from "./auth-flow";
+     8→import {
+     9→  Bell, BellOff, CalendarDays, Check, CheckCheck, Copy, Fingerprint, HeartHandshake, Home, KeyRound, LifeBuoy,
+    10→  LogOut, Megaphone, PiggyBank, RefreshCw, ScrollText, Send, ShieldCheck, Smartphone, Trash2, UserPlus, Users, Vote,
+    11→} from "lucide-react";
+    12→import {
+    13→  enablePush, hasDeferredInstallPrompt, promptInstall, pushState as getPushState, testPush,
+    14→  type PushState,
+    15→} from "@/lib/fc-push";
+    16→
+    17→export type SessionData = {
+    18→  user: { id: string; fullName: string; phone?: string | null; email?: string | null; role: string; hasPin: boolean };
+    19→  member: { id: string; branch: string; role: string; status: string } | null;
+    20→  device: { id: string; name: string; type: string } | null;
+    21→  unreadCount: number;
+    22→  hasPasskey: boolean;
+    23→};
+    24→
+    25→type NotificationItem = {
+    26→  id: string; univers: string; typeCode: string; priority: string;
+    27→  title: string; body: string; read: boolean; createdAt: string;
+    28→};
+    29→
+    30→type DeviceItem = {
+    31→  id: string; name: string; type: string; simulated: boolean; hasPasskey: boolean;
+    32→  hasPush: boolean; lastSeen: string; revoked: boolean; current: boolean; createdAt: string;
+    33→};
+    34→
+    35→type LogItem = { id: string; action: string; detail: string | null; createdAt: string };
+    36→
+    37→type AdminMember = {
+    38→  id: string; fullName: string; phone?: string | null; email?: string | null; role: string;
+    39→  status: string; branch: string; branchId: string; activated: boolean;
+    40→  activeCode: string | null; codeExpiresAt: string | null;
+    41→};
+    42→
+    43→const isAdminRole = (r: string) => ["SECRETAIRE", "PATRIARCHE", "CHEF_BRANCHE", "CONSEIL"].includes(r);
+    44→
+    45→export function Dashboard({ session, onLoggedOut }: { session: SessionData; onLoggedOut: () => void }) {
+    46→  const [tab, setTab] = useState<"home" | "notif" | "security" | "admin">("home");
+    47→  const isAdmin = isAdminRole(session.user.role);
+    48→
+    49→  return (
+    50→    <div className="relative z-10 mx-auto w-full max-w-md px-4 pb-28 pt-4">
+    51→      {/* En-tête */}
+    52→      <header className="mb-4 flex items-center justify-between">
+    53→        <div className="flex items-center gap-2">
+    54→          <img src="/logo-famille.png" alt="" className="h-9 w-9" />
+    55→          <div>
+    56→            <p className="fc-serif text-[17px] font-bold leading-tight text-[#1E4D2B]">Famille.Mbeutetsa</p>
+    57→            <p className="text-[11px] leading-tight text-[#8A9288]">Le registre vivant</p>
+    58→          </div>
+    59→        </div>
+    60→        <button
+    61→          onClick={() => setTab("notif")}
+    62→          className="relative rounded-full p-2 text-[#2A4A3A] hover:bg-[#2A4A3A]/5"
+    63→          aria-label="Notifications"
+    64→        >
+    65→          <Bell className="h-5 w-5" />
+    66→          {session.unreadCount > 0 && (
+    67→            <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#B91C1C] px-1 text-[10px] font-bold text-white">
+    68→              {session.unreadCount > 9 ? "9+" : session.unreadCount}
+    69→            </span>
+    70→          )}
+    71→        </button>
+    72→      </header>
+    73→
+    74→      {tab === "home" && <HomeTab session={session} goTab={setTab} />}
+    75→      {tab === "notif" && <NotifTab session={session} />}
+    76→      {tab === "security" && <SecurityTab session={session} onLoggedOut={onLoggedOut} />}
+    77→      {tab === "admin" && isAdmin && <AdminTab session={session} />}
+    78→
+    79→      {/* Navigation basse — mobile native */}
+    80→      <nav
+    81→        className="fixed inset-x-0 bottom-0 z-20 mx-auto max-w-md border-t border-[#E5DCC0] bg-[#FBF7EA]/95 backdrop-blur"
+    82→        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    83→        aria-label="Navigation principale"
+    84→      >
+    85→        <div className="grid grid-cols-4">
+    86→          <NavBtn active={tab === "home"} onClick={() => setTab("home")} icon={<Home className="h-5 w-5" />} label="Accueil" />
+    87→          <NavBtn
+    88→            active={tab === "notif"}
+    89→            onClick={() => setTab("notif")}
+    90→            icon={<Bell className="h-5 w-5" />}
+    91→            label="Alertes"
+    92→            badge={session.unreadCount}
+    93→          />
+    94→          <NavBtn active={tab === "security"} onClick={() => setTab("security")} icon={<ShieldCheck className="h-5 w-5" />} label="Sécurité" />
+    95→          {isAdmin && <NavBtn active={tab === "admin"} onClick={() => setTab("admin")} icon={<UserPlus className="h-5 w-5" />} label="Secrétariat" />}
+    96→        </div>
+    97→      </nav>
+    98→    </div>
+    99→  );
+   100→}
+   101→
+   102→function NavBtn({
+   103→  active, onClick, icon, label, badge,
+   104→}: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; badge?: number }) {
+   105→  return (
+   106→    <button
+   107→      onClick={onClick}
+   108→      className={`relative flex min-h-[56px] flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium transition-colors ${
+   109→        active ? "text-[#1E4D2B]" : "text-[#8A9288] hover:text-[#2A4A3A]"
+   110→      }`}
+   111→      aria-current={active ? "page" : undefined}
+   112→    >
+   113→      <span className="relative">
+   114→        {icon}
+   115→        {badge != null && badge > 0 && (
+   116→          <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#B91C1C] px-1 text-[9px] font-bold text-white">
+   117→            {badge > 9 ? "9+" : badge}
+   118→          </span>
+   119→        )}
+   120→      </span>
+   121→      {label}
+   122→      {active && <span className="absolute top-0 h-0.5 w-10 rounded-full bg-[#C89F62]" />}
+   123→    </button>
+   124→  );
+   125→}
+   126→
+   127→type FamilyStats = {
+   128→  members: number;
+   129→  treasury: number;
+   130→  events: number;
+   131→  branches: number;
+   132→  announcement: { title: string; body: string } | null;
+   133→};
+   134→
+   135→const UNIVERS_COMING = (label: string) =>
+   136→  `L'univers « ${label} » arrive très bientôt — registre complet, trésor Mobile Money, événements et votes. Vous serez alerté par notification 🔔`;
+   137→
+   138→function StatCard({ value, label }: { value: string; label: string }) {
+   139→  return (
+   140→    <div className="flex flex-col items-center justify-center rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] px-2 py-3 shadow-sm">
+   141→      <p className="fc-serif text-xl font-bold leading-tight text-[#1E4D2B]">{value}</p>
+   142→      <p className="text-center text-[11px] leading-tight text-[#8A9288]">{label}</p>
+   143→    </div>
+   144→  );
+   145→}
+   146→
+   147→function HomeTab({ session, goTab }: { session: SessionData; goTab: (t: "notif" | "security") => void }) {
+   148→  const [stats, setStats] = useState<FamilyStats | null>(null);
+   149→  const [recent, setRecent] = useState<NotificationItem[]>([]);
+   150→
+   151→  useEffect(() => {
+   152→    const t = setTimeout(async () => {
+   153→      const s = await api<{ stats: FamilyStats }>("/api/stats");
+   154→      if (s.ok) setStats(s.stats);
+   155→      const n = await api<{ notifications: NotificationItem[] }>("/api/notifications");
+   156→      if (n.ok) setRecent(n.notifications.filter((x) => !x.read).slice(0, 3));
+   157→    }, 0);
+   158→    return () => clearTimeout(t);
+   159→  }, []);
+   160→
+   161→  return (
+   162→    <div className="space-y-4">
+   163→      {/* Bienvenue */}
+   164→      <FcCard className="overflow-hidden">
+   165→        <div className="bg-[#1E4D2B] px-5 py-4 text-white">
+   166→          <p className="text-[13px] opacity-80">Karibu,</p>
+   167→          <p className="fc-serif text-xl font-bold">{session.user.fullName}</p>
+   168→          {session.member && (
+   169→            <p className="text-[12px] opacity-70">
+   170→              {session.member.branch} · {roleLabel(session.member.role)}
+   171→            </p>
+   172→          )}
+   173→        </div>
+   174→      </FcCard>
+   175→
+   176→      {/* Chiffres de la famille */}
+   177→      <div className="grid grid-cols-3 gap-3">
+   178→        <StatCard value={stats ? String(stats.members) : "…"} label="Membres" />
+   179→        <StatCard
+   180→          value={stats ? `${stats.treasury.toLocaleString("fr-FR")} F` : "…"}
+   181→          label="Caisse familiale"
+   182→        />
+   183→        <StatCard value={stats ? String(stats.events) : "…"} label="Événements" />
+   184→      </div>
+   185→
+   186→      {/* Raccourcis — les univers au service de la famille */}
+   187→      <div>
+   188→        <p className="mb-2 px-1 text-[11px] font-bold uppercase tracking-wide text-[#8A9288]">
+   189→          La famille
+   190→        </p>
+   191→        <div className="grid grid-cols-2 gap-3">
+   192→          <ShortcutCard icon={<Users className="h-5 w-5" />} label="Membres" onClick={() => toast.info(UNIVERS_COMING("Membres"))} />
+   193→          <ShortcutCard icon={<PiggyBank className="h-5 w-5" />} label="Trésor" onClick={() => toast.info(UNIVERS_COMING("Trésor"))} />
+   194→          <ShortcutCard icon={<CalendarDays className="h-5 w-5" />} label="Événements" onClick={() => toast.info(UNIVERS_COMING("Événements"))} />
+   195→          <ShortcutCard icon={<HeartHandshake className="h-5 w-5" />} label="Solidarité" onClick={() => toast.info(UNIVERS_COMING("Solidarité"))} />
+   196→          <ShortcutCard icon={<Vote className="h-5 w-5" />} label="Votes" onClick={() => toast.info(UNIVERS_COMING("Votes"))} />
+   197→          <ShortcutCard icon={<ScrollText className="h-5 w-5" />} label="Mémoire" onClick={() => toast.info(UNIVERS_COMING("Mémoire"))} />
+   198→        </div>
+   199→      </div>
+   200→
+   201→      {/* Annonce du conseil */}
+   202→      {stats?.announcement && (
+   203→        <FcCard className="p-4">
+   204→          <div className="mb-1.5 flex items-center gap-2">
+   205→            <Megaphone className="h-4 w-4 text-[#C89F62]" />
+   206→            <p className="text-[11px] font-bold uppercase tracking-wide text-[#8A9288]">
+   207→              Annonce du conseil
+   208→            </p>
+   209→          </div>
+   210→          <p className="text-[14px] font-semibold text-[#1E4D2B]">{stats.announcement.title}</p>
+   211→          <p className="mt-0.5 text-[13px] leading-relaxed text-[#5C6B60]">{stats.announcement.body}</p>
+   212→        </FcCard>
+   213→      )}
+   214→
+   215→      {/* Alertes non lues */}
+   216→      <FcCard className="p-4">
+   217→        <div className="mb-2 flex items-center justify-between">
+   218→          <div className="flex items-center gap-2">
+   219→            <Bell className="h-4 w-4 text-[#C89F62]" />
+   220→            <p className="text-[11px] font-bold uppercase tracking-wide text-[#8A9288]">
+   221→              Alertes récentes
+   222→            </p>
+   223→          </div>
+   224→          <button
+   225→            onClick={() => goTab("notif")}
+   226→            className="text-[12px] font-medium text-[#2A4A3A] hover:underline"
+   227→          >
+   228→            Tout voir
+   229→          </button>
+   230→        </div>
+   231→        {recent.length === 0 ? (
+   232→          <p className="py-2 text-[13px] text-[#8A9288]">
+   233→            Rien de nouveau — la famille va bien. 🌿
+   234→          </p>
+   235→        ) : (
+   236→          <ul className="space-y-2">
+   237→            {recent.map((n) => (
+   238→              <li key={n.id} className="rounded-xl border border-[#C89F62]/50 bg-[#C89F62]/10 p-3">
+   239→                <div className="flex items-start justify-between gap-2">
+   240→                  <p className="text-[13px] font-bold text-[#1E4D2B]">{n.title}</p>
+   241→                  <PriorityBadge priority={n.priority} />
+   242→                </div>
+   243→                <p className="mt-0.5 line-clamp-2 text-[12px] text-[#5C6B60]">{n.body}</p>
+   244→              </li>
+   245→            ))}
+   246→          </ul>
+   247→        )}
+   248→      </FcCard>
+   249→    </div>
+   250→  );
+   251→}
+   252→function ShortcutCard({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
+   253→  return (
+   254→    <button
+   255→      onClick={onClick}
+   256→      className="flex min-h-[72px] flex-col items-center justify-center gap-1.5 rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3 text-[13px] font-semibold text-[#1E4D2B] shadow-sm transition-all hover:shadow-md active:scale-[0.98]"
+   257→    >
+   258→      <span className="text-[#C89F62]">{icon}</span>
+   259→      {label}
+   260→    </button>
+   261→  );
+   262→}
+   263→
+   264→/* ─────────────────────────── Notifications ─────────────────────────── */
+   265→
+   266→function NotifTab({ session }: { session: SessionData }) {
+   267→  const [items, setItems] = useState<NotificationItem[]>([]);
+   268→  const [loading, setLoading] = useState(true);
+   269→  const [prefs, setPrefs] = useState<{ digestEnabled: boolean; quietStart: number; quietEnd: number; pushEnabled: boolean } | null>(null);
+   270→
+   271→  const load = useCallback(async () => {
+   272→    setLoading(true);
+   273→    const res = await api<{ notifications: NotificationItem[]; prefs: typeof prefs }>("/api/notifications");
+   274→    if (res.ok) {
+   275→      setItems(res.notifications);
+   276→      setPrefs(res.prefs);
+   277→    }
+   278→    setLoading(false);
+   279→  }, []);
+   280→
+   281→  useEffect(() => {
+   282→    const t = setTimeout(load, 0);
+   283→    return () => clearTimeout(t);
+   284→  }, [load]);
+   285→
+   286→  const markRead = async (id: string) => {
+   287→    await api("/api/notifications", { body: { action: "read", id } });
+   288→    setItems((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+   289→  };
+   290→
+   291→  const markAll = async () => {
+   292→    const res = await api<{ readAll: number }>("/api/notifications", { body: { action: "read-all" } });
+   293→    if (res.ok) {
+   294→      setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+   295→      toast.success(`${res.readAll} notification(s) marquée(s) comme lue(s)`);
+   296→    }
+   297→  };
+   298→
+   299→  const toggleDigest = async () => {
+   300→    if (!prefs) return;
+   301→    const res = await api<{ prefs: typeof prefs }>("/api/notifications", {
+   302→      body: { action: "prefs", digestEnabled: !prefs.digestEnabled },
+   303→    });
+   304→    if (res.ok) {
+   305→      setPrefs(res.prefs);
+   306→      toast.success(res.prefs.digestEnabled ? "Résumé quotidien 19h activé" : "Résumé quotidien désactivé");
+   307→    }
+   308→  };
+   309→
+   310→  return (
+   311→    <div className="space-y-4">
+   312→      <FcCard className="p-5">
+   313→        <div className="mb-3 flex items-center justify-between">
+   314→          <div className="flex items-center gap-2">
+   315→            <Bell className="h-5 w-5 text-[#C89F62]" />
+   316→            <h3 className="fc-serif text-lg font-bold text-[#1E4D2B]">Centre d&apos;alertes</h3>
+   317→          </div>
+   318→          <button
+   319→            onClick={markAll}
+   320→            className="flex items-center gap-1 text-[12px] font-medium text-[#2A4A3A] hover:underline"
+   321→          >
+   322→            <CheckCheck className="h-4 w-4" /> Tout lire
+   323→          </button>
+   324→        </div>
+   325→
+   326→        {loading ? (
+   327→          <p className="py-6 text-center text-sm text-[#8A9288]">Chargement…</p>
+   328→        ) : items.length === 0 ? (
+   329→          <p className="py-6 text-center text-sm text-[#8A9288]">
+   330→            Aucune notification pour le moment. Les événements de la famille apparaîtront ici.
+   331→          </p>
+   332→        ) : (
+   333→          <ul className="fc-scroll max-h-96 space-y-2 overflow-y-auto pr-1">
+   334→            {items.map((n) => (
+   335→              <li
+   336→                key={n.id}
+   337→                className={`rounded-2xl border p-3 transition-colors ${
+   338→                  n.read ? "border-[#E5DCC0] bg-[#FFFDF6]" : "border-[#C89F62]/50 bg-[#C89F62]/10"
+   339→                }`}
+   340→              >
+   341→                <div className="mb-1 flex items-start justify-between gap-2">
+   342→                  <p className="text-[14px] font-bold text-[#1E4D2B]">{n.title}</p>
+   343→                  <PriorityBadge priority={n.priority} />
+   344→                </div>
+   345→                <p className="text-[13px] leading-snug text-[#5C6B60]">{n.body}</p>
+   346→                <div className="mt-2 flex items-center justify-between">
+   347→                  <span className="text-[11px] text-[#8A9288]">
+   348→                    {n.univers} · {timeAgo(n.createdAt)}
+   349→                  </span>
+   350→                  {!n.read && (
+   351→                    <button
+   352→                      onClick={() => markRead(n.id)}
+   353→                      className="flex items-center gap-1 text-[11px] font-medium text-[#2A4A3A] hover:underline"
+   354→                    >
+   355→                      <Check className="h-3 w-3" /> Marquer lue
+   356→                    </button>
+   357→                  )}
+   358→                </div>
+   359→              </li>
+   360→            ))}
+   361→          </ul>
+   362→        )}
+   363→      </FcCard>
+   364→
+   365→      {prefs && (
+   366→        <FcCard className="p-5">
+   367→          <h3 className="fc-serif mb-3 text-lg font-bold text-[#1E4D2B]">Préférences</h3>
+   368→          <label className="flex items-center justify-between gap-3 text-[14px] text-[#2B3530]">
+   369→            <span>
+   370→              Résumé quotidien à 19 h
+   371→              <span className="block text-[12px] text-[#8A9288]">Anti-saturation : 1 récapitulatif au lieu de multiples alertes</span>
+   372→            </span>
+   373→            <input
+   374→              type="checkbox"
+   375→              checked={prefs.digestEnabled}
+   376→              onChange={toggleDigest}
+   377→              className="h-5 w-5 accent-[#1F5B3F]"
+   378→            />
+   379→          </label>
+   380→          <p className="mt-3 rounded-xl bg-[#3D6B52]/5 p-3 text-[12px] leading-relaxed text-[#5C6B60]">
+   381→            🔴 Les alertes <strong>critiques</strong> (décès, caisse en déficit) contournent toujours le silence
+   382→            nocturne et le résumé — conformément au règlement de la famille.
+   383→          </p>
+   384→        </FcCard>
+   385→      )}
+   386→    </div>
+   387→  );
+   388→}
+   389→
+   390→/* ─────────────────────────── Sécurité ─────────────────────────── */
+   391→
+   392→/* Carte notifications système — dans Ma sécurité */
+   393→
+   394→function PushCard() {
+   395→  const [state, setState] = useState<PushState>("default");
+   396→  const [busy, setBusy] = useState(false);
+   397→  const [isIOS] = useState(() =>
+   398→    typeof navigator !== "undefined" &&
+   399→    (/iPhone|iPad|iPod/.test(navigator.userAgent) ||
+   400→      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1))
+   401→  );
+   402→
+   403→  useEffect(() => {
+   404→    const t = setTimeout(async () => setState(await getPushState()), 0);
+   405→    return () => clearTimeout(t);
+   406→  }, []);
+   407→
+   408→  const enable = async () => {
+   409→    setBusy(true);
+   410→    const ok = await enablePush();
+   411→    if (ok) setState(await getPushState());
+   412→    setBusy(false);
+   413→  };
+   414→
+   415→  const verify = async () => {
+   416→    setBusy(true);
+   417→    const res = await testPush();
+   418→    if (res.ok) {
+   419→      toast.success("Notification envoyée — regardez votre écran, même vérrouillé 🔔");
+   420→    } else {
+   421→      toast.error(res.error || "Envoi impossible.");
+   422→    }
+   423→    setBusy(false);
+   424→  };
+   425→
+   426→  return (
+   427→    <FcCard className="p-5">
+   428→      <div className="mb-2 flex items-center gap-2">
+   429→        <Bell className="h-5 w-5 text-[#C89F62]" />
+   430→        <h3 className="fc-serif text-lg font-bold text-[#1E4D2B]">Notifications du téléphone</h3>
+   431→      </div>
+   432→      {state === "unsupported" && (
+   433→        <p className="text-[13px] leading-relaxed text-[#8A9288]">
+   434→          {isIOS
+   435→            ? "Sur iPhone : ajoutez d'abord l'app à l'écran d'accueil (Partager → Sur l'écran d'accueil), puis ouvrez-la depuis l'icône."
+   436→            : "Ce navigateur ne prend pas en charge les notifications push."}
+   437→        </p>
+   438→      )}
+   439→      {state === "denied" && (
+   440→        <p className="flex items-center gap-2 text-[13px] text-[#B91C1C]">
+   441→          <BellOff className="h-4 w-4" /> Notifications bloquées — réautorisez-les dans les réglages du site
+   442→          (icône cadenas dans la barre d'adresse).
+   443→        </p>
+   444→      )}
+   445→      {(state === "default" || state === "granted") && (
+   446→        <>
+   447→          <p className="mb-3 text-[13px] leading-relaxed text-[#5C6B60]">
+   448→            Recevez les événements de la famille même application fermée — avec le son et la vibration,
+   449→            comme WhatsApp. Gratuit et illimité.
+   450→          </p>
+   451→          <FcButton onClick={enable} disabled={busy}>
+   452→            {busy ? "Activation…" : "Activer les notifications"}
+   453→          </FcButton>
+   454→        </>
+   455→      )}
+   456→      {state === "subscribed" && (
+   457→        <>
+   458→          <p className="mb-3 flex items-center gap-1.5 text-[13px] font-medium text-[#16A34A]">
+   459→            <ShieldCheck className="h-4 w-4" /> Actives sur cet appareil — même app fermée.
+   460→          </p>
+   461→          <FcButton variant="outline" onClick={verify} disabled={busy}>
+   462→            {busy ? "Envoi…" : "Vérifier que ça sonne sur mon téléphone"}
+   463→          </FcButton>
+   464→        </>
+   465→      )}
+   466→    </FcCard>
+   467→  );
+   468→}
+   469→
+   470→/* Carte installation PWA — dans Ma sécurité */
+   471→
+   472→function InstallCard({ isIOS }: { isIOS: boolean }) {
+   473→  const [available, setAvailable] = useState(false);
+   474→
+   475→  useEffect(() => {
+   476→    const t = setTimeout(() => setAvailable(hasDeferredInstallPrompt()), 0);
+   477→    return () => clearTimeout(t);
+   478→  }, []);
+   479→
+   480→  if (isIOS) {
+   481→    return (
+   482→      <FcCard className="p-5">
+   483→        <h3 className="fc-serif mb-2 text-lg font-bold text-[#1E4D2B]">Installer l'application</h3>
+   484→        <p className="text-[13px] leading-relaxed text-[#5C6B60]">
+   485→          Sur iPhone : touchez <strong>Partager</strong> ⎋ en bas de Safari, puis
+   486→          <strong> « Sur l'écran d'accueil »</strong>. L'icône verte de la famille apparaîtra comme une vraie app.
+   487→        </p>
+   488→      </FcCard>
+   489→    );
+   490→  }
+   491→  return (
+   492→    <FcCard className="p-5">
+   493→      <h3 className="fc-serif mb-2 text-lg font-bold text-[#1E4D2B]">Installer l'application</h3>
+   494→      {available ? (
+   495→        <>
+   496→          <p className="mb-3 text-[13px] text-[#5C6B60]">
+   497→            Ajoutez l'icône verte à votre écran d'accueil — ouverture immédiate, comme WhatsApp.
+   498→          </p>
+   499→          <FcButton
+   500→            onClick={async () => {
+   501→              const res = await promptInstall();
+   502→              if (res === "accepted") toast.success("Famille.Mbeutetsa ajoutée à votre téléphone 📱");
+   503→            }}
+   504→          >
+   505→            Installer sur mon téléphone
+   506→          </FcButton>
+   507→        </>
+   508→      ) : (
+   509→        <p className="text-[13px] leading-relaxed text-[#8A9288]">
+   510→          Ou téléchargez l'application Android :{' '}
+   511→          <a
+   512→            href="/famille-mbeutetsa.apk"
+   513→            className="font-semibold text-[#2A4A3A] underline"
+   514→            target="_blank"
+   515→            rel="noreferrer"
+   516→          >
+   517→            famille-mbeutetsa.apk
+   518→          </a>
+   519→        </p>
+   520→      )}
+   521→    </FcCard>
+   522→  );
+   523→}
+   524→
+   525→function SecurityTab({ session, onLoggedOut }: { session: SessionData; onLoggedOut: () => void }) {
+   526→  const [devices, setDevices] = useState<DeviceItem[]>([]);
+   527→  const [logs, setLogs] = useState<LogItem[]>([]);
+   528→  const [loading, setLoading] = useState(true);
+   529→
+   530→  const load = useCallback(async () => {
+   531→    setLoading(true);
+   532→    const [d, l] = await Promise.all([
+   533→      api<{ devices: DeviceItem[] }>("/api/devices"),
+   534→      api<{ logs: LogItem[] }>("/api/security-log"),
+   535→    ]);
+   536→    if (d.ok) setDevices(d.devices);
+   537→    if (l.ok) setLogs(l.logs);
+   538→    setLoading(false);
+   539→  }, []);
+   540→
+   541→  useEffect(() => {
+   542→    const t = setTimeout(load, 0);
+   543→    return () => clearTimeout(t);
+   544→  }, [load]);
+   545→
+   546→  const revoke = async (dev: DeviceItem) => {
+   547→    const res = await api("/api/devices", { body: { action: "revoke", id: dev.id } });
+   548→    if (res.ok) {
+   549→      toast.success(`« ${dev.name} » n'a plus accès à votre compte.`);
+   550→      load();
+   551→    } else {
+   552→      toast.error(res.error);
+   553→    }
+   554→  };
+   555→
+   556→  const logoutWeb = async () => {
+   557→    const res = await api("/api/auth/logout", { method: "POST" });
+   558→    if (res.ok) {
+   559→      toast.success("Session fermée sur cet appareil.");
+   560→      onLoggedOut();
+   561→    }
+   562→  };
+   563→
+   564→  const [isIOS] = useState(() =>
+   565→    typeof navigator !== "undefined" &&
+   566→    (/iPhone|iPad|iPod/.test(navigator.userAgent) ||
+   567→      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1))
+   568→  );
+   569→
+   570→  return (
+   571→    <div className="space-y-4">
+   572→      <PushCard />
+   573→      <InstallCard isIOS={isIOS} />
+   574→      <FcCard className="p-5">
+   575→        <div className="mb-3 flex items-center gap-2">
+   576→          <Smartphone className="h-5 w-5 text-[#C89F62]" />
+   577→          <h3 className="fc-serif text-lg font-bold text-[#1E4D2B]">Mes appareils</h3>
+   578→        </div>
+   579→        {loading ? (
+   580→          <p className="py-4 text-center text-sm text-[#8A9288]">Chargement…</p>
+   581→        ) : (
+   582→          <ul className="fc-scroll max-h-80 space-y-2 overflow-y-auto pr-1">
+   583→            {devices.map((d) => (
+   584→              <li
+   585→                key={d.id}
+   586→                className={`flex items-center justify-between gap-3 rounded-2xl border p-3 ${
+   587→                  d.revoked ? "border-[#E5DCC0] bg-[#FFFDF6] opacity-60" : "border-[#E5DCC0] bg-[#FFFDF6]"
+   588→                }`}
+   589→              >
+   590→                <div className="min-w-0">
+   591→                  <p className="truncate text-[14px] font-semibold text-[#2B3530]">
+   592→                    {d.name}
+   593→                    {d.current && <span className="ml-2 rounded-full bg-[#3D6B52]/10 px-2 py-0.5 text-[10px] font-bold text-[#2A4A3A]">CET APPAREIL</span>}
+   594→                  </p>
+   595→                  <p className="text-[12px] text-[#8A9288]">
+   596→                    {d.hasPasskey && "🔐 biométrie · "}
+   597→                    {d.hasPush && "🔔 push · "}
+   598→                    vu {timeAgo(d.lastSeen)}
+   599→                    {d.revoked && " · révoqué"}
+   600→                  </p>
+   601→                </div>
+   602→                {!d.revoked && !d.current && (
+   603→                  <button
+   604→                    onClick={() => revoke(d)}
+   605→                    className="shrink-0 rounded-lg p-2 text-[#B91C1C] hover:bg-[#B91C1C]/10"
+   606→                    aria-label={`Révoquer ${d.name}`}
+   607→                  >
+   608→                    <Trash2 className="h-4 w-4" />
+   609→                  </button>
+   610→                )}
+   611→              </li>
+   612→            ))}
+   613→          </ul>
+   614→        )}
+   615→        <p className="mt-3 text-[12px] leading-relaxed text-[#8A9288]">
+   616→          Téléphone perdu ? Utilisez votre code de récupération ou demandez un nouveau code d&apos;accès au
+   617→          secrétaire : tous les appareils seront déconnectés automatiquement.
+   618→        </p>
+   619→      </FcCard>
+   620→
+   621→      <FcCard className="p-5">
+   622→        <div className="mb-3 flex items-center gap-2">
+   623→          <ScrollText className="h-5 w-5 text-[#C89F62]" />
+   624→          <h3 className="fc-serif text-lg font-bold text-[#1E4D2B]">Journal de sécurité</h3>
+   625→        </div>
+   626→        {loading ? (
+   627→          <p className="py-4 text-center text-sm text-[#8A9288]">Chargement…</p>
+   628→        ) : logs.length === 0 ? (
+   629→          <p className="py-4 text-center text-sm text-[#8A9288]">Aucune activité enregistrée.</p>
+   630→        ) : (
+   631→          <ul className="fc-scroll max-h-80 space-y-2 overflow-y-auto pr-1">
+   632→            {logs.map((l) => (
+   633→              <li key={l.id} className="rounded-xl border border-[#E5DCC0] bg-[#FFFDF6] p-3">
+   634→                <div className="flex items-center justify-between gap-2">
+   635→                  <p className="text-[13px] font-semibold text-[#2B3530]">{logLabel(l.action)}</p>
+   636→                  <span className="shrink-0 text-[11px] text-[#8A9288]">{timeAgo(l.createdAt)}</span>
+   637→                </div>
+   638→                {l.detail && <p className="mt-0.5 text-[12px] text-[#5C6B60]">{l.detail}</p>}
+   639→              </li>
+   640→            ))}
+   641→          </ul>
+   642→        )}
+   643→      </FcCard>
+   644→
+   645→      <FcCard className="p-5">
+   646→        <h3 className="fc-serif mb-2 text-lg font-bold text-[#1E4D2B]">Session sur cet appareil</h3>
+   647→        <p className="mb-3 text-[13px] text-[#5C6B60]">
+   648→          Sur mobile, votre session reste active comme WhatsApp — pas besoin de vous déconnecter.
+   649→          « Quitter » sert uniquement aux ordinateurs partagés.
+   650→        </p>
+   651→        <FcButton variant="outline" onClick={logoutWeb}>
+   652→          <LogOut className="h-4 w-4" /> Quitter la session (web)
+   653→        </FcButton>
+   654→      </FcCard>
+   655→    </div>
+   656→  );
+   657→}
+   658→
+   659→export function logLabel(action: string): string {
+   660→  const map: Record<string, string> = {
+   661→    ACTIVATED: "Compte activé",
+   662→    REENROLLED: "Ré-enrôlement (nouvel appareil)",
+   663→    DEVICES_REVOKED: "Anciens appareils révoqués",
+   664→    PASSKEY_REGISTERED: "Biométrie enregistrée",
+   665→    PASSKEY_LOGIN: "Connexion biométrique",
+   666→    PASSKEY_SIMULATED_LOGIN: "Connexion biométrie simulée",
+   667→    PIN_SET: "PIN défini",
+   668→    PIN_FAIL: "Tentative PIN échouée",
+   669→    PIN_LOCKED: "PIN verrouillé (30 min)",
+   670→    PIN_LOGIN: "Connexion par PIN",
+   671→    DEVICE_REVOKED: "Appareil révoqué",
+   672→    RECOVERY_USED: "Code de récupération utilisé",
+   673→    RECOVERY_FAILED: "Code de récupération invalide",
+   674→    MEMBER_PREREGISTERED: "Membre pré-enregistré",
+   675→    CODE_REGENERATED: "Code d'accès régénéré",
+   676→    PUSH_TEST_SENT: "Push de test envoyé",
+   677→    LOGOUT: "Session fermée",
+   678→    CODE_VERIFIED: "Code d'accès vérifié",
+   679→    OTP_REQUESTED: "Code de vérification demandé",
+   680→    OTP_VERIFIED: "Code de vérification validé",
+   681→    OTP_FAILED: "Code de vérification invalide",
+   682→  };
+   683→  return map[action] ?? action;
+   684→}
+   685→
+   686→/* ─────────────────────────── Secrétariat (admin) ─────────────────────────── */
+   687→
+   688→function AdminTab({ session }: { session: SessionData }) {
+   689→  const [members, setMembers] = useState<AdminMember[]>([]);
+   690→  const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
+   691→  const [loading, setLoading] = useState(true);
+   692→  const [fullName, setFullName] = useState("");
+   693→  const [phone, setPhone] = useState("");
+   694→  const [email, setEmail] = useState("");
+   695→  const [branchId, setBranchId] = useState("");
+   696→  const [role, setRole] = useState("ADULTE");
+   697→  const [busy, setBusy] = useState(false);
+   698→  const [lastCode, setLastCode] = useState<{ code: string; name: string } | null>(null);
+   699→  const [copied, setCopied] = useState(false);
+   700→
+   701→  const load = useCallback(async () => {
+   702→    setLoading(true);
+   703→    const res = await api<{ members: AdminMember[]; branches: { id: string; name: string }[] }>("/api/admin/members");
+   704→    if (res.ok) {
+   705→      setMembers(res.members);
+   706→      setBranches(res.branches);
+   707→      setBranchId((prev) => prev || res.branches[0]?.id || "");
+   708→    }
+   709→    setLoading(false);
+   710→  }, []);
+   711→
+   712→  useEffect(() => {
+   713→    const t = setTimeout(load, 0);
+   714→    return () => clearTimeout(t);
+   715→  }, [load]);
+   716→
+   717→  const preRegister = async () => {
+   718→    setBusy(true);
+   719→    try {
+   720→      const res = await api<{ member: { fullName: string }; accessCode: { code: string } }>("/api/admin/members", {
+   721→        body: { fullName, phone, email, branchId, role },
+   722→      });
+   723→      if (!res.ok) throw new Error(res.error);
+   724→      toast.success(`${res.member.fullName} pré-enregistré ✓ Code remis à usage unique.`);
+   725→      setLastCode({ code: res.accessCode.code, name: res.member.fullName });
+   726→      setFullName("");
+   727→      setPhone("");
+   728→      setEmail("");
+   729→      load();
+   730→    } catch (e) {
+   731→      toast.error(e instanceof Error ? e.message : "Pré-enregistrement impossible.");
+   732→    } finally {
+   733→      setBusy(false);
+   734→    }
+   735→  };
+   736→
+   737→  const regenerate = async (m: AdminMember) => {
+   738→    const res = await api<{ accessCode: { code: string } }>("/api/admin/members", {
+   739→      method: "PUT",
+   740→      body: { memberId: m.id },
+   741→    });
+   742→    if (res.ok) {
+   743→      toast.success(`Nouveau code généré pour ${m.fullName}`);
+   744→      setLastCode({ code: res.accessCode.code, name: m.fullName });
+   745→      load();
+   746→    } else {
+   747→      toast.error(res.error);
+   748→    }
+   749→  };
+   750→
+   751→  const copyCode = async (code: string) => {
+   752→    await navigator.clipboard.writeText(code).catch(() => {});
+   753→    setCopied(true);
+   754→    toast.success("Code copié — transmettez-le à usage unique au membre.");
+   755→    setTimeout(() => setCopied(false), 2000);
+   756→  };
+   757→
+   758→  return (
+   759→    <div className="space-y-4">
+   760→      <FcCard className="p-5">
+   761→        <div className="mb-1 flex items-center gap-2">
+   762→          <UserPlus className="h-5 w-5 text-[#C89F62]" />
+   763→          <h3 className="fc-serif text-lg font-bold text-[#1E4D2B]">Pré-enregistrer un membre</h3>
+   764→        </div>
+   765→        <p className="mb-4 text-[13px] text-[#5C6B60]">
+   766→          Remplissez ses informations : le membre n&apos;aura qu&apos;à coller son code pour un accès définitif.
+   767→        </p>
+   768→        <div className="space-y-2">
+   769→          <input
+   770→            value={fullName}
+   771→            onChange={(e) => setFullName(e.target.value)}
+   772→            placeholder="Nom complet *"
+   773→            className="h-[48px] w-full rounded-xl border border-[#C9B98A] bg-[#FFFDF6] px-4 text-[15px] focus:border-[#2A4A3A] focus:outline-none"
+   774→            aria-label="Nom complet"
+   775→          />
+   776→          <div className="grid grid-cols-2 gap-2">
+   777→            <input
+   778→              value={phone}
+   779→              onChange={(e) => setPhone(e.target.value)}
+   780→              placeholder="+237 6…"
+   781→              inputMode="tel"
+   782→              className="h-[48px] w-full rounded-xl border border-[#C9B98A] bg-[#FFFDF6] px-4 text-[15px] focus:border-[#2A4A3A] focus:outline-none"
+   783→              aria-label="Téléphone"
+   784→            />
+   785→            <input
+   786→              value={email}
+   787→              onChange={(e) => setEmail(e.target.value)}
+   788→              placeholder="Email (diaspora)"
+   789→              inputMode="email"
+   790→              className="h-[48px] w-full rounded-xl border border-[#C9B98A] bg-[#FFFDF6] px-4 text-[15px] focus:border-[#2A4A3A] focus:outline-none"
+   791→              aria-label="Email"
+   792→            />
+   793→          </div>
+   794→          <div className="grid grid-cols-2 gap-2">
+   795→            <select
+   796→              value={branchId}
+   797→              onChange={(e) => setBranchId(e.target.value)}
+   798→              className="h-[48px] w-full rounded-xl border border-[#C9B98A] bg-[#FFFDF6] px-3 text-[14px] focus:border-[#2A4A3A] focus:outline-none"
+   799→              aria-label="Branche"
+   800→            >
+   801→              {branches.map((b) => (
+   802→                <option key={b.id} value={b.id}>{b.name}</option>
+   803→              ))}
+   804→            </select>
+   805→            <select
+   806→              value={role}
+   807→              onChange={(e) => setRole(e.target.value)}
+   808→              className="h-[48px] w-full rounded-xl border border-[#C9B98A] bg-[#FFFDF6] px-3 text-[14px] focus:border-[#2A4A3A] focus:outline-none"
+   809→              aria-label="Rôle"
+   810→            >
+   811→              <option value="ADULTE">Adulte (18+)</option>
+   812→              <option value="JUNIOR">Junior (&lt;18)</option>
+   813→              <option value="CHEF_BRANCHE">Chef de branche</option>
+   814→              <option value="SECRETAIRE">Secrétaire</option>
+   815→              <option value="CONSEIL">Conseil</option>
+   816→              <option value="PATRIARCHE">Patriarche</option>
+   817→            </select>
+   818→          </div>
+   819→          <FcButton onClick={preRegister} disabled={busy || fullName.trim().length < 3}>
+   820→            {busy ? "Enregistrement…" : <><KeyRound className="h-5 w-5" /> Pré-enregistrer + générer le code</>}
+   821→          </FcButton>
+   822→        </div>
+   823→
+   824→        {lastCode && (
+   825→          <div className="mt-4 rounded-2xl border-2 border-dashed border-[#1F5B3F] bg-[#1F5B3F]/5 p-4 text-center">
+   826→            <p className="text-xs font-semibold uppercase tracking-wide text-[#5C6B60]">
+   827→              Code d&apos;accès de {lastCode.name} (valable 7 jours)
+   828→            </p>
+   829→            <div className="mt-1 flex items-center justify-center gap-3">
+   830→              <span className="fc-serif text-2xl font-bold tracking-wider text-[#1E4D2B]">{lastCode.code}</span>
+   831→              <button onClick={() => copyCode(lastCode.code)} className="rounded-lg p-2 text-[#2A4A3A] hover:bg-[#2A4A3A]/10" aria-label="Copier le code">
+   832→                {copied ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
+   833→              </button>
+   834→            </div>
+   835→          </div>
+   836→        )}
+   837→      </FcCard>
+   838→
+   839→      <FcCard className="p-5">
+   840→        <div className="mb-3 flex items-center gap-2">
+   841→          <Users className="h-5 w-5 text-[#C89F62]" />
+   842→          <h3 className="fc-serif text-lg font-bold text-[#1E4D2B]">Membres ({members.length})</h3>
+   843→          <button onClick={load} className="ml-auto rounded-lg p-1.5 text-[#2A4A3A] hover:bg-[#2A4A3A]/5" aria-label="Rafraîchir">
+   844→            <RefreshCw className="h-4 w-4" />
+   845→          </button>
+   846→        </div>
+   847→        {loading ? (
+   848→          <p className="py-4 text-center text-sm text-[#8A9288]">Chargement…</p>
+   849→        ) : (
+   850→          <ul className="fc-scroll max-h-96 space-y-2 overflow-y-auto pr-1">
+   851→            {members.map((m) => (
+   852→              <li key={m.id} className="rounded-2xl border border-[#E5DCC0] bg-[#FFFDF6] p-3">
+   853→                <div className="flex items-start justify-between gap-2">
+   854→                  <div className="min-w-0">
+   855→                    <p className="truncate text-[14px] font-bold text-[#1E4D2B]">{m.fullName}</p>
+   856→                    <p className="text-[12px] text-[#8A9288]">
+   857→                      {m.branch} · {roleLabel(m.role)} ·{" "}
+   858→                      {m.activated ? (
+   859→                        <span className="font-semibold text-[#16A34A]">actif</span>
+   860→                      ) : (
+   861→                        <span className="font-semibold text-[#D97706]">pré-enregistré</span>
+   862→                      )}
+   863→                    </p>
+   864→                    {m.activeCode && !m.activated && (
+   865→                      <p className="mt-1 inline-block rounded-lg bg-[#C89F62]/15 px-2 py-0.5 text-[12px] font-bold tracking-wider text-[#7A5B2E]">
+   866→                        {m.activeCode}
+   867→                      </p>
+   868→                    )}
+   869→                  </div>
+   870→                  {!m.activated && (
+   871→                    <button
+   872→                      onClick={() => regenerate(m)}
+   873→                      className="shrink-0 rounded-lg p-2 text-[#2A4A3A] hover:bg-[#2A4A3A]/10"
+   874→                      aria-label={`Régénérer le code de ${m.fullName}`}
+   875→                      title="Régénérer un code (téléphone perdu, code expiré)"
+   876→                    >
+   877→                      <RefreshCw className="h-4 w-4" />
+   878→                    </button>
+   879→                  )}
+   880→                </div>
+   881→              </li>
+   882→            ))}
+   883→          </ul>
+   884→        )}
+   885→      </FcCard>
+   886→
+   887→      <FcCard className="p-5">
+   888→        <div className="flex items-start gap-3">
+   889→          <LifeBuoy className="mt-0.5 h-5 w-5 shrink-0 text-[#D97706]" />
+   890→          <p className="text-[13px] leading-relaxed text-[#5C6B60]">
+   891→            <strong className="text-[#1E4D2B]">Téléphone perdu d&apos;un membre ?</strong> Régénérez simplement son
+   892→            code (bouton ↻) : dès qu&apos;il l&apos;utilisera sur son nouvel appareil, tous les anciens appareils
+   893→            seront déconnectés automatiquement.
+   894→          </p>
+   895→        </div>
+   896→      </FcCard>
+   897→
+   898→      <p className="pb-2 text-center text-[11px] text-[#8A9288]">
+   899→        Connecté en tant que {roleLabel(session.user.role)} · {deviceName()}
+   900→      </p>
+   901→    </div>
+   902→  );
+   903→}
+   904→

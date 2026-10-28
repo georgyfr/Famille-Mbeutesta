@@ -3,10 +3,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Notifications push réelles (Web Push / VAPID) — Famille.Mbeutetsa
 // Fonctionne en mode complet (API Node /api/push) et en mode démo statique
-// (Worker Cloudflare fc-push via NEXT_PUBLIC_PUSH_API).
+// (passerelle same-origin _worker.js sur pages.dev — le téléphone ne parle
+// qu'à notre domaine, jamais à workers.dev).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { api, urlBase64ToUint8Array } from "./fc-client";
+import { api, deviceName, urlBase64ToUint8Array } from "./fc-client";
 import { toast } from "sonner";
 
 export type PushState = "unsupported" | "default" | "granted" | "denied" | "subscribed";
@@ -59,15 +60,87 @@ export function initPushDebugListener(): void {
   }
 }
 
-async function subscribeToPush(): Promise<PushSubscription> {
+/* ── Clé VAPID du serveur + auto-réparation de l'abonnement ── */
+
+async function getServerPublicKey(): Promise<string> {
   const key = await api<{ publicKey: string }>("/api/push/public-key");
   if (!key.ok || !key.publicKey) throw new Error("Clé de notification indisponible.");
+  return key.publicKey;
+}
+
+function bytesToB64u(b: Uint8Array): string {
+  let bin = "";
+  for (let i = 0; i < b.length; i++) bin += String.fromCharCode(b[i]);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/** Clé publique avec laquelle l'abonnement actuel a été créé (si le navigateur l'expose). */
+function subscriptionAppKey(sub: PushSubscription): string {
+  try {
+    const k = sub.options && sub.options.applicationServerKey;
+    if (!k) return "";
+    return bytesToB64u(new Uint8Array(k as ArrayBufferLike & ArrayBuffer));
+  } catch {
+    return "";
+  }
+}
+
+async function currentSubscription(): Promise<PushSubscription | null> {
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    return reg ? await reg.pushManager.getSubscription() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function subscribeToPush(): Promise<PushSubscription> {
+  const serverKey = await getServerPublicKey();
   const reg = await navigator.serviceWorker.ready;
-  const sub = await reg.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(key.publicKey).buffer as ArrayBuffer,
+  let sub = await reg.pushManager.getSubscription();
+
+  // Auto-réparation : abonnement lié à une AUTRE clé (ex : clé factice d'un ancien
+  // déploiement, ou serveur changé) → on désabonne puis réabonne avec la clé actuelle.
+  if (sub) {
+    let usedKey = subscriptionAppKey(sub);
+    if (!usedKey) {
+      try {
+        usedKey = localStorage.getItem("fc_push_pkey") || "";
+      } catch {
+        usedKey = "";
+      }
+    }
+    if (usedKey && usedKey !== serverKey) {
+      await sub.unsubscribe().catch(() => undefined);
+      sub = null;
+    }
+  }
+
+  if (!sub) {
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(serverKey).buffer as ArrayBuffer,
+    });
+  }
+  try {
+    localStorage.setItem("fc_push_pkey", serverKey);
+  } catch {
+    /* rien */
+  }
+
+  const saved = await api("/api/push/subscribe", {
+    body: {
+      subscription: sub.toJSON(),
+      phone: (() => {
+        try {
+          return localStorage.getItem("fc_phone") || undefined;
+        } catch {
+          return undefined;
+        }
+      })(),
+      deviceName: deviceName(),
+    },
   });
-  const saved = await api("/api/push/subscribe", { body: { subscription: sub.toJSON() } });
   if (!saved.ok) throw new Error("Enregistrement de l'abonnement refusé.");
   return sub;
 }
@@ -114,8 +187,7 @@ export async function afterAuthPush(isNewUser: boolean): Promise<void> {
         toast.info("Activez les notifications dans « Ma sécurité » pour recevoir les alertes de la famille.");
       }
     } else if (Notification.permission === "granted") {
-      const reg = await navigator.serviceWorker.getRegistration();
-      const sub = reg ? await reg.pushManager.getSubscription() : null;
+      const sub = await currentSubscription();
       if (!sub) await subscribeToPush().catch(() => undefined);
     }
   } catch {
@@ -123,18 +195,67 @@ export async function afterAuthPush(isNewUser: boolean): Promise<void> {
   }
 }
 
-/** Push de bienvenue réel (serveur ou Worker) — juste après l'inscription. */
+/** Push de bienvenue réel — juste après l'inscription. */
 export async function welcomePush(): Promise<void> {
   try {
-    await api("/api/push", { body: { action: "welcome" } });
+    const subscription = await currentSubscription();
+    await api("/api/push", { body: { action: "welcome", subscription: subscription ? subscription.toJSON() : undefined } });
   } catch {
     /* silencieux */
   }
 }
 
-/** Notification de vérification — l'utilisateur confirme que ça marche sur son téléphone. */
+/** Notification de vérification — l'utilisateur confirme que ça sonne sur son téléphone. */
 export async function testPush(): Promise<{ ok: boolean; error?: string }> {
-  return api<{ ok: boolean }>("/api/push", { body: { action: "test" } });
+  const subscription = await currentSubscription();
+  if (!subscription) {
+    return { ok: false, error: "Aucun abonnement push sur cet appareil — activez les notifications d'abord." };
+  }
+  return api<{ ok: boolean }>("/api/push", {
+    body: { action: "test", subscription: subscription.toJSON() },
+  });
+}
+
+/**
+ * Diffuse un événement familial : la notification système part sur TOUS les
+ * téléphones abonnés (son + vibration, même écran verrouillé) et reste
+ * consultable dans le centre d'alertes. Jamais bloquant.
+ */
+export async function familyNotify(opts: { title: string; body: string; tag?: string }): Promise<void> {
+  try {
+    await fetch("/api/notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(opts),
+    });
+  } catch {
+    /* silencieux — l'action locale reste toujours réussie */
+  }
+}
+
+/**
+ * Repli in-app : polling léger des événements récents (60 s) — pour les
+ * navigateurs sans Web Push (iOS < 16.4, vieux WebView) et pour afficher
+ * aussi un toast quand l'app est ouverte au premier plan.
+ * Renvoie une fonction d'arrêt.
+ */
+export function startInAppNotificationPolling(onEvent: (n: { title: string; body: string }) => void): () => void {
+  let last = Date.now() - 120000;
+  const tick = async () => {
+    try {
+      const res = await fetch(`/api/notify/recent?since=${last}`, { cache: "no-store" });
+      const j = (await res.json()) as { ok?: boolean; notifications?: { title: string; body: string }[]; now?: number };
+      if (j && j.ok) {
+        last = j.now || Date.now();
+        (j.notifications || []).slice(0, 3).forEach(onEvent);
+      }
+    } catch {
+      /* silencieux */
+    }
+  };
+  const iv = setInterval(tick, 60000);
+  void tick();
+  return () => clearInterval(iv);
 }
 
 /* ── Invite d'installation PWA (différée) — utilisée par Ma sécurité ── */

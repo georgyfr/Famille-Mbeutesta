@@ -536,6 +536,39 @@ export function installDemoApi(): void {
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     if (!url.startsWith("/api/")) return originalFetch(input as RequestInfo, init);
+
+    // ── Notifications push & événements : fetch RÉEL (même origine) ──
+    // La passerelle push (_worker.js sur pages.dev / routes Node en local) gère
+    // /api/push/* et /api/notify*. Seul /api/push/subscribe est intercepté pour
+    // marquer l'appareil comme « push actif » dans la base de démo, puis relayé.
+    if (url === "/api/push/subscribe" && (init?.method || "POST").toUpperCase() === "POST") {
+      let subBody: Record<string, unknown> = {};
+      try {
+        subBody = JSON.parse(String(init?.body || "{}")) as Record<string, unknown>;
+      } catch {
+        subBody = {};
+      }
+      const sub = subBody.subscription as { endpoint?: string } | undefined;
+      const d = db();
+      if (d.session && sub?.endpoint) {
+        const dev = d.devices.find((x) => x.id === d.session!.did);
+        if (dev) {
+          dev.hasPush = true;
+          dev.pushSubscription = JSON.stringify(sub);
+        }
+        save(d);
+      }
+      // Relais réel (originalFetch passe au-dessus de ce hook) → passerelle push
+      return originalFetch("/api/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: String(init?.body || "{}"),
+      });
+    }
+    if (url === "/api/push" || url.startsWith("/api/push/") || url.startsWith("/api/notify")) {
+      return originalFetch(input as RequestInfo, init);
+    }
+
     const method = (init?.method || (init?.body ? "POST" : "GET")).toUpperCase();
     let body: Record<string, unknown> = {};
     try {

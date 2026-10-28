@@ -10,8 +10,8 @@ import {
   LogOut, Megaphone, PiggyBank, RefreshCw, ScrollText, Send, ShieldCheck, Smartphone, Trash2, UserPlus, Users, Vote,
 } from "lucide-react";
 import {
-  enablePush, hasDeferredInstallPrompt, promptInstall, pushState as getPushState, testPush,
-  type PushState,
+  enablePush, hasDeferredInstallPrompt, promptInstall, pushState as getPushState, startInAppNotificationPolling, testPush,
+  type PushState, familyNotify,
 } from "@/lib/fc-push";
 
 export type SessionData = {
@@ -45,6 +45,15 @@ const isAdminRole = (r: string) => ["SECRETAIRE", "PATRIARCHE", "CHEF_BRANCHE", 
 export function Dashboard({ session, onLoggedOut }: { session: SessionData; onLoggedOut: () => void }) {
   const [tab, setTab] = useState<"home" | "notif" | "security" | "admin">("home");
   const isAdmin = isAdminRole(session.user.role);
+
+  // Repli in-app : événements familiaux récents (60 s) — affichés même app ouverte,
+  // et pour les navigateurs sans Web Push (iOS < 16.4, vieux WebView).
+  useEffect(() => {
+    const stop = startInAppNotificationPolling((n) => {
+      toast.info(n.title, { description: n.body });
+    });
+    return stop;
+  }, []);
 
   return (
     <div className="relative z-10 mx-auto w-full max-w-md px-4 pb-28 pt-4">
@@ -723,6 +732,12 @@ function AdminTab({ session }: { session: SessionData }) {
       if (!res.ok) throw new Error(res.error);
       toast.success(`${res.member.fullName} pré-enregistré ✓ Code remis à usage unique.`);
       setLastCode({ code: res.accessCode.code, name: res.member.fullName });
+      // Événement familial → notification système sur tous les appareils abonnés
+      void familyNotify({
+        title: "Nouveau membre pré-enregistré",
+        body: `${res.member.fullName} — un code d'accès unique lui a été remis par le secrétariat.`,
+        tag: "fc-preregister",
+      });
       setFullName("");
       setPhone("");
       setEmail("");
