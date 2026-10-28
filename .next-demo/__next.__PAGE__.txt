@@ -1,9 +1,180 @@
 1:"$Sreact.fragment"
-2:I[47257,["/_next/static/chunks/2f236954d6a65e12.js"],"ClientPageRoot"]
-3:I[52683,["/_next/static/chunks/274d94dcb198914d.js","/_next/static/chunks/45136011d9e50269.js","/_next/static/chunks/6a6b0cfd0638843e.js"],"default"]
-6:I[97367,["/_next/static/chunks/2f236954d6a65e12.js"],"OutletBoundary"]
-7:"$Sreact.suspense"
-0:{"buildId":"1W6U1Be47ihVB5-pU1dE1","rsc":["$","$1","c",{"children":[["$","$L2",null,{"Component":"$3","serverProvidedParams":{"searchParams":{},"params":{},"promises":["$@4","$@5"]}}],[["$","script","script-0",{"src":"/_next/static/chunks/6a6b0cfd0638843e.js","async":true}]],["$","$L6",null,{"children":["$","$7",null,{"name":"Next.MetadataOutlet","children":"$@8"}]}]]}],"loading":null,"isPartial":false}
-4:{}
-5:"$0:rsc:props:children:0:props:serverProvidedParams:params"
-8:null
+b:I[88205,["/_next/static/chunks/3f769d1227efe736.js","/_next/static/chunks/6ba35f4e2324f9be.js","/_next/static/chunks/f1cf0c9322aa5720.js"],"MainApp"]
+c:I[97367,["/_next/static/chunks/2f236954d6a65e12.js"],"OutletBoundary"]
+d:"$Sreact.suspense"
+:HL["/logo-famille.png","image"]
+2:T23d6,
+html.fc-modern #fc-legacy{display:none!important}
+html.fc-legacy .fc-root{display:none!important}
+html.fc-legacy .fc-footer{display:none!important}
+html.fc-legacy body{background:#F4F1E9;margin:0}
+#fc-legacy{
+  font-family:'Segoe UI',Calibri,Arial,sans-serif;color:#2B3530;
+  -webkit-text-size-adjust:100%;-webkit-tap-highlight-color:rgba(42,74,58,.12);
+}
+#fc-legacy *{box-sizing:border-box;-webkit-box-sizing:border-box}
+#fc-legacy img{border:0}
+#fc-legacy button{cursor:pointer;outline:none;font-family:inherit}
+#fc-legacy input{font-family:inherit;-webkit-appearance:none;appearance:none}
+#fc-legacy p{margin:0}
+
+.l-app{max-width:480px;margin:0 auto;padding:12px 14px 96px}
+
+/* ── En-tête ── */
+.l-header{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;
+  -webkit-justify-content:space-between;justify-content:space-between;margin-bottom:12px}
+.l-brand{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center}
+.l-logo{width:42px;height:42px;border-radius:12px;background:#FBF7EA;padding:3px;
+  border:1px solid #E5DCC0;margin-right:10px}
+.l-brand-name{font-family:Georgia,'Times New Roman',serif;font-size:17px;font-weight:bold;
+  color:#1E4D2B;line-height:1.15}
+.l-brand-sub{font-size:11px;color:#8A9288;line-height:1.15}
+.l-bell{position:relative;background:none;border:0;padding:8px;font-size:20px;line-height:1}
+.l-badge{position:absolute;top:0;right:-2px;background:#B91C1C;color:#fff;font-size:10px;
+  font-weight:bold;border-radius:9px;padding:1px 5px;line-height:1.3}
+
+/* ── Cartes & champs ── */
+.l-card{background:#FBF7EA;border:1px solid #E5DCC0;border-radius:16px;padding:16px;
+  box-shadow:0 4px 14px rgba(42,74,58,.08);margin-bottom:12px}
+.l-card-title{font-family:Georgia,'Times New Roman',serif;font-size:19px;font-weight:bold;
+  color:#1E4D2B;margin-bottom:4px}
+.l-label{font-size:14px;font-weight:bold;color:#1E4D2B;margin-bottom:8px}
+.l-sub{font-size:13px;color:#5C6B60;line-height:1.45;margin-bottom:12px}
+.l-hint{font-size:11px;color:#8A9288;text-align:center;margin-top:10px;line-height:1.4}
+.l-input{width:100%;height:50px;border:1px solid #C9B98A;border-radius:12px;background:#FFFDF6;
+  font-size:16px;color:#2B3530;padding:0 14px;margin-bottom:10px}
+.l-phone-row{display:-webkit-flex;display:flex;-webkit-align-items:stretch;align-items:stretch}
+.l-phone-row .l-input{margin-bottom:0;-webkit-flex:1;flex:1}
+.l-indicatif{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;
+  background:#FFFDF6;border:1px solid #C9B98A;border-right:0;border-radius:12px 0 0 12px;
+  padding:0 12px;font-size:15px;font-weight:bold;color:#2B3530;white-space:nowrap}
+.l-phone-row .l-input{border-radius:0 12px 12px 0}
+.l-mt8{margin-top:8px}
+
+/* ── Boutons ── */
+.l-btn{display:block;width:100%;min-height:48px;background:#1F5B3F;color:#fff;border:0;
+  border-radius:12px;font-size:16px;font-weight:bold;padding:12px;margin-top:12px;
+  -webkit-appearance:none;appearance:none;text-align:center}
+.l-btn:active{background:#184A33}
+.l-btn-gold{background:#C89F62;color:#2B2416}
+.l-btn-danger{background:#B91C1C}
+.l-btn-ghost{background:none;color:#5C6B60;font-weight:normal;font-size:14px;min-height:40px}
+.l-btn[disabled]{opacity:.5}
+
+/* ── Auth : en-tête de marque ── */
+.l-auth-head{text-align:center;padding:8px 0 14px}
+.l-auth-logo{width:84px;border-radius:20px;background:#FBF7EA;padding:5px;
+  border:1px solid #E5DCC0}
+.l-auth-title{font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:bold;
+  color:#1E4D2B;margin-top:10px}
+.l-auth-sub{font-size:13px;color:#5C6B60;line-height:1.5;margin:6px auto 0;max-width:320px}
+
+/* ── Notification simulée + étapes ── */
+.l-push{background:#fff;border:1px solid #E5DCC0;border-radius:12px;padding:12px;margin:10px 0}
+.l-push-head{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;
+  margin-bottom:6px}
+.l-push-logo{width:34px;height:34px;border-radius:8px;background:#FBF7EA;padding:2px;
+  border:1px solid #E5DCC0;margin-right:8px}
+.l-push-head p{font-size:12px;color:#8A9288}
+.l-push-head b{color:#2B3530}
+.l-push-body{font-size:13px;color:#5C6B60;line-height:1.45}
+.l-push-body b{color:#1E4D2B;letter-spacing:1px}
+.l-steps{list-style:none;margin:14px 0 0;padding:0}
+.l-steps li{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;
+  margin-bottom:10px;font-size:14px;color:#8A9288}
+.l-dot{width:20px;height:20px;border-radius:50%;border:2px solid #D9D2BC;margin-right:10px;
+  -webkit-flex-shrink:0;flex-shrink:0;background:#fff;color:#fff;font-size:12px;line-height:16px;
+  text-align:center;font-weight:bold}
+.l-steps li.l-done{color:#1E4D2B}
+.l-steps li.l-done .l-dot{background:#16A34A;border-color:#16A34A}
+.l-steps li.l-run{color:#2B3530}
+.l-steps li.l-run .l-dot{border-color:#2A4A3A;border-top-color:transparent;
+  -webkit-animation:lspin 1s linear infinite;animation:lspin 1s linear infinite}
+@-webkit-keyframes lspin{to{-webkit-transform:rotate(360deg)}}
+@keyframes lspin{to{transform:rotate(360deg)}}
+.l-code{text-align:center;font-size:20px;letter-spacing:6px}
+
+/* ── Tableau de bord Lite ── */
+.l-profile-card{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center}
+.l-avatar{width:52px;height:52px;border-radius:50%;background:#2A4A3A;color:#FBF7EA;
+  font-size:22px;font-weight:bold;text-align:center;line-height:52px;margin-right:12px;
+  -webkit-flex-shrink:0;flex-shrink:0}
+.l-user-name{font-size:16px;font-weight:bold;color:#1E4D2B}
+.l-user-meta{font-size:12px;color:#8A9288}
+.l-stats{display:-webkit-flex;display:flex;margin-bottom:12px}
+.l-stat{-webkit-flex:1;flex:1;background:#FBF7EA;border:1px solid #E5DCC0;border-radius:14px;
+  padding:12px 6px;text-align:center;margin-right:10px}
+.l-stat-last{margin-right:0}
+.l-stat-num{font-size:18px;font-weight:bold;color:#1E4D2B}
+.l-stat-lbl{font-size:10px;color:#8A9288;margin-top:2px}
+.l-grid{display:-webkit-flex;display:flex;-webkit-flex-wrap:wrap;flex-wrap:wrap;
+  -webkit-justify-content:space-between;justify-content:space-between}
+.l-shortcut{width:48.5%;background:#FBF7EA;border:1px solid #E5DCC0;border-radius:14px;
+  padding:14px 10px;text-align:center;margin-bottom:10px}
+.l-shortcut-ico{font-size:24px;display:block;margin-bottom:4px}
+.l-shortcut-lbl{font-size:12px;color:#2B3530;font-weight:bold}
+.l-announce{background:#FFFDF6;border:1px solid #C89F62;border-radius:14px;padding:12px}
+.l-announce-tag{font-size:10px;font-weight:bold;color:#7A5B2E;text-transform:uppercase;
+  letter-spacing:1px;margin-bottom:4px}
+.l-announce-body{font-size:13px;color:#2B3530;line-height:1.45}
+
+/* ── Alertes ── */
+.l-notif{display:-webkit-flex;display:flex;background:#FBF7EA;border:1px solid #E5DCC0;
+  border-radius:14px;padding:12px;margin-bottom:10px}
+.l-notif-unread{background:#FFFDF6;border-color:#C89F62}
+.l-notif-ico{width:38px;height:38px;border-radius:50%;background:#2A4A3A;color:#fff;
+  text-align:center;line-height:38px;font-size:17px;margin-right:10px;-webkit-flex-shrink:0;flex-shrink:0}
+.l-notif-title{font-size:14px;font-weight:bold;color:#1E4D2B}
+.l-notif-body{font-size:12px;color:#5C6B60;line-height:1.4;margin-top:2px}
+.l-notif-time{font-size:10px;color:#8A9288;margin-top:3px}
+.l-empty{font-size:13px;color:#8A9288;text-align:center;padding:16px 0}
+
+/* ── Sécurité ── */
+.l-sec-row{display:-webkit-flex;display:flex;font-size:13px;margin-bottom:10px}
+.l-sec-key{width:38%;color:#8A9288}
+.l-sec-val{-webkit-flex:1;flex:1;color:#2B3530;font-weight:bold;word-break:break-all}
+.l-note{font-size:12px;color:#5C6B60;line-height:1.5;background:#FFFDF6;border:1px solid #E5DCC0;
+  border-radius:12px;padding:10px 12px;margin:12px 0}
+.l-copy{text-align:center;font-size:11px;color:#8A9288;padding:14px 0 4px}
+
+/* ── Navigation basse ── */
+.l-nav{position:fixed;bottom:0;left:0;right:0;max-width:480px;margin:0 auto;z-index:30;
+  display:-webkit-flex;display:flex;background:#FBF7EA;border-top:1px solid #E5DCC0;
+  padding-bottom:0;padding-bottom:env(safe-area-inset-bottom);
+  box-shadow:0 -4px 14px rgba(42,74,58,.06)}
+.l-navbtn{-webkit-flex:1;flex:1;min-height:58px;background:none;border:0;border-top:2px solid
+  transparent;font-size:11px;color:#8A9288;position:relative;padding:7px 0 4px;font-weight:bold}
+.l-navbtn span{display:block;font-size:20px;font-style:normal;margin-bottom:2px}
+.l-navbtn.l-active{color:#1E4D2B;border-top-color:#C89F62}
+.l-navbadge{position:absolute;top:4px;right:18%;background:#B91C1C;color:#fff;font-size:9px;
+  font-weight:bold;border-radius:8px;padding:1px 5px;font-style:normal}
+
+/* ── Toast ── */
+.l-toast{position:fixed;left:14px;right:14px;bottom:76px;max-width:452px;margin:0 auto;
+  background:#2A4A3A;color:#fff;border-radius:12px;padding:12px 14px;font-size:14px;
+  line-height:1.4;z-index:40;display:none;opacity:0;
+  box-shadow:0 6px 20px rgba(0,0,0,.25);
+  -webkit-transition:opacity .25s;transition:opacity .25s}
+.l-toast.l-err{background:#B91C1C}
+.l-toast.l-ok{background:#16A34A}
+.l-toast.l-show{display:block;opacity:1}
+
+@media (min-width:900px){
+  html.fc-legacy body{background:#EFE9DA}
+  .l-app{padding-top:24px}
+}
+0:{"buildId":"fk50mt6XXt1ty1ugEA1x7","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"fc-bg-page flex min-h-screen flex-col","children":[["$","main",null,{"className":"flex flex-1 flex-col","children":[["$","div",null,{"id":"fc-legacy","children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"$2"}}],"$L3"]}],"$L4"]}],"$L5"]}],["$L6"],"$L7"]}],"loading":null,"isPartial":false}
+3:["$","div",null,{"className":"l-app","children":[["$","header",null,{"className":"l-header","children":[["$","div",null,{"className":"l-brand","children":[["$","img",null,{"src":"/logo-famille.png","alt":"Armoiries de la famille Mbeutetsa","className":"l-logo"}],["$","div",null,{"children":[["$","p",null,{"className":"l-brand-name","children":"Famille.Mbeutetsa"}],["$","p",null,{"className":"l-brand-sub","children":"Le registre vivant"}]]}]]}],["$","button",null,{"id":"l-bell","type":"button","className":"l-bell","aria-label":"Notifications","children":["🔔",["$","span",null,{"id":"l-bell-badge","className":"l-badge","style":{"display":"none"},"children":"0"}]]}]]}],["$","div",null,{"id":"l-auth","children":[["$","div",null,{"className":"l-auth-head","children":[["$","img",null,{"src":"/logo-famille.png","alt":"","className":"l-auth-logo"}],["$","p",null,{"className":"l-auth-title","children":"Bienvenue 🌳"}],["$","p",null,{"className":"l-auth-sub","children":"Votre numéro de téléphone est votre identifiant — comme sur WhatsApp. Aucun mot de passe à retenir."}]]}],["$","div",null,{"id":"l-step-phone","className":"l-card","children":[["$","p",null,{"className":"l-label","children":"Votre numéro de téléphone"}],["$","p",null,{"className":"l-sub","children":"Nous vous envoyons une notification pour vérifier qu'il s'agit bien de votre téléphone."}],["$","div",null,{"className":"l-phone-row","children":[["$","span",null,{"className":"l-indicatif","children":"🇨🇲 +237"}],["$","input",null,{"id":"l-phone","className":"l-input","type":"tel","placeholder":"6 91 23 45 67","maxLength":13,"autoComplete":"tel-national","aria-label":"Numéro de téléphone"}]]}],["$","button",null,{"id":"l-btn-phone","type":"button","className":"l-btn","children":"🔔 Recevoir la notification"}],["$","p",null,{"className":"l-hint","children":"Format camerounais — 9 chiffres commençant par 6 (mobile) ou 2 (fixe)."}]]}],["$","div",null,{"id":"l-step-verify","className":"l-card","style":{"display":"none"},"children":[["$","p",null,{"className":"l-label","children":"Vérification du numéro"}],["$","p",null,{"className":"l-sub","children":["Notification envoyée au ",["$","b",null,{"id":"l-verify-phone","children":"+237 …"}]]}],["$","div",null,{"id":"l-push","className":"l-push","style":{"display":"none"},"children":[["$","div",null,{"className":"l-push-head","children":[["$","img",null,{"src":"/logo-famille.png","alt":"","className":"l-push-logo"}],["$","p",null,{"children":[["$","b",null,{"children":"Famille.Mbeutetsa"}]," · à l'instant"]}]]}],["$","p",null,{"className":"l-push-body","children":["Votre code de vérification est ",["$","b",null,{"id":"l-push-code","children":"······"}],". Ne le partagez avec personne."]}]]}],["$","ol",null,{"className":"l-steps","aria-label":"Progression de la vérification","children":[["$","li",null,{"id":"l-st-1","children":[["$","span",null,{"className":"l-dot"}]," ",["$","span",null,{"children":"Notification envoyée sur votre téléphone"}]]}],["$","li",null,{"id":"l-st-2","children":[["$","span",null,{"className":"l-dot"}]," ",["$","span",null,{"children":"Vérification du numéro sur cet appareil…"}]]}],["$","li",null,{"id":"l-st-3","children":[["$","span",null,{"className":"l-dot"}]," ",["$","span",null,{"children":"Lecture de la notification…"}]]}]]}],["$","button",null,{"id":"l-btn-verify","type":"button","className":"l-btn l-btn-ghost","children":"Saisir le code manuellement"}],["$","div",null,{"id":"l-manual","style":{"display":"none"},"children":[["$","input",null,{"id":"l-code","className":"l-input l-code l-mt8","type":"tel","placeholder":"● ● ● ● ● ●","maxLength":6,"autoComplete":"one-time-code","aria-label":"Code de vérification à 6 chiffres"}],["$","button",null,{"id":"l-btn-code","type":"button","className":"l-btn","children":"🛡️ Confirmer mon numéro"}]]}]]}],["$","div",null,{"id":"l-step-profile","className":"l-card","style":{"display":"none"},"children":[["$","p",null,{"className":"l-label","children":"Comment vous appelez-vous ?"}],["$","p",null,{"className":"l-sub","children":["Numéro ",["$","b",null,{"id":"l-profile-phone","children":"+237 …"}]," vérifié ✓. Indiquez votre prénom et votre nom — vous entrerez immédiatement au tableau de bord."]}],["$","input",null,{"id":"l-firstname","className":"l-input","type":"text","placeholder":"Prénom (ex : Jean)","autoComplete":"given-name","aria-label":"Prénom"}],["$","input",null,{"id":"l-lastname","className":"l-input","type":"text","placeholder":"Nom (ex : Mbeutetsa)","autoComplete":"family-name","aria-label":"Nom"}],["$","button",null,{"id":"l-btn-profile","type":"button","className":"l-btn","children":"✓ Créer mon compte"}]]}]]}],"$L8","$L9","$La"]}]
+4:["$","div",null,{"className":"fc-root flex flex-1 flex-col","children":["$","$Lb",null,{}]}]
+5:["$","footer",null,{"className":"fc-footer mt-auto border-t border-[#E5DCC0] bg-[#1E4D2B] text-center text-[12px] text-[#FBF7EA]/80","style":{"paddingBottom":"max(0.75rem, env(safe-area-inset-bottom))"},"children":["$","p",null,{"className":"pt-3","children":"Famille.Mbeutetsa © 2026 — Le registre vivant des grandes familles"}]}]
+6:["$","script","script-0",{"src":"/_next/static/chunks/f1cf0c9322aa5720.js","async":true}]
+7:["$","$Lc",null,{"children":["$","$d",null,{"name":"Next.MetadataOutlet","children":"$@e"}]}]
+8:["$","div",null,{"id":"l-dash","style":{"display":"none"},"children":[["$","div",null,{"id":"l-tab-home","children":[["$","div",null,{"className":"l-card l-profile-card","children":[["$","div",null,{"id":"l-user-initial","className":"l-avatar","children":"M"}],["$","div",null,{"children":[["$","p",null,{"id":"l-user-name","className":"l-user-name","children":"Membre Mbeutetsa"}],["$","p",null,{"id":"l-user-meta","className":"l-user-meta","children":"Membre · Branche Douala"}]]}]]}],["$","div",null,{"className":"l-stats","children":[["$","div",null,{"className":"l-stat","children":[["$","p",null,{"className":"l-stat-num","children":"52"}],["$","p",null,{"className":"l-stat-lbl","children":"Membres"}]]}],["$","div",null,{"className":"l-stat","children":[["$","p",null,{"className":"l-stat-num","children":"245 000 F"}],["$","p",null,{"className":"l-stat-lbl","children":"Caisse familiale"}]]}],["$","div",null,{"className":"l-stat l-stat-last","children":[["$","p",null,{"className":"l-stat-num","children":"3"}],["$","p",null,{"className":"l-stat-lbl","children":"Événements"}]]}]]}],["$","p",null,{"className":"l-label","children":"Raccourcis"}],["$","div",null,{"className":"l-grid","style":{"marginBottom":"12px"},"children":[["$","button",null,{"type":"button","className":"l-shortcut","data-toast":"Registre des membres — disponible dans la version complète.","children":[["$","span",null,{"className":"l-shortcut-ico","aria-hidden":"true","children":"👥"}],["$","span",null,{"className":"l-shortcut-lbl","children":"Membres"}]]}],["$","button",null,{"type":"button","className":"l-shortcut","data-toast":"Trésor familial — disponible dans la version complète.","children":[["$","span",null,{"className":"l-shortcut-ico","aria-hidden":"true","children":"💰"}],["$","span",null,{"className":"l-shortcut-lbl","children":"Trésor"}]]}],["$","button",null,{"type":"button","className":"l-shortcut","data-toast":"Événements familiaux — disponible dans la version complète.","children":[["$","span",null,{"className":"l-shortcut-ico","aria-hidden":"true","children":"📅"}],["$","span",null,{"className":"l-shortcut-lbl","children":"Événements"}]]}],["$","button",null,{"type":"button","className":"l-shortcut","data-toast":"Solidarité & entraide — disponible dans la version complète.","children":[["$","span",null,{"className":"l-shortcut-ico","aria-hidden":"true","children":"🤝"}],["$","span",null,{"className":"l-shortcut-lbl","children":"Solidarité"}]]}],["$","button",null,{"type":"button","className":"l-shortcut","data-toast":"Votes du Conseil — disponible dans la version complète.","children":[["$","span",null,{"className":"l-shortcut-ico","aria-hidden":"true","children":"🗳️"}],["$","span",null,{"className":"l-shortcut-lbl","children":"Votes"}]]}],["$","button",null,{"type":"button","className":"l-shortcut","data-toast":"Mémoire familiale — disponible dans la version complète.","children":[["$","span",null,{"className":"l-shortcut-ico","aria-hidden":"true","children":"📜"}],["$","span",null,{"className":"l-shortcut-lbl","children":"Mémoire"}]]}]]}],["$","div",null,{"className":"l-announce","children":[["$","p",null,{"className":"l-announce-tag","children":"📢 Annonce du Conseil"}],["$","p",null,{"className":"l-announce-body","children":"Réunion familiale dimanche à 15h chez le Patriarche — présence des chefs de branche requise."}]]}]]}],["$","div",null,{"id":"l-tab-notif","style":{"display":"none"},"children":[["$","div",null,{"className":"l-card","children":[["$","p",null,{"className":"l-card-title","children":"Alertes familiales"}],["$","p",null,{"className":"l-sub","children":"Vos notifications — bienvenue, connexions, annonces du Conseil."}],["$","button",null,{"id":"l-btn-readall","type":"button","className":"l-btn l-btn-ghost","style":{"marginTop":0},"children":"✓ Tout marquer comme lu"}]]}],["$","div",null,{"id":"l-notif-list"}]]}],["$","div",null,{"id":"l-tab-security","style":{"display":"none"},"children":[["$","div",null,{"className":"l-card","children":[["$","p",null,{"className":"l-card-title","children":"Sécurité & session"}],["$","div",null,{"className":"l-sec-row","children":[["$","span",null,{"className":"l-sec-key","children":"Membre"}],["$","span",null,{"id":"l-sec-name","className":"l-sec-val","children":"—"}]]}],["$","div",null,{"className":"l-sec-row","children":[["$","span",null,{"className":"l-sec-key","children":"Téléphone"}],["$","span",null,{"id":"l-sec-phone","className":"l-sec-val","children":"—"}]]}],["$","div",null,{"className":"l-sec-row","children":[["$","span",null,{"className":"l-sec-key","children":"Appareil"}],["$","span",null,{"id":"l-sec-device","className":"l-sec-val","children":"—"}]]}],["$","div",null,{"className":"l-sec-row","children":["$Lf","$L10"]}]]}],"$L11","$L12","$L13"]}]]}]
+9:["$","nav",null,{"className":"l-nav","id":"l-nav","aria-label":"Navigation principale","children":[["$","button",null,{"type":"button","data-tab":"home","className":"l-navbtn l-active","children":[["$","span",null,{"aria-hidden":"true","children":"🏠"}],"Accueil"]}],["$","button",null,{"type":"button","data-tab":"notif","className":"l-navbtn","children":[["$","span",null,{"aria-hidden":"true","children":"🔔"}],"Alertes",["$","i",null,{"id":"l-nav-badge","className":"l-navbadge","style":{"display":"none"},"children":"0"}]]}],["$","button",null,{"type":"button","data-tab":"security","className":"l-navbtn","children":[["$","span",null,{"aria-hidden":"true","children":"🛡️"}],"Sécurité"]}]]}]
+a:["$","div",null,{"id":"l-toast","className":"l-toast","role":"status","aria-live":"polite"}]
+e:null
+f:["$","span",null,{"className":"l-sec-key","children":"Session ouverte"}]
+10:["$","span",null,{"id":"l-sec-since","className":"l-sec-val","children":"—"}]
+11:["$","div",null,{"className":"l-note","children":["📱 ",["$","b",null,{"children":"Session permanente"}]," — comme sur WhatsApp, l'application s'ouvre directement sur cet appareil. La déconnexion est volontaire uniquement ; en cas de changement de téléphone, réinsérez le même numéro pour retrouver votre compte."]}]
+12:["$","button",null,{"id":"l-btn-logout","type":"button","className":"l-btn l-btn-danger","children":"Se déconnecter"}]
+13:["$","p",null,{"className":"l-copy","children":"Famille.Mbeutetsa © 2026 · Cameroun — Mode compatibilité anciens téléphones"}]

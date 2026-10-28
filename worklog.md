@@ -765,3 +765,30 @@ Stage Summary:
 - Changement de téléphone : réinsérer le même numéro → compte retrouvé (vérifié) ; nouveau numéro pour un même accès : reporté (décision utilisateur antérieure)
 - Limites connues : en mode Lite l'inscription est simulée localement (pas d'API sur les vieux navigateurs) ; artefact console bénin si l'on navigue du hash legacy vers moderne sans reload (QA uniquement, impossible en usage réel)
 - Prochaines étapes possibles : U1 registre + U4 finances sur le design system, déploiement de la version fonctionnelle (Workers + D1), test réel sur un téléphone Android 5/iOS 9 physique
+
+---
+Task ID: 12
+Agent: Z.ai Code (orchestrateur)
+Task: Livraison du lien de téléchargement — reconstruction/redéploiement de la version mobile 2015-compatible + génération d'un APK signé téléchargeable (0 FCFA)
+
+Work Log:
+- Constat : la version en ligne datait de la Task 10 (fc-lite.js en 404, gate ES5 absent) — la compatibilité 2015 de la Task 11 n'était pas encore déployée
+- .env.cloudflare restauré (token cfut_…, Account ID ead74f…) ; token vérifié actif via API (expire 2027-10-27)
+- Rebuild statique : bash scripts/build-cloudflare.sh (stash API → DEMO_BUILD=1 NEXT_PUBLIC_DEMO_MODE=1 next build → restauration) → .next-demo 4,6 Mo avec fc-lite.js + markup fc-legacy vérifiés
+- APK Android généré gratuitement via PWABuilder CloudAPK (POST /generateApkZip, options dans scripts/apk-options.json) : packageId cm.famille.mbeutetsa, v1.0.0 (code 1), fallbackType webview (fonctionne sans asset-links, plein écran), notifications activées, orientation portrait, thème vert/or, icônes 512 + maskable
+- Sortie : Famille.Mbeutetsa.apk (2,99 Mo, signé) + Famille.Mbeutetsa.aab (Play Store) + signing.keystore + assetlinks.json (empreinte SHA-256 9E:58:54:DC:…)
+- APK copié dans .next-demo/famille-mbeutetsa.apk (type MIME application/vnd.android.package-archive servi par Pages) ; assetlinks.json dans .next-demo/.well-known/ ; clé de signature + AAB conservés LOCALEMENT dans secrets-android/ (NON publiés)
+- Déploiement : bunx wrangler@4 pages deploy .next-demo --project-name famille-mbeutetsa --branch main (48 fichiers, 2,5 s)
+- Vérifications curl en prod : / contient fc-legacy (26) + fc-lite.js (2) ✓ ; /fc-lite.js 200 (13,7 Ko) ✓ ; /famille-mbeutetsa.apk 200 (2 998 005 o, bon MIME) ✓ ; /.well-known/assetlinks.json 200 ✓ ; /familleconnect-interfaces.zip 200 ✓
+- Vérification Agent Browser EN LIGNE (390×844) : MODERNE = accueil → « Continuer avec mon numéro » → numéro 691 55 44 33 → toast « Notification de vérification envoyée au +237 6 91 55 44 33 » → auto-vérification appareil → page nom → « Blaise Mbeutetsa » → dashboard + toast « Bienvenue dans la famille, Blaise ! 🌳 » + bannière Installer + nav basse ; RELOAD → dashboard direct (session persistante) ✓
+- LEGACY (#fc-force-legacy) EN LIGNE : UI Lite ES5 → numéro 677 88 99 00 → notification → auto-vérif (4,5 s) → nom « Sylvie Mbeutetsa » → dashboard Lite complet (52 membres, 245 000 F, 3 événements, 6 raccourcis, annonce du conseil, toast bienvenue, badge 3 alertes) ; capture shots/live-legacy-dashboard.png ✓
+- Serveur dev local intègre (200, 0 erreur)
+
+Stage Summary:
+- LIEN DE TÉLÉCHARGEMENT APK : https://famille-mbeutetsa.pages.dev/famille-mbeutetsa.apk (Android 4.4+/5.x 2015 → aujourd'hui, 3 Mo, signé cm.famille.mbeutetsa v1.0.0)
+- LIEN APPLICATION (PWA installable, tous téléphones y compris iOS) : https://famille-mbeutetsa.pages.dev
+- LIEN ZIP interfaces (pack design) : https://famille-mbeutetsa.pages.dev/familleconnect-interfaces.zip
+- La version en ligne inclut désormais la compatibilité 2015 (gate ES5 → version Lite automatique sur Android 5/iOS 9/WebView anciens)
+- À l'intérieur de l'APK sur vieux WebView : gate ES5 → version Lite ; sur Android récent : app complète + notifications push
+- secrets-android/ : signing.keystore + mots de passe + AAB (indispensables pour mises à jour APK et futur Play Store — ne jamais publier)
+- Build APK reproductible : curl -X POST https://pwabuilder-cloudapk.azurewebsites.net/generateApkZip -d @scripts/apk-options.json

@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "cm.famille.mbeutetsa",
+        "sha256_cert_fingerprints": ["9E:58:54:DC:82:0D:A5:6E:9B:CB:34:10:18:1E:51:36:59:4F:1D:5C:03:87:99:6F:7B:08:FF:D1:5E:AD:BE:4F"]
+      }
+    }]
