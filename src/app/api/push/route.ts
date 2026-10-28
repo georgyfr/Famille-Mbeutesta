@@ -15,8 +15,14 @@ export async function POST(req: NextRequest) {
   if (!result) return apiError("Session requise.", 401);
   const body = await req.json().catch(() => ({}));
 
+  // Abonnement : celui de l'appareil (Prisma) — ou fourni dans la requête (repli,
+  // utile si le client vient de s'abonner et que la base n'est pas encore à jour).
   const device = await db.device.findUnique({ where: { id: result.session.did } });
-  if (!device?.pushSubscription) {
+  const bodySub = body.subscription as { endpoint?: string; keys?: unknown } | undefined;
+  const subJson =
+    device?.pushSubscription ||
+    (bodySub?.endpoint && bodySub?.keys ? JSON.stringify(bodySub) : null);
+  if (!subJson) {
     return apiError("Aucun abonnement push sur cet appareil. Activez les notifications d'abord.", 400);
   }
   if (!VAPID_PUBLIC || !VAPID_PRIVATE) {
@@ -40,7 +46,7 @@ export async function POST(req: NextRequest) {
         };
 
   try {
-    await webpush.sendNotification(JSON.parse(device.pushSubscription), JSON.stringify(payload), {
+    await webpush.sendNotification(JSON.parse(subJson), JSON.stringify(payload), {
       urgency: "high",
       TTL: 7 * 86400,
     });

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { familyNotify } from "@/lib/fc-push";
 import { api, deviceName } from "@/lib/fc-client";
 import { afterAuthPush } from "@/lib/fc-push";
 import { FcButton, FcCard, FcInput, FcSpinner, FcWatermark } from "./ui";
@@ -183,6 +184,11 @@ function PhoneScreen({
         body: { action: "request", phone: digits, deviceName: deviceName() },
       });
       if (!res.ok) throw new Error(res.error);
+      try {
+        localStorage.setItem("fc_phone", "+237" + digits);
+      } catch {
+        /* rien */
+      }
       toast.success(`Notification de vérification envoyée au ${prettyPhone(digits)}`, {
         description: "Consultez vos notifications — l'application vérifie ensuite votre appareil.",
       });
@@ -451,6 +457,12 @@ function ProfileScreen({
       localStorage.setItem("fc_name", res.user.fullName);
       toast.success(`Bienvenue dans la famille, ${res.user.fullName.split(" ")[0]} ! 🌳`);
       void afterAuthPush(true);
+      // Événement familial → notification système sur tous les appareils abonnés
+      void familyNotify({
+        title: "Nouveau membre inscrit 🌳",
+        body: `${res.user.fullName} vient de rejoindre Famille.Mbeutetsa.`,
+        tag: "fc-register",
+      });
       onReady(res.user.fullName);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Inscription impossible.");

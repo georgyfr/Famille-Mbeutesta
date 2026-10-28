@@ -1,3 +1,4 @@
+import { DevAccess } from "@/components/fc/dev-access";
 import { LegacyApp } from "@/components/fc/legacy-app";
 import { MainApp } from "@/components/fc/main-app";
 
@@ -27,6 +28,9 @@ export default function Page() {
           Famille.Mbeutetsa © 2026 — Le registre vivant des grandes familles
         </p>
       </footer>
+
+      {/* Accès développeur — point discret + Ctrl+Shift+D, bureau uniquement */}
+      <DevAccess />
     </div>
   );
 }

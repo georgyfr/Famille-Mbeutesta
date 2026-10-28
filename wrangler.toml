@@ -1,0 +1,21 @@
+# Famille.Mbeutetsa — configuration Cloudflare Pages (wrangler v4)
+# Déploiement : bunx wrangler@4 pages deploy .next-demo --project-name famille-mbeutetsa --branch main
+# Le dossier .next-demo contient le site statique + _worker.js (passerelle push same-origin).
+
+name = "famille-mbeutetsa"
+pages_build_output_dir = ".next-demo"
+compatibility_date = "2024-09-23"
+
+[vars]
+# Moteur d'envoi push (clés VAPID + WebCrypto) — joignable uniquement depuis
+# le réseau interne Cloudflare (le téléphone ne l'appelle jamais directement).
+PUSH_ENGINE_URL = "https://fc-push.famille-mbeutetsa.workers.dev"
+
+[[kv_namespaces]]
+# Namespace KV du worker fc-push — partagé : abonnements + événements récents
+binding = "PUSH_SUBS"
+id = "9b41fcb029524a22b65e155d3796243b"
+
+# Secrets (à poser une fois) :
+#   bunx wrangler@4 pages secret put DEV_TOKEN_SHA --project-name famille-mbeutetsa
+#   (valeur : SHA-256 hex du code développeur — ae46f1f7…a696)

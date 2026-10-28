@@ -235,7 +235,9 @@ export default {
         do {
           const list = await env.PUSH_SUBS.list({ cursor, prefix: "" });
           for (const k of list.keys) {
-            if (k.name.startsWith("rl:") || k.name.startsWith("admin:")) continue;
+            // Uniquement les abonnements (clé = sha256 hex de l'endpoint) ;
+            // ignorer les clés système (rl:, admin:, ntf:*, etc.)
+            if (!/^[0-9a-f]{64}$/.test(k.name)) continue;
             const raw = await env.PUSH_SUBS.get(k.name);
             if (!raw) continue;
             try {
