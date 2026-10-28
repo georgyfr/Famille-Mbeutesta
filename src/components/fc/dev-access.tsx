@@ -2,8 +2,10 @@
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Accès DÉVELOPPEUR — Famille.Mbeutetsa
-// • Visible UNIQUEMENT sur navigateur de bureau (jamais sur mobile) : un point
-//   discret en bas à droite + raccourci clavier Ctrl+Shift+D.
+// • Visible UNIQUEMENT sur navigateur de bureau (jamais sur mobile) :
+//   un bouton fantôme discret en bas à droite, un lien « Développeur » dans le
+//   pied de page, et le raccourci clavier Ctrl+Shift+D.
+//   (La sécurité réelle reste le code secret — la discrétion n'est qu'ergonomique.)
 // • Protégé par un code secret connu du seul développeur ; le code n'est
 //   jamais stocké en clair : on compare son SHA-256.
 // • Permet de visualiser toutes les données (base de démo, appareils push,
@@ -73,12 +75,15 @@ export function DevAccess() {
       if (e.key === "Escape") setOpen(false);
     };
     const onResize = () => setDesktop(isDesktopBrowser());
+    const onOpenReq = () => setOpen(true);
     window.addEventListener("keydown", onKey);
     window.addEventListener("resize", onResize);
+    window.addEventListener("fc-dev-open", onOpenReq as EventListener);
     return () => {
       clearTimeout(t);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("resize", onResize);
+      window.removeEventListener("fc-dev-open", onOpenReq as EventListener);
     };
   }, []);
 
@@ -112,13 +117,16 @@ export function DevAccess() {
 
   return (
     <>
-      {/* Point discret — présent uniquement sur navigateur de bureau */}
+      {/* Bouton fantôme discret — présent uniquement sur navigateur de bureau.
+          28 px, opacité 35 % : repérable par le développeur, ignoré des autres. */}
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-2 right-2 z-[70] h-2.5 w-2.5 rounded-full bg-neutral-500/25 transition hover:scale-125 hover:bg-neutral-600/70 focus:outline-none"
-        title="Accès développeur"
+        className="fixed bottom-3 right-3 z-[70] flex h-7 w-7 items-center justify-center rounded-full bg-[#1E4D2B]/10 text-[#1E4D2B]/40 shadow-sm backdrop-blur-[2px] transition hover:scale-110 hover:bg-[#1E4D2B]/20 hover:text-[#1E4D2B] focus:outline-none"
+        title="Accès développeur (Ctrl+Shift+D)"
         aria-label="Accès développeur"
-      />
+      >
+        <Terminal className="h-3.5 w-3.5" />
+      </button>
 
       {open && (
         <div
@@ -225,6 +233,33 @@ export function DevAccess() {
           </div>
         </div>
       )}
+    </>
+  );
+}
+
+/**
+ * Lien « Développeur » du pied de page — desktop uniquement (renvoie null sur
+ * mobile). Ouvre la console via l'événement `fc-dev-open` écouté par <DevAccess/>.
+ */
+export function DevFooterLink() {
+  const [desktop, setDesktop] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setDesktop(isDesktopBrowser()), 0);
+    return () => clearTimeout(t);
+  }, []);
+  if (!desktop) return null;
+  return (
+    <>
+      <span aria-hidden="true" className="mx-2 opacity-40">·</span>
+      <button
+        type="button"
+        onClick={() => window.dispatchEvent(new CustomEvent("fc-dev-open"))}
+        className="text-[10px] uppercase tracking-wider opacity-40 transition hover:opacity-100 hover:underline focus:outline-none"
+        title="Espace réservé au développeur du site (Ctrl+Shift+D)"
+        aria-label="Accès développeur"
+      >
+        Développeur
+      </button>
     </>
   );
 }

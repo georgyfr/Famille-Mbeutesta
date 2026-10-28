@@ -866,3 +866,21 @@ Stage Summary:
 - Code développeur : MbeutetsaDev2025! (hash SHA-256 ae46f1f7…a696 ; serveurs vérifient le hash via secret Pages DEV_TOKEN_SHA)
 - FCM : sous Android/Chrome la livraison passe DÉJÀ par fcm.googleapis.com (endpoints des abonnements) — Web Push (W3C) + VAPID auto-hébergé = 0 FCFA sans compte ; procédure FCM SDK optionnelle communiquée à l'utilisateur
 - Reproductible : bash scripts/build-cloudflare.sh (build statique + _worker.js) → bunx wrangler@4 pages deploy .next-demo --project-name famille-mbeutetsa --branch main
+
+---
+Task ID: 16
+Agent: Z.ai Code (orchestrateur)
+Task: Accès développeur introuvable (retour utilisateur + capture ibb.co/n8LybgFH) — rendu trouvable, toujours invisible sur mobile
+
+Work Log:
+- Constat (capture utilisateur, Edge desktop 1907 px sur pages.dev) : la console dev existait (Task 15) mais l'unique point d'entrée était un point de 10 px opacité 25 % + Ctrl+Shift+D — même le développeur ne le trouvait pas
+- dev-access.tsx : bouton fantôme remplacé par un bouton Terminal 28 px (bg #1E4D2B/10, icône 40 %, hover accentué, title « Accès développeur (Ctrl+Shift+D) ») ; écoute de l'événement window `fc-dev-open` pour ouverture à distance ; nouvel export <DevFooterLink/> — lien « · DÉVELOPPEUR » 10 px opacité 40 % (hover 100 % + souligné) dans le pied de page, desktop uniquement (même isDesktopBrowser : UA non-mobile + min-width 1024), null sur mobile
+- page.tsx : <DevFooterLink/> intégré dans le <footer> après la signature ; .env.cloudflare restauré (token cfut_…9fc605de, échéance 2027-10-27)
+- Lint : 0 erreur nouvelle (12 no-this-alias préexistantes fc-lite.js minifié)
+- Déploiement : bash scripts/build-cloudflare.sh (18 fichiers uploadés) → wrangler pages deploy → https://famille-mbeutetsa.pages.dev
+- Vérifications Agent Browser PRODUCTION : desktop 1440×900 → lien footer true + 2 boutons aria « Accès développeur » + login MbeutetsaDev2025! → « Accès développeur ouvert. » + 4 onglets (Aperçu : mode Démo statique détecté, 52 membres / 245 000 FCFA / 3 événements / 4 branches) ; mobile 390×844 → boutonsDevMobile:0, footer sans le lien ✓ ; passerelle push intacte (/api/push/public-key → vraie VAPID, /api/notify/recent → 200) ; APK v1.1.0 → 200 + MIME package-archive ✓
+
+Stage Summary:
+- L'accès développeur est MAINTENANT TROUVABLE sur PC : 3 portes d'entrée — lien « Développeur » dans le pied de page, bouton Terminal discret bas-droite, Ctrl+Shift+D — et reste strictement ABSENT sur mobile
+- Code développeur inchangé : MbeutetsaDev2025! (SHA-256 ae46f1f7…a696, préimage jamais dans le code, vérifié côté serveur via secret Pages DEV_TOKEN_SHA)
+- Aucune régression : push (clé VAPID, événements récents), APK, gate ES5, dashboard inchangés
