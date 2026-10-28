@@ -37,6 +37,7 @@ type DemoDevice = {
   simulated: boolean;
   hasPasskey: boolean;
   hasPush: boolean;
+  pushSubscription?: string | null;
   lastSeen: string;
   revoked: boolean;
   createdAt: string;
@@ -321,28 +322,96 @@ async function handleApi(url: string, method: string, body: Record<string, unkno
     return { ok: true };
   }
 
-  // ── Push ──
-  if (path === "/api/push" && method === "GET") {
+  // ── Statistiques du tableau de bord ──
+  if (path === "/api/stats" && method === "GET") {
+    return {
+      ok: true,
+      stats: {
+        members: 52,
+        treasury: 245000,
+        events: 3,
+        branches: 4,
+        announcement: {
+          title: "Réunion familiale dimanche à 15 h",
+          body: "Chez le Patriarche, quartier Bonamoussadi — présence des chefs de branche requise. Ordre du jour : caisse de solidarité et préparatifs de la fête annuelle.",
+        },
+      },
+    };
+  }
+
+  // ── Push ── (le Worker Cloudflare fc-push envoie les vraies notifications système)
+  const PUSH_URL = process.env.NEXT_PUBLIC_FC_PUSH_URL || "";
+  if (path === "/api/push/public-key" && method === "GET") {
+    if (PUSH_URL) {
+      try {
+        const r = await fetch(`${PUSH_URL}/public-key`);
+        const j = (await r.json()) as { publicKey?: string };
+        if (j.publicKey) return { ok: true, publicKey: j.publicKey };
+      } catch {
+        /* secours ci-dessous */
+      }
+    }
     return { ok: true, publicKey: fakeVapid() };
+  }
+  if (path === "/api/push/subscribe" && method === "POST") {
+    const sub = body.subscription as { endpoint?: string } | undefined;
+    if (d.session && sub?.endpoint) {
+      const dev = d.devices.find((x) => x.id === d.session!.did);
+      if (dev) {
+        dev.hasPush = true;
+        dev.pushSubscription = JSON.stringify(sub);
+      }
+      save(d);
+      if (PUSH_URL) {
+        void fetch(`${PUSH_URL}/subscribe`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subscription: sub, phone: currentUser(d)?.phone }),
+        }).catch(() => undefined);
+      }
+    }
+    return { ok: true, subscribed: true };
   }
   if (path === "/api/push" && method === "POST") {
     const user = currentUser(d);
-    if (body.action === "subscribe") {
-      if (d.session) {
-        const dev = d.devices.find((x) => x.id === d.session!.did);
-        if (dev) dev.hasPush = true;
-        save(d);
+    const action = String(body.action ?? "");
+    if ((action === "test" || action === "welcome") && user) {
+      const dev = d.session ? d.devices.find((x) => x.id === d.session!.did) : null;
+      const subJson = dev?.pushSubscription;
+      const welcome = action === "welcome";
+      if (PUSH_URL && subJson) {
+        try {
+          const r = await fetch(`${PUSH_URL}/send-one`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              subscription: JSON.parse(subJson),
+              title: welcome ? "🌳 Bienvenue dans la famille !" : "🔔 Famille.Mbeutetsa — test réussi",
+              body: welcome
+                ? `Félicitations ${user.fullName} — les alertes de la famille vous parviendront ici, même l'application fermée.`
+                : `Les notifications push fonctionnent sur « ${dev!.name} ». Vous ne manquerez plus aucun événement familial.`,
+              tag: welcome ? "fc-welcome" : "fc-push-test",
+            }),
+          });
+          if (r.ok) {
+            logOne(d, user.id, welcome ? "PUSH_WELCOME_SENT" : "PUSH_TEST_SENT", "Notification système réelle (Worker)");
+            save(d);
+            return { ok: true, sent: true };
+          }
+        } catch {
+          /* secours in-app ci-dessous */
+        }
       }
-      return { ok: true };
-    }
-    if (body.action === "test" && user) {
       notifyOne(d, user.id, {
-        typeCode: "PUSH_TEST", priority: "INFO", title: "Notification de test envoyée",
-        body: "Si les notifications sont autorisées, une bulle apparaît en haut de votre écran.",
+        typeCode: welcome ? "AUTH_WELCOME" : "PUSH_TEST", priority: "NORMALE",
+        title: welcome ? "Bienvenue dans Famille.Mbeutetsa 🌳" : "Notification de test",
+        body: welcome
+          ? "Votre compte est actif. Activez les notifications dans Ma sécurité pour être alerté sur l'écran du téléphone."
+          : "Le serveur de notification n'est pas encore relié — cette alerte reste dans le centre d'alertes.",
       });
-      logOne(d, user.id, "PUSH_TEST_SENT", "Push de test (mode démo)");
+      logOne(d, user.id, welcome ? "PUSH_WELCOME_INAPP" : "PUSH_TEST_INAPP", "Notification in-app (secours)");
       save(d);
-      return { ok: true };
+      return { ok: true, sent: false, fallback: "in-app" };
     }
     return { ok: true };
   }

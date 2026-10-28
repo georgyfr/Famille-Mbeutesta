@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api, deviceName } from "@/lib/fc-client";
+import { afterAuthPush } from "@/lib/fc-push";
 import { FcButton, FcCard, FcInput, FcSpinner, FcWatermark } from "./ui";
 import { ArrowLeft, BellRing, Check, Phone, RefreshCw, ShieldCheck, Smartphone, UserRound } from "lucide-react";
 
@@ -273,6 +274,7 @@ function VerifyScreen({
         if (res.registered && res.user) {
           // Le numéro est déjà enregistré → session ouverte, on entre directement
           toast.success(`Content de vous revoir, ${res.user.fullName.split(" ")[0]} !`);
+          void afterAuthPush(false);
           onReady(res.user.fullName);
         } else if (res.registerToken) {
           toast.info("Numéro vérifié — première inscription, continuez.");
@@ -448,6 +450,7 @@ function ProfileScreen({
       localStorage.setItem("fc_uid", res.user.id);
       localStorage.setItem("fc_name", res.user.fullName);
       toast.success(`Bienvenue dans la famille, ${res.user.fullName.split(" ")[0]} ! 🌳`);
+      void afterAuthPush(true);
       onReady(res.user.fullName);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Inscription impossible.");

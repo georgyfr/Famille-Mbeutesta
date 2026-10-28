@@ -6,9 +6,13 @@ import { api, deviceName, timeAgo, urlBase64ToUint8Array } from "@/lib/fc-client
 import { FcButton, FcCard, PriorityBadge } from "./ui";
 import { roleLabel } from "./auth-flow";
 import {
-  Bell, BellOff, BellRing, Check, CheckCheck, Copy, Fingerprint, Home, KeyRound, LifeBuoy,
-  LogOut, RefreshCw, ScrollText, Send, ShieldCheck, Smartphone, Trash2, TreePine, UserPlus, Users,
+  Bell, BellOff, CalendarDays, Check, CheckCheck, Copy, Fingerprint, HeartHandshake, Home, KeyRound, LifeBuoy,
+  LogOut, Megaphone, PiggyBank, RefreshCw, ScrollText, Send, ShieldCheck, Smartphone, Trash2, UserPlus, Users, Vote,
 } from "lucide-react";
+import {
+  enablePush, hasDeferredInstallPrompt, promptInstall, pushState as getPushState, testPush,
+  type PushState,
+} from "@/lib/fc-push";
 
 export type SessionData = {
   user: { id: string; fullName: string; phone?: string | null; email?: string | null; role: string; hasPin: boolean };
@@ -120,143 +124,131 @@ function NavBtn({
   );
 }
 
-/* ─────────────────────────── Accueil ─────────────────────────── */
+type FamilyStats = {
+  members: number;
+  treasury: number;
+  events: number;
+  branches: number;
+  announcement: { title: string; body: string } | null;
+};
 
-function HomeTab({ session, goTab }: { session: SessionData; goTab: (t: "notif" | "security") => void }) {
-  const [pushState, setPushState] = useState<"unknown" | "unsupported" | "default" | "granted" | "denied" | "subscribed">("unknown");
-  const [busyPush, setBusyPush] = useState(false);
+const UNIVERS_COMING = (label: string) =>
+  `L'univers « ${label} » arrive très bientôt — registre complet, trésor Mobile Money, événements et votes. Vous serez alerté par notification 🔔`;
 
-  useEffect(() => {
-    if (typeof Notification === "undefined" || !("serviceWorker" in navigator)) {
-      const t = setTimeout(() => setPushState("unsupported"), 0);
-      return () => clearTimeout(t);
-    }
-    const t = setTimeout(() => {
-      setPushState(Notification.permission === "granted" ? "granted" : Notification.permission === "denied" ? "denied" : "default");
-    }, 0);
-    return () => clearTimeout(t);
-  }, []);
-
-  const enablePush = useCallback(async () => {
-    setBusyPush(true);
-    try {
-      const perm = await Notification.requestPermission();
-      setPushState(perm === "granted" ? "granted" : perm === "denied" ? "denied" : "default");
-      if (perm !== "granted") {
-        toast.warning("Permission refusée — vous pouvez l'accorder plus tard dans les réglages du navigateur.");
-        return;
-      }
-      const reg = await navigator.serviceWorker.register("/sw.js");
-      await navigator.serviceWorker.ready;
-      const vapid = await api<{ publicKey: string }>("/api/push");
-      if (!vapid.ok) throw new Error(vapid.error);
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapid.publicKey),
-      });
-      const saved = await api("/api/push", { body: { action: "subscribe", subscription: sub.toJSON() } });
-      if (!saved.ok) throw new Error(saved.error);
-      setPushState("subscribed");
-      toast.success("Notifications activées ✓ Vous recevrez les alertes de la famille même app fermée.");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Activation des notifications impossible.");
-    } finally {
-      setBusyPush(false);
-    }
-  }, []);
-
-  const testPush = useCallback(async () => {
-    setBusyPush(true);
-    try {
-      const res = await api("/api/push", { body: { action: "test" } });
-      if (!res.ok) throw new Error(res.error);
-      toast.success("Push envoyé ! Regardez votre écran — même vérrouillé.");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Envoi impossible.");
-    } finally {
-      setBusyPush(false);
-    }
-  }, []);
-
+function StatCard({ value, label }: { value: string; label: string }) {
   return (
-    <div className="space-y-4">
-      {/* Carte de bienvenue */}
-      <FcCard className="overflow-hidden">
-        <div className="bg-[#1E4D2B] px-5 py-4 text-white">
-          <p className="text-[13px] opacity-80">Karibu,</p>
-          <p className="fc-serif text-xl font-bold">{session.user.fullName}</p>
-        </div>
-        <div className="space-y-2 px-5 py-4 text-[14px] text-[#2B3530]">
-          {session.member && (
-            <>
-              <div className="flex justify-between"><span className="text-[#8A9288]">Branche</span><span className="font-semibold">{session.member.branch}</span></div>
-              <div className="flex justify-between"><span className="text-[#8A9288]">Rôle</span><span className="font-semibold">{roleLabel(session.member.role)}</span></div>
-              <div className="flex justify-between"><span className="text-[#8A9288]">Statut</span><span className="font-semibold text-[#16A34A]">Compte actif</span></div>
-            </>
-          )}
-          <div className="flex justify-between"><span className="text-[#8A9288]">Appareil</span><span className="font-semibold">{session.device?.name}</span></div>
-        </div>
-      </FcCard>
-
-      {/* Carte notifications push */}
-      <FcCard className="p-5">
-        <div className="mb-2 flex items-center gap-2">
-          <BellRing className="h-5 w-5 text-[#C89F62]" />
-          <h3 className="fc-serif text-lg font-bold text-[#1E4D2B]">Notifications push</h3>
-        </div>
-        {pushState === "unsupported" && (
-          <p className="text-[13px] text-[#8A9288]">
-            Votre navigateur actuel ne les prend pas en charge. Sur téléphone : installez l&apos;app via
-            « Ajouter à l&apos;écran d&apos;accueil » puis rouvrez-la.
-          </p>
-        )}
-        {pushState === "default" && (
-          <>
-            <p className="mb-3 text-[13px] text-[#5C6B60]">
-              Recevez les événements de la famille même application fermée — comme WhatsApp. Gratuit, illimité.
-            </p>
-            <FcButton onClick={enablePush} disabled={busyPush}>
-              {busyPush ? "Activation…" : <><BellRing className="h-5 w-5" /> Activer les notifications</>}
-            </FcButton>
-          </>
-        )}
-        {(pushState === "granted" || pushState === "subscribed") && (
-          <>
-            <p className="mb-3 text-[13px] text-[#16A34A]">
-              ✓ {pushState === "subscribed" ? "Abonnement push actif sur cet appareil." : "Permission accordée."}
-            </p>
-            <FcButton variant="gold" onClick={testPush} disabled={busyPush}>
-              {busyPush ? "Envoi…" : <><Send className="h-4 w-4" /> Tester la notification réelle</>}
-            </FcButton>
-          </>
-        )}
-        {pushState === "denied" && (
-          <p className="flex items-center gap-2 text-[13px] text-[#B91C1C]">
-            <BellOff className="h-4 w-4" /> Notifications bloquées — réautorisez-les dans les réglages du site.
-          </p>
-        )}
-      </FcCard>
-
-      {/* Raccourcis */}
-      <div className="grid grid-cols-2 gap-3">
-        <ShortcutCard icon={<Bell className="h-5 w-5" />} label="Centre d'alertes" onClick={() => goTab("notif")} />
-        <ShortcutCard icon={<ShieldCheck className="h-5 w-5" />} label="Ma sécurité" onClick={() => goTab("security")} />
-      </div>
-
-      <FcCard className="p-5">
-        <div className="flex items-start gap-3">
-          <TreePine className="mt-0.5 h-5 w-5 shrink-0 text-[#3D6B52]" />
-          <p className="text-[13px] leading-relaxed text-[#5C6B60]">
-            <strong className="text-[#1E4D2B]">Prochaines étapes du MVP :</strong> registre complet des membres (U1),
-            caisse et cotisations Mobile Money (U4), moteur d&apos;événements (U2). Cette interface posera les bases
-            de chacun des 7 univers.
-          </p>
-        </div>
-      </FcCard>
+    <div className="flex flex-col items-center justify-center rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] px-2 py-3 shadow-sm">
+      <p className="fc-serif text-xl font-bold leading-tight text-[#1E4D2B]">{value}</p>
+      <p className="text-center text-[11px] leading-tight text-[#8A9288]">{label}</p>
     </div>
   );
 }
 
+function HomeTab({ session, goTab }: { session: SessionData; goTab: (t: "notif" | "security") => void }) {
+  const [stats, setStats] = useState<FamilyStats | null>(null);
+  const [recent, setRecent] = useState<NotificationItem[]>([]);
+
+  useEffect(() => {
+    const t = setTimeout(async () => {
+      const s = await api<{ stats: FamilyStats }>("/api/stats");
+      if (s.ok) setStats(s.stats);
+      const n = await api<{ notifications: NotificationItem[] }>("/api/notifications");
+      if (n.ok) setRecent(n.notifications.filter((x) => !x.read).slice(0, 3));
+    }, 0);
+    return () => clearTimeout(t);
+  }, []);
+
+  return (
+    <div className="space-y-4">
+      {/* Bienvenue */}
+      <FcCard className="overflow-hidden">
+        <div className="bg-[#1E4D2B] px-5 py-4 text-white">
+          <p className="text-[13px] opacity-80">Karibu,</p>
+          <p className="fc-serif text-xl font-bold">{session.user.fullName}</p>
+          {session.member && (
+            <p className="text-[12px] opacity-70">
+              {session.member.branch} · {roleLabel(session.member.role)}
+            </p>
+          )}
+        </div>
+      </FcCard>
+
+      {/* Chiffres de la famille */}
+      <div className="grid grid-cols-3 gap-3">
+        <StatCard value={stats ? String(stats.members) : "…"} label="Membres" />
+        <StatCard
+          value={stats ? `${stats.treasury.toLocaleString("fr-FR")} F` : "…"}
+          label="Caisse familiale"
+        />
+        <StatCard value={stats ? String(stats.events) : "…"} label="Événements" />
+      </div>
+
+      {/* Raccourcis — les univers au service de la famille */}
+      <div>
+        <p className="mb-2 px-1 text-[11px] font-bold uppercase tracking-wide text-[#8A9288]">
+          La famille
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <ShortcutCard icon={<Users className="h-5 w-5" />} label="Membres" onClick={() => toast.info(UNIVERS_COMING("Membres"))} />
+          <ShortcutCard icon={<PiggyBank className="h-5 w-5" />} label="Trésor" onClick={() => toast.info(UNIVERS_COMING("Trésor"))} />
+          <ShortcutCard icon={<CalendarDays className="h-5 w-5" />} label="Événements" onClick={() => toast.info(UNIVERS_COMING("Événements"))} />
+          <ShortcutCard icon={<HeartHandshake className="h-5 w-5" />} label="Solidarité" onClick={() => toast.info(UNIVERS_COMING("Solidarité"))} />
+          <ShortcutCard icon={<Vote className="h-5 w-5" />} label="Votes" onClick={() => toast.info(UNIVERS_COMING("Votes"))} />
+          <ShortcutCard icon={<ScrollText className="h-5 w-5" />} label="Mémoire" onClick={() => toast.info(UNIVERS_COMING("Mémoire"))} />
+        </div>
+      </div>
+
+      {/* Annonce du conseil */}
+      {stats?.announcement && (
+        <FcCard className="p-4">
+          <div className="mb-1.5 flex items-center gap-2">
+            <Megaphone className="h-4 w-4 text-[#C89F62]" />
+            <p className="text-[11px] font-bold uppercase tracking-wide text-[#8A9288]">
+              Annonce du conseil
+            </p>
+          </div>
+          <p className="text-[14px] font-semibold text-[#1E4D2B]">{stats.announcement.title}</p>
+          <p className="mt-0.5 text-[13px] leading-relaxed text-[#5C6B60]">{stats.announcement.body}</p>
+        </FcCard>
+      )}
+
+      {/* Alertes non lues */}
+      <FcCard className="p-4">
+        <div className="mb-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Bell className="h-4 w-4 text-[#C89F62]" />
+            <p className="text-[11px] font-bold uppercase tracking-wide text-[#8A9288]">
+              Alertes récentes
+            </p>
+          </div>
+          <button
+            onClick={() => goTab("notif")}
+            className="text-[12px] font-medium text-[#2A4A3A] hover:underline"
+          >
+            Tout voir
+          </button>
+        </div>
+        {recent.length === 0 ? (
+          <p className="py-2 text-[13px] text-[#8A9288]">
+            Rien de nouveau — la famille va bien. 🌿
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {recent.map((n) => (
+              <li key={n.id} className="rounded-xl border border-[#C89F62]/50 bg-[#C89F62]/10 p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-[13px] font-bold text-[#1E4D2B]">{n.title}</p>
+                  <PriorityBadge priority={n.priority} />
+                </div>
+                <p className="mt-0.5 line-clamp-2 text-[12px] text-[#5C6B60]">{n.body}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </FcCard>
+    </div>
+  );
+}
 function ShortcutCard({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
   return (
     <button
@@ -397,6 +389,139 @@ function NotifTab({ session }: { session: SessionData }) {
 
 /* ─────────────────────────── Sécurité ─────────────────────────── */
 
+/* Carte notifications système — dans Ma sécurité */
+
+function PushCard() {
+  const [state, setState] = useState<PushState>("default");
+  const [busy, setBusy] = useState(false);
+  const [isIOS] = useState(() =>
+    typeof navigator !== "undefined" &&
+    (/iPhone|iPad|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1))
+  );
+
+  useEffect(() => {
+    const t = setTimeout(async () => setState(await getPushState()), 0);
+    return () => clearTimeout(t);
+  }, []);
+
+  const enable = async () => {
+    setBusy(true);
+    const ok = await enablePush();
+    if (ok) setState(await getPushState());
+    setBusy(false);
+  };
+
+  const verify = async () => {
+    setBusy(true);
+    const res = await testPush();
+    if (res.ok) {
+      toast.success("Notification envoyée — regardez votre écran, même vérrouillé 🔔");
+    } else {
+      toast.error(res.error || "Envoi impossible.");
+    }
+    setBusy(false);
+  };
+
+  return (
+    <FcCard className="p-5">
+      <div className="mb-2 flex items-center gap-2">
+        <Bell className="h-5 w-5 text-[#C89F62]" />
+        <h3 className="fc-serif text-lg font-bold text-[#1E4D2B]">Notifications du téléphone</h3>
+      </div>
+      {state === "unsupported" && (
+        <p className="text-[13px] leading-relaxed text-[#8A9288]">
+          {isIOS
+            ? "Sur iPhone : ajoutez d'abord l'app à l'écran d'accueil (Partager → Sur l'écran d'accueil), puis ouvrez-la depuis l'icône."
+            : "Ce navigateur ne prend pas en charge les notifications push."}
+        </p>
+      )}
+      {state === "denied" && (
+        <p className="flex items-center gap-2 text-[13px] text-[#B91C1C]">
+          <BellOff className="h-4 w-4" /> Notifications bloquées — réautorisez-les dans les réglages du site
+          (icône cadenas dans la barre d'adresse).
+        </p>
+      )}
+      {(state === "default" || state === "granted") && (
+        <>
+          <p className="mb-3 text-[13px] leading-relaxed text-[#5C6B60]">
+            Recevez les événements de la famille même application fermée — avec le son et la vibration,
+            comme WhatsApp. Gratuit et illimité.
+          </p>
+          <FcButton onClick={enable} disabled={busy}>
+            {busy ? "Activation…" : "Activer les notifications"}
+          </FcButton>
+        </>
+      )}
+      {state === "subscribed" && (
+        <>
+          <p className="mb-3 flex items-center gap-1.5 text-[13px] font-medium text-[#16A34A]">
+            <ShieldCheck className="h-4 w-4" /> Actives sur cet appareil — même app fermée.
+          </p>
+          <FcButton variant="outline" onClick={verify} disabled={busy}>
+            {busy ? "Envoi…" : "Vérifier que ça sonne sur mon téléphone"}
+          </FcButton>
+        </>
+      )}
+    </FcCard>
+  );
+}
+
+/* Carte installation PWA — dans Ma sécurité */
+
+function InstallCard({ isIOS }: { isIOS: boolean }) {
+  const [available, setAvailable] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setAvailable(hasDeferredInstallPrompt()), 0);
+    return () => clearTimeout(t);
+  }, []);
+
+  if (isIOS) {
+    return (
+      <FcCard className="p-5">
+        <h3 className="fc-serif mb-2 text-lg font-bold text-[#1E4D2B]">Installer l'application</h3>
+        <p className="text-[13px] leading-relaxed text-[#5C6B60]">
+          Sur iPhone : touchez <strong>Partager</strong> ⎋ en bas de Safari, puis
+          <strong> « Sur l'écran d'accueil »</strong>. L'icône verte de la famille apparaîtra comme une vraie app.
+        </p>
+      </FcCard>
+    );
+  }
+  return (
+    <FcCard className="p-5">
+      <h3 className="fc-serif mb-2 text-lg font-bold text-[#1E4D2B]">Installer l'application</h3>
+      {available ? (
+        <>
+          <p className="mb-3 text-[13px] text-[#5C6B60]">
+            Ajoutez l'icône verte à votre écran d'accueil — ouverture immédiate, comme WhatsApp.
+          </p>
+          <FcButton
+            onClick={async () => {
+              const res = await promptInstall();
+              if (res === "accepted") toast.success("Famille.Mbeutetsa ajoutée à votre téléphone 📱");
+            }}
+          >
+            Installer sur mon téléphone
+          </FcButton>
+        </>
+      ) : (
+        <p className="text-[13px] leading-relaxed text-[#8A9288]">
+          Ou téléchargez l'application Android :{' '}
+          <a
+            href="/famille-mbeutetsa.apk"
+            className="font-semibold text-[#2A4A3A] underline"
+            target="_blank"
+            rel="noreferrer"
+          >
+            famille-mbeutetsa.apk
+          </a>
+        </p>
+      )}
+    </FcCard>
+  );
+}
+
 function SecurityTab({ session, onLoggedOut }: { session: SessionData; onLoggedOut: () => void }) {
   const [devices, setDevices] = useState<DeviceItem[]>([]);
   const [logs, setLogs] = useState<LogItem[]>([]);
@@ -436,8 +561,16 @@ function SecurityTab({ session, onLoggedOut }: { session: SessionData; onLoggedO
     }
   };
 
+  const [isIOS] = useState(() =>
+    typeof navigator !== "undefined" &&
+    (/iPhone|iPad|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1))
+  );
+
   return (
     <div className="space-y-4">
+      <PushCard />
+      <InstallCard isIOS={isIOS} />
       <FcCard className="p-5">
         <div className="mb-3 flex items-center gap-2">
           <Smartphone className="h-5 w-5 text-[#C89F62]" />

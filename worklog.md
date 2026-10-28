@@ -814,3 +814,29 @@ Stage Summary:
 - LIEN VERSIONNÉ : https://famille-mbeutetsa.pages.dev/famille-mbeutetsa-1.1.0.apk ; archivage v1.0.0 : famille-mbeutetsa-1.0.0.apk
 - Raccourcis natifs par appui long sur l'icône : Membres, Trésor, Événements, Solidarité
 - Reproductible : bun scripts/gen-apk-options.ts → curl -X POST …/generateApkZip (signingMode none) → zipalign → apksigner sign
+
+---
+Task ID: 14
+Agent: Z.ai Code (orchestrateur)
+Task: Vraies notifications push système (son, écran verrouillé) + tableau de bord utilisateur propre (retour utilisateur avec capture ibb.co)
+
+Work Log:
+- Retour utilisateur (capture téléphone réel : Georges Dongmo, Android/Chrome) : (1) le dashboard post-inscription montrait des blocs inutiles (panneau « Notifications push » avec bouton de test, tuiles Centre d'alertes/Ma sécurité, « Prochaines étapes du MVP ») ; (2) aucune notification n'arrivait sur le téléphone (en démo statique il n'y avait AUCUN serveur d'envoi, et les clés VAPID manquaient même côté Node)
+- Tableau de bord refondu (dashboard.tsx) : accueil = carte Karibu (branche · rôle) + 3 chiffres (52 membres / 245 000 F / 3 événements via GET /api/stats) + 6 raccourcis univers (Membres, Trésor, Événements, Solidarité, Votes, Mémoire → toast « arrive bientôt ») + Annonce du conseil + Alertes récentes (« Tout voir ») ; blocs inutiles supprimés ; la bannière d'installation flottante retirée (remplacée par une carte dans Ma sécurité)
+- Ma sécurité enrichie : carte « Notifications du téléphone » (activer / état / « Vérifier que ça sonne sur mon téléphone ») + carte « Installer l'application » (invite PWA native ou lien APK) ; push auto-invité juste après l'inscription (afterAuthPush, geste utilisateur) et abonnement silencieux aux reconnexions si permission déjà accordée
+- Clés VAPID générées (web-push) et partagées Node + Worker (.env : VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/VAPID_SUBJECT)
+- API Node : GET /api/push/public-key, POST /api/push/subscribe (abonnement sur Device.pushSubscription), POST /api/push {test|welcome} (web-push, urgency high, TTL 7 j) ; nouveau GET /api/stats (counts Prisma + dernière annonce)
+- Worker Cloudflare « fc-push » (worker/fc-push/, 100 % gratuit) : KV PUSH_SUBS (9b41fcb0…) stocke les abonnements ; ENVOI Web Push avec crypto maison WebCrypto — VAPID ES256 (importKey jwk + ECDSA P-256) et chiffrement aes128gcm RFC 8291/8188 (ECDH P-256, HKDF, AES-128-GCM, en-tête salt‖rs‖idlen‖clé) ; routes /public-key, /subscribe, /send-one (rate-limit 10/min/IP via KV), /send (diffusion admin via KV admin:token) ; CORS restreint (pages.dev + localhost:3000)
+- Sous-domaine workers.dev enregistré via API (famille-mbeutetsa) → https://fc-push.famille-mbeutetsa.workers.dev ; secrets VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY posés ; déployé (wrangler deploy)
+- demo-api.ts : /api/stats (52/245000/3 + annonce), /api/push/public-key (relais Worker, secours fakeVapid), /api/push/subscribe (stockage localStorage + relais Worker), test/welcome → Worker /send-one avec secours in-app ; build-cloudflare.sh intègre désormais NEXT_PUBLIC_FC_PUSH_URL
+- sw.js : postMessage fc-push-received vers les clients (vérification E2E via window.__lastPush, initPushDebugListener)
+- Scripts de test : scripts/test-push-e2e.ts (CDP local : Browser.grantPermissions → inscription fetch → subscribe → push Node ET Worker) et scripts/test-push-prod.ts (production)
+- RÉSULTATS E2E : LOCAL = abonnement FCM réel, push Node reçu (tag fc-push-test) ET push Worker reçu (tag fc-worker-test) — crypto RFC 8291 maison VALIDÉE par FCM ; PRODUCTION = inscription Georges Dongmo → push bienvenue reçu (fc-welcome) + push test reçu (fc-push-test) via Worker → FCM → SW
+- Déploiement Pages (49 fichiers) : / 200, sw.js avec hook, APK v1.1.0 toujours servi ; non-régression navigateur : nouveau dashboard mobile capturé (shots/prod-nouveau-dashboard.png), onglet Sécurité complet, APKs désormais copiés depuis public/ (rebuild reproductible)
+
+Stage Summary:
+- Les notifications push SONT MAINTENANT RÉELLES : système, avec son/vibration, sur l'écran verrouillé, app fermée — sur Android (Chrome, y compris dans l'APK) et iOS 16.4+ (PWA installée) ; limites documentées : iOS ≤ 16.3 et vieux WebView 2015 → notifications in-app uniquement (impossibilité technique du Web Push)
+- Chaîne gratuite sans carte bancaire : Web Push standard (W3C) + VAPID auto-hébergé + Cloudflare Workers/KV (gratuit) — aucune dépendance payante ; alternatives libres citées à l'utilisateur : FCM (déjà utilisé sous le capot par Chrome), OneSignal (tierce partie gratuite), ntfy
+- Nouveau dashboard d'accueil conforme à l'attente (chiffres famille, 6 univers, annonce, alertes) — plus aucun élément de type « dev »
+- Sécurité : /send-one n'expose aucun secret (le client ne peut écrire que sur SON abonnement), rate-limit KV ; /send réservé au token admin stocké en KV
+- Test reproductible : bun scripts/test-push-prod.ts

@@ -7,59 +7,55 @@ export const runtime = "nodejs";
 
 const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || "";
 const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || "";
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:contact@familleconnect.app";
 
-// GET /api/push — clé publique VAPID pour l'abonnement navigateur
-export async function GET() {
-  if (!VAPID_PUBLIC) return apiError("VAPID non configuré côté serveur.", 500);
-  return apiOk({ publicKey: VAPID_PUBLIC });
-}
-
-// POST /api/push — { action: "subscribe" | "test", subscription? }
+// POST /api/push — { action: "test" | "welcome" } : envoie une vraie notification système
 export async function POST(req: NextRequest) {
   const result = await requireSession();
   if (!result) return apiError("Session requise.", 401);
   const body = await req.json().catch(() => ({}));
 
-  if (body.action === "subscribe") {
-    const sub = body.subscription;
-    if (!sub?.endpoint || !sub?.keys?.p256dh || !sub?.keys?.auth) {
-      return apiError("Abonnement push invalide.", 400);
-    }
-    await db.device.update({
-      where: { id: result.session.did },
-      data: { pushSubscription: JSON.stringify(sub) },
-    });
-    return apiOk({ subscribed: true });
+  const device = await db.device.findUnique({ where: { id: result.session.did } });
+  if (!device?.pushSubscription) {
+    return apiError("Aucun abonnement push sur cet appareil. Activez les notifications d'abord.", 400);
   }
-
-  if (body.action === "test") {
-    const device = await db.device.findUnique({ where: { id: result.session.did } });
-    if (!device?.pushSubscription) {
-      return apiError("Aucun abonnement push sur cet appareil. Activez les notifications d'abord.", 400);
-    }
-    if (!VAPID_PUBLIC || !VAPID_PRIVATE) {
-      return apiError("VAPID non configuré côté serveur.", 500);
-    }
-    webpush.setVapidDetails("mailto:contact@familleconnect.app", VAPID_PUBLIC, VAPID_PRIVATE);
-    const payload = JSON.stringify({
-      title: "🔔 Famille.Mbeutetsa — test réussi",
-      body: `Les notifications push fonctionnent sur « ${device.name} ». Vous ne manquerez plus aucun événement familial.`,
-      tag: "fc-push-test",
-      url: "/",
-    });
-    try {
-      await webpush.sendNotification(JSON.parse(device.pushSubscription), payload);
-      await logSecurity(result.user.id, "PUSH_TEST_SENT", `Push test envoyé à « ${device.name} »`);
-      return apiOk({ sent: true });
-    } catch (e) {
-      const err = e as { statusCode?: number; message?: string };
-      if (err.statusCode === 410 || err.statusCode === 404) {
-        await db.device.update({ where: { id: device.id }, data: { pushSubscription: null } });
-        return apiError("Abonnement expiré côté navigateur. Réactivez les notifications.", 410);
-      }
-      return apiError(`Envoi push impossible : ${String(err.message).slice(0, 120)}`, 502);
-    }
+  if (!VAPID_PUBLIC || !VAPID_PRIVATE) {
+    return apiError("VAPID non configuré côté serveur.", 500);
   }
+  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
 
-  return apiError("Action inconnue.", 400);
+  const payload =
+    body.action === "welcome"
+      ? {
+          title: "🌳 Bienvenue dans la famille !",
+          body: `Félicitations ${result.user.fullName} — les alertes de la famille vous parviendront ici, même l'application fermée.`,
+          tag: "fc-welcome",
+          url: "/",
+        }
+      : {
+          title: "🔔 Famille.Mbeutetsa — test réussi",
+          body: `Les notifications push fonctionnent sur « ${device.name} ». Vous ne manquerez plus aucun événement familial.`,
+          tag: "fc-push-test",
+          url: "/",
+        };
+
+  try {
+    await webpush.sendNotification(JSON.parse(device.pushSubscription), JSON.stringify(payload), {
+      urgency: "high",
+      TTL: 7 * 86400,
+    });
+    await logSecurity(
+      result.user.id,
+      body.action === "welcome" ? "PUSH_WELCOME_SENT" : "PUSH_TEST_SENT",
+      `Push réel envoyé à « ${device.name} »`
+    );
+    return apiOk({ sent: true });
+  } catch (e) {
+    const err = e as { statusCode?: number; message?: string };
+    if (err.statusCode === 410 || err.statusCode === 404) {
+      await db.device.update({ where: { id: device.id }, data: { pushSubscription: null } });
+      return apiError("Abonnement expiré côté navigateur. Réactivez les notifications.", 410);
+    }
+    return apiError(`Envoi push impossible : ${String(err.message).slice(0, 120)}`, 502);
+  }
 }
