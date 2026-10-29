@@ -53,6 +53,9 @@ model User {
   fullName      String
   phone         String?
   email         String?
+  identifier    String?           @unique // identifiant texte (connexion sans numéro)
+  passwordHash  String? // PBKDF2-SHA256 (connexion identifiant + mot de passe)
+  passwordSalt  String?
   role          String            @default("ADULTE")
   pinHash       String?
   pinSalt       String?

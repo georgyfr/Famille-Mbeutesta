@@ -13,6 +13,8 @@ type DemoUser = {
   phone: string;
   role: string;
   pinHash?: string;
+  identifier?: string; // identifiant texte (connexion sans numéro)
+  passwordHash?: string; // sha$salt$hash (WebCrypto, mode démo)
 };
 
 type DemoMember = {
@@ -106,6 +108,59 @@ function normalizePhone(raw: string): string | null {
   else if (digits.startsWith("237")) digits = digits.slice(3);
   if (digits.length !== 9 || !/^[62]/.test(digits)) return null;
   return "+237" + digits;
+}
+
+// Identifiant : 3 à 30 caractères — lettres, chiffres, point, tiret, underscore
+function normalizeIdentifier(raw: string): string | null {
+  const id = String(raw ?? "").trim().toLowerCase();
+  if (!/^[a-z0-9._-]{3,30}$/.test(id)) return null;
+  return id;
+}
+
+// Hash mot de passe (mode démo) : SHA-256 salé via WebCrypto, format sha$salt$hash
+async function hashPassword(password: string, salt?: string): Promise<string> {
+  const s = salt || Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  const msg = new TextEncoder().encode(`fc:${s}:${password}`);
+  try {
+    const digest = await crypto.subtle.digest("SHA-256", msg);
+    const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+    return `sha$${s}$${hex}`;
+  } catch {
+    // Repli sans WebCrypto (rare) — FNV-1a 32 bits salé
+    let h = 2166136261;
+    const str = `fc:${s}:${password}`;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return `fnv$${s}$${(h >>> 0).toString(16)}`;
+  }
+}
+function verifyPassword(password: string, stored: string | undefined): boolean {
+  if (!stored) return false;
+  const [, salt, hash] = stored.split("$");
+  if (!salt || !hash) return false;
+  // Vérification SYNCHRONE : recalcul du même schéma que hashPassword
+  const str = `fc:${salt}:${password}`;
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  // Le hash WebCrypto (64 hex) ne peut PAS être recalculé en synchrone :
+  // on stocke donc TOUJOURS le hash via hashPassword (async) et on vérifie
+  // en re-hasant de manière asynchrone côté appelant (checkPassword).
+  return hash.length === 64 ? false : (h >>> 0).toString(16) === hash;
+}
+async function checkPassword(password: string, stored: string | undefined): Promise<boolean> {
+  if (!stored) return false;
+  const [, salt, hash] = stored.split("$");
+  if (!salt || !hash) return false;
+  if (hash.length === 64) {
+    const recomputed = await hashPassword(password, salt);
+    return recomputed === stored;
+  }
+  return verifyPassword(password, stored);
 }
 
 function seedDB(): DemoDB {
@@ -261,10 +316,11 @@ async function handleApi(url: string, method: string, body: Record<string, unkno
       }
       const firstName = String(body.firstName ?? "").trim();
       const lastName = String(body.lastName ?? "").trim();
-      if (firstName.length < 2 || lastName.length < 2) {
-        return { ok: false, error: "Indiquez votre prénom et votre nom pour créer votre compte." };
+      const pseudo = String(body.pseudo ?? "").trim().slice(0, 60);
+      if (!((firstName.length >= 2 && lastName.length >= 2) || pseudo.length >= 2)) {
+        return { ok: false, error: "Indiquez votre prénom et votre nom — ou au moins un pseudo." };
       }
-      const fullName = `${firstName} ${lastName}`;
+      const fullName = pseudo || `${firstName} ${lastName}`;
       const existing = d.users.find((u) => u.phone === pr.phone);
       if (existing) {
         const device: DemoDevice = {
@@ -311,6 +367,127 @@ async function handleApi(url: string, method: string, body: Record<string, unkno
       d.pendingRegister = null;
       save(d);
       return { ok: true, user: { id: user.id, fullName } };
+    }
+  }
+
+  // ── Auth : inscription / connexion par identifiant + mot de passe ──
+  if (path === "/api/auth/identifier" && method === "POST") {
+    const action = String(body.action ?? "");
+
+    if (action === "register") {
+      const identifier = normalizeIdentifier(String(body.identifier ?? ""));
+      const password = String(body.password ?? "");
+      const pseudo = String(body.pseudo ?? "").trim().slice(0, 60);
+      const phone = normalizePhone(String(body.phone ?? ""));
+      const deviceName = String(body.deviceName ?? "Appareil").slice(0, 60);
+
+      if (!identifier) return { ok: false, error: "Identifiant invalide : 3 à 30 caractères (lettres, chiffres, point, tiret ou underscore)." };
+      if (password.length < 6) return { ok: false, error: "Mot de passe trop court : au moins 6 caractères." };
+      if (pseudo.length < 2) return { ok: false, error: "Indiquez votre pseudo (au moins 2 caractères)." };
+      if (!phone) return { ok: false, error: "Numéro camerounais invalide. Exemple : 6 91 23 45 67 (9 chiffres)." };
+
+      // 1. Identifiant déjà pris ?
+      if (d.users.some((u) => u.identifier === identifier)) {
+        return { ok: false, error: "Cet identifiant est déjà utilisé. Connectez-vous ou choisissez-en un autre." };
+      }
+
+      // 2. DÉTECTION par numéro de téléphone
+      const detected = d.users.find((u) => u.phone === phone);
+      if (detected) {
+        if (detected.identifier && detected.identifier !== identifier) {
+          return { ok: false, error: `Ce numéro est déjà associé au compte « ${detected.fullName} ». Connectez-vous avec son identifiant, ou utilisez un autre numéro.` };
+        }
+        // Compte détecté sans identifiant → association identifiant + mot de passe
+        detected.identifier = identifier;
+        detected.passwordHash = await hashPassword(password);
+        const device: DemoDevice = {
+          id: rid("dev"), userId: detected.id, name: deviceName, type: "pwa_web",
+          simulated: false, hasPasskey: false, hasPush: false,
+          lastSeen: nowISO(), revoked: false, createdAt: nowISO(),
+        };
+        d.devices.push(device);
+        d.session = { uid: detected.id, did: device.id };
+        notifyOne(d, detected.id, {
+          typeCode: "AUTH_PASSWORD_LOGIN", title: "Identifiant associé à votre compte",
+          body: `Votre identifiant « ${identifier} » est désormais relié au numéro ${phone}. Vous pouvez vous connecter avec ou sans mot de passe.`,
+        });
+        logOne(d, detected.id, "IDENTIFIER_LINKED", `${detected.fullName} — identifiant ${identifier} — ${phone}`);
+        d.pendingVerify = null;
+        save(d);
+        return { ok: true, linked: true, user: { id: detected.id, fullName: detected.fullName } };
+      }
+
+      // 3. Nouveau compte complet
+      const branch = BRANCHES[0];
+      const memberId = rid("m");
+      d.members.push({
+        id: memberId, fullName: pseudo, phone, role: "ADULTE", status: "ACTIF",
+        branch: branch.name, branchId: branch.id, activeCode: null, codeExpiresAt: null, createdAt: nowISO(),
+      });
+      const user: DemoUser = {
+        id: rid("u"), memberId, fullName: pseudo, phone, role: "ADULTE",
+        identifier, passwordHash: await hashPassword(password),
+      };
+      d.users.push(user);
+      const device: DemoDevice = {
+        id: rid("dev"), userId: user.id, name: deviceName, type: "pwa_web",
+        simulated: false, hasPasskey: false, hasPush: false,
+        lastSeen: nowISO(), revoked: false, createdAt: nowISO(),
+      };
+      d.devices.push(device);
+      d.session = { uid: user.id, did: device.id };
+      notifyOne(d, user.id, {
+        typeCode: "AUTH_WELCOME", title: "Bienvenue dans Famille.Mbeutetsa 🌳",
+        body: `Votre compte « ${pseudo} » est actif (${branch.name}). Conservez votre identifiant « ${identifier} » et votre mot de passe — votre numéro ${phone} permet aussi de vous retrouver.`,
+      });
+      d.users
+        .filter((u) => ["SECRETAIRE", "PATRIARCHE", "CHEF_BRANCHE", "CONSEIL"].includes(u.role))
+        .forEach((a) =>
+          notifyOne(d, a.id, {
+            typeCode: "AUTH_REGISTERED_ADMIN", title: "Nouveau membre inscrit",
+            body: `${pseudo} (${branch.name}) vient de s'inscrire avec l'identifiant « ${identifier} » — numéro ${phone}.`,
+          })
+        );
+      logOne(d, user.id, "REGISTERED_IDENTIFIER", `${pseudo} — identifiant ${identifier} — ${phone} — appareil « ${deviceName} »`);
+      d.pendingVerify = null;
+      d.pendingRegister = null;
+      save(d);
+      return { ok: true, linked: false, user: { id: user.id, fullName: pseudo } };
+    }
+
+    if (action === "login") {
+      const rawId = String(body.identifier ?? "").trim();
+      const password = String(body.password ?? "");
+      const deviceName = String(body.deviceName ?? "Appareil").slice(0, 60);
+      if (!rawId || !password) {
+        return { ok: false, error: "Indiquez votre identifiant et votre mot de passe." };
+      }
+      const phone = normalizePhone(rawId);
+      const identifier = phone ? null : normalizeIdentifier(rawId);
+      const user = phone
+        ? d.users.find((u) => u.phone === phone && u.passwordHash)
+        : identifier
+          ? d.users.find((u) => u.identifier === identifier)
+          : undefined;
+      if (!user || !(await checkPassword(password, user.passwordHash))) {
+        logOne(d, user?.id ?? null, "LOGIN_IDENTIFIER_FAILED", "identifiant ou mot de passe incorrect");
+        save(d);
+        return { ok: false, error: "Identifiant ou mot de passe incorrect." };
+      }
+      const device: DemoDevice = {
+        id: rid("dev"), userId: user.id, name: deviceName, type: "pwa_web",
+        simulated: false, hasPasskey: false, hasPush: false,
+        lastSeen: nowISO(), revoked: false, createdAt: nowISO(),
+      };
+      d.devices.push(device);
+      d.session = { uid: user.id, did: device.id };
+      notifyOne(d, user.id, {
+        typeCode: "AUTH_PASSWORD_LOGIN", title: "Connexion par identifiant",
+        body: `Vous êtes connecté avec l'identifiant « ${user.identifier ?? user.phone} » sur « ${device.name} ». Si ce n'était pas vous, signalez-le au secrétaire de famille.`,
+      });
+      logOne(d, user.id, "LOGIN_IDENTIFIER", `${user.fullName} — appareil « ${device.name} »`);
+      save(d);
+      return { ok: true, user: { id: user.id, fullName: user.fullName } };
     }
   }
 

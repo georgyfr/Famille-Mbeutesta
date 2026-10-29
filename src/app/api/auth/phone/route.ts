@@ -108,10 +108,11 @@ export async function POST(req: NextRequest) {
     const phone = String(payload.phone);
     const firstName = String(body.firstName ?? "").trim().slice(0, 60);
     const lastName = String(body.lastName ?? "").trim().slice(0, 60);
-    if (firstName.length < 2 || lastName.length < 2) {
-      return apiError("Indiquez votre prénom et votre nom pour créer votre compte.");
+    const pseudo = String(body.pseudo ?? "").trim().slice(0, 60);
+    if (!((firstName.length >= 2 && lastName.length >= 2) || pseudo.length >= 2)) {
+      return apiError("Indiquez votre prénom et votre nom — ou au moins un pseudo.");
     }
-    const fullName = `${firstName} ${lastName}`;
+    const fullName = pseudo || `${firstName} ${lastName}`;
 
     // Le numéro a pu être enregistré entre-temps sur un autre appareil → on connecte directement
     const existing = await db.user.findFirst({ where: { phone } });
