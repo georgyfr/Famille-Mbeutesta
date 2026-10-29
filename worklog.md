@@ -884,3 +884,19 @@ Stage Summary:
 - L'accès développeur est MAINTENANT TROUVABLE sur PC : 3 portes d'entrée — lien « Développeur » dans le pied de page, bouton Terminal discret bas-droite, Ctrl+Shift+D — et reste strictement ABSENT sur mobile
 - Code développeur inchangé : MbeutetsaDev2025! (SHA-256 ae46f1f7…a696, préimage jamais dans le code, vérifié côté serveur via secret Pages DEV_TOKEN_SHA)
 - Aucune régression : push (clé VAPID, événements récents), APK, gate ES5, dashboard inchangés
+
+---
+Task ID: 17
+Agent: Z.ai Code (orchestrateur)
+Task: « Je ne vois toujours pas où me connecter en tant qu'administrateur » (capture ibb.co/LDdx1Fb1) — entrées redondantes + adresse directe /#admin
+
+Work Log:
+- Analyse capture (Edge desktop 1911×975) : le lien « Développeur » du footer était SOUS la ligne de flottaison (bandeau coupé) et l'icône >_ restait cryptique → invisible en pratique
+- dev-access.tsx renommé « administrateur » (console, champ, toasts, session) ; bouton fantôme → pastille blanche lisible « 🔑 Admin » (h-9, KeyRound + label, hover accentué) en bas-droite ; auto-ouverture si location.hash = #admin|#dev|#console (au montage + hashchange, desktop seulement) ; DevFooterLink : libellé « ADMINISTRATION » 11 px opacité 60 % + écoute resize (corrige le lien qui restait si la fenêtre est rétrécie après montage)
+- Bug repéré au test : hash-only navigation ne recharge pas la page (état desktop persistant en simulation) → fix resize listener ; re-test avec chargement frais
+- Déploiements : build-cloudflare.sh + wrangler (2×, token .env.cloudflare re-disparu → recréé + passage inline)
+- Vérifs PROD Agent Browser : desktop 1440×900 frais → /#admin ouvre « Console administrateur », pastille Admin présente, login MbeutetsaDev2025! → « Connexion administrateur réussie. » + 4 onglets ; mobile 390×844 frais → consoleOuverte:false, elementsAdmin:0, footer signature seule ✓ ; push (VAPID 200), APK (200 package-archive), accueil (200) intacts
+
+Stage Summary:
+- 4 portes d'entrée admin desktop redondantes : ADRESSE DIRECTE https://famille-mbeutetsa.pages.dev/#admin (à mettre en favori — ouvre la console automatiquement), pastille « 🔑 Admin » bas-droite toujours visible, lien « Administration » dans le footer, Ctrl+Shift+D — TOUTES absentes sur mobile/APK (0 élément admin vérifié à 390×844)
+- Code administrateur inchangé : MbeutetsaDev2025!

@@ -1,10 +1,11 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Accès DÉVELOPPEUR — Famille.Mbeutetsa
+// Accès ADMINISTRATEUR (développeur du site) — Famille.Mbeutetsa
 // • Visible UNIQUEMENT sur navigateur de bureau (jamais sur mobile) :
-//   un bouton fantôme discret en bas à droite, un lien « Développeur » dans le
-//   pied de page, et le raccourci clavier Ctrl+Shift+D.
+//   un bouton « Admin » discret en bas à droite, un lien « Administration »
+//   dans le pied de page, le raccourci clavier Ctrl+Shift+D, et l'adresse
+//   directe /#admin (idéal en favori navigateur).
 //   (La sécurité réelle reste le code secret — la discrétion n'est qu'ergonomique.)
 // • Protégé par un code secret connu du seul développeur ; le code n'est
 //   jamais stocké en clair : on compare son SHA-256.
@@ -60,13 +61,19 @@ export function DevAccess() {
 
   useEffect(() => {
     const t = setTimeout(() => {
-      setDesktop(isDesktopBrowser());
+      const d = isDesktopBrowser();
+      setDesktop(d);
+      // Adresse directe : /#admin (ou #dev / #console) ouvre la console sur bureau.
+      if (d && /^(#admin|#dev|#console)$/.test(window.location.hash)) setOpen(true);
       try {
         if (sessionStorage.getItem(AUTH_KEY) === DEV_HASH) setAuthed(true);
       } catch {
         /* rien */
       }
     }, 0);
+    const onHash = () => {
+      if (isDesktopBrowser() && /^(#admin|#dev|#console)$/.test(window.location.hash)) setOpen(true);
+    };
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey && (e.key === "D" || e.key === "d")) {
         e.preventDefault();
@@ -78,11 +85,13 @@ export function DevAccess() {
     const onOpenReq = () => setOpen(true);
     window.addEventListener("keydown", onKey);
     window.addEventListener("resize", onResize);
+    window.addEventListener("hashchange", onHash);
     window.addEventListener("fc-dev-open", onOpenReq as EventListener);
     return () => {
       clearTimeout(t);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("resize", onResize);
+      window.removeEventListener("hashchange", onHash);
       window.removeEventListener("fc-dev-open", onOpenReq as EventListener);
     };
   }, []);
@@ -99,9 +108,9 @@ export function DevAccess() {
       }
       setAuthed(true);
       setCode("");
-      toast.success("Accès développeur ouvert.");
+      toast.success("Connexion administrateur réussie.");
     } else {
-      toast.error("Code développeur incorrect.");
+      toast.error("Code administrateur incorrect.");
     }
   };
 
@@ -117,15 +126,17 @@ export function DevAccess() {
 
   return (
     <>
-      {/* Bouton fantôme discret — présent uniquement sur navigateur de bureau.
-          28 px, opacité 35 % : repérable par le développeur, ignoré des autres. */}
+      {/* Bouton « Admin » discret — présent uniquement sur navigateur de bureau.
+          Pastille blanche lisible : le développeur le repère immédiatement,
+          les membres de la famille (sur téléphone/APK) ne le voient jamais. */}
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-3 right-3 z-[70] flex h-7 w-7 items-center justify-center rounded-full bg-[#1E4D2B]/10 text-[#1E4D2B]/40 shadow-sm backdrop-blur-[2px] transition hover:scale-110 hover:bg-[#1E4D2B]/20 hover:text-[#1E4D2B] focus:outline-none"
-        title="Accès développeur (Ctrl+Shift+D)"
-        aria-label="Accès développeur"
+        className="fixed bottom-3 right-3 z-[70] flex h-9 items-center gap-1.5 rounded-full border border-[#1E4D2B]/15 bg-white/80 pl-3 pr-3.5 text-[#1E4D2B]/55 shadow-sm backdrop-blur-[2px] transition hover:scale-[1.03] hover:border-[#1E4D2B]/30 hover:bg-white hover:text-[#1E4D2B] focus:outline-none"
+        title="Connexion administrateur (Ctrl+Shift+D ou adresse /#admin)"
+        aria-label="Connexion administrateur"
       >
-        <Terminal className="h-3.5 w-3.5" />
+        <KeyRound className="h-3.5 w-3.5" />
+        <span className="text-[12px] font-semibold">Admin</span>
       </button>
 
       {open && (
@@ -143,7 +154,7 @@ export function DevAccess() {
             <div className="mb-5 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Terminal className="h-5 w-5 text-[#1E4D2B]" />
-                <h2 className="fc-serif text-lg font-bold text-[#1E4D2B]">Console développeur</h2>
+                <h2 className="fc-serif text-lg font-bold text-[#1E4D2B]">Console administrateur</h2>
                 <span className="rounded-full bg-[#1E4D2B]/10 px-2 py-0.5 text-[11px] font-semibold text-[#1E4D2B]">
                   PC uniquement
                 </span>
@@ -154,7 +165,7 @@ export function DevAccess() {
                     onClick={logout}
                     className="rounded-lg px-3 py-1.5 text-[12px] font-medium text-[#8A9288] hover:bg-black/5 hover:text-[#2A4A3A]"
                   >
-                    Fermer la session dev
+                    Fermer la session admin
                   </button>
                 )}
                 <button
@@ -172,7 +183,7 @@ export function DevAccess() {
               <div className="mx-auto max-w-sm py-6">
                 <div className="mb-4 flex items-center justify-center gap-2 text-[#5C6B60]">
                   <KeyRound className="h-5 w-5" />
-                  <p className="text-[14px]">Espace réservé au développeur du site.</p>
+                  <p className="text-[14px]">Espace réservé à l&apos;administrateur du site.</p>
                 </div>
                 <input
                   type="password"
@@ -181,11 +192,11 @@ export function DevAccess() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter") void login();
                   }}
-                  placeholder="Code développeur"
+                  placeholder="Code administrateur"
                   autoComplete="off"
                   autoFocus
                   className="h-[48px] w-full rounded-xl border border-[#C9B98A] bg-[#FFFDF6] px-4 text-center text-[15px] tracking-widest focus:border-[#2A4A3A] focus:outline-none"
-                  aria-label="Code développeur"
+                  aria-label="Code administrateur"
                 />
                 <button
                   onClick={() => void login()}
@@ -194,7 +205,7 @@ export function DevAccess() {
                   Entrer dans la console
                 </button>
                 <p className="mt-3 text-center text-[11px] leading-relaxed text-[#8A9288]">
-                  Accès invisible sur mobile. Raccourci : Ctrl+Shift+D
+                  Accès invisible sur mobile. Raccourci : Ctrl+Shift+D · Adresse directe : /#admin
                 </p>
               </div>
             ) : (
@@ -238,27 +249,32 @@ export function DevAccess() {
 }
 
 /**
- * Lien « Développeur » du pied de page — desktop uniquement (renvoie null sur
+ * Lien « Administration » du pied de page — desktop uniquement (renvoie null sur
  * mobile). Ouvre la console via l'événement `fc-dev-open` écouté par <DevAccess/>.
  */
 export function DevFooterLink() {
   const [desktop, setDesktop] = useState(false);
   useEffect(() => {
-    const t = setTimeout(() => setDesktop(isDesktopBrowser()), 0);
-    return () => clearTimeout(t);
+    const check = () => setDesktop(isDesktopBrowser());
+    const t = setTimeout(check, 0);
+    window.addEventListener("resize", check);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("resize", check);
+    };
   }, []);
   if (!desktop) return null;
   return (
     <>
-      <span aria-hidden="true" className="mx-2 opacity-40">·</span>
+      <span aria-hidden="true" className="mx-2 opacity-50">·</span>
       <button
         type="button"
         onClick={() => window.dispatchEvent(new CustomEvent("fc-dev-open"))}
-        className="text-[10px] uppercase tracking-wider opacity-40 transition hover:opacity-100 hover:underline focus:outline-none"
-        title="Espace réservé au développeur du site (Ctrl+Shift+D)"
-        aria-label="Accès développeur"
+        className="text-[11px] font-medium uppercase tracking-wider opacity-60 transition hover:opacity-100 hover:underline focus:outline-none"
+        title="Connexion administrateur (Ctrl+Shift+D ou adresse /#admin)"
+        aria-label="Connexion administrateur"
       >
-        Développeur
+        Administration
       </button>
     </>
   );
