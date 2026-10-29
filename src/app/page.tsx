@@ -30,7 +30,7 @@ export default function Page() {
         </p>
       </footer>
 
-      {/* Accès développeur — point discret + Ctrl+Shift+D, bureau uniquement */}
+      {/* Accès administrateur — bouton « Admin » + /#admin + Ctrl+Shift+D, bureau uniquement */}
       <DevAccess />
     </div>
   );
