@@ -900,3 +900,24 @@ Work Log:
 Stage Summary:
 - 4 portes d'entrée admin desktop redondantes : ADRESSE DIRECTE https://famille-mbeutetsa.pages.dev/#admin (à mettre en favori — ouvre la console automatiquement), pastille « 🔑 Admin » bas-droite toujours visible, lien « Administration » dans le footer, Ctrl+Shift+D — TOUTES absentes sur mobile/APK (0 élément admin vérifié à 390×844)
 - Code administrateur inchangé : MbeutetsaDev2025!
+
+---
+Task ID: 18
+Agent: Z.ai Code (orchestrateur)
+Task: Page d'authentification refondue de zéro — inscription par numéro (nom/prénom ou pseudo) OU par identifiant + mot de passe (pseudo + numéro de détection)
+
+Work Log:
+- Demande : « recommencer à zéro la page de connexion » avec 2 parcours : (A) numéro de téléphone → nom & prénom ou au moins un pseudo ; (B) identifiant + mot de passe → pseudo + numéro (le numéro détecte l'utilisateur)
+- Schéma Prisma User : + identifier (unique), passwordHash, passwordSalt → db:push OK
+- Nouvelle API Node /api/auth/identifier (register/login) : PBKDF2-SHA256 120k (hashPin/verifyPin existants), normalisation identifiant [a-z0-9._-]{3,30}, DÉTECTION par numéro (compte existant sans identifiant → association ; avec identifiant différent → refus PHONE_TAKEN 409), création membre+user, session cookie, notifications (bienvenue + admins) ; login accepte identifiant OU numéro comme identifiant ; fix : openSession renvoie désormais { user } dans la réponse (bug découvert au test navigateur — le cookie était posé mais le front ne recevait pas le nom)
+- /api/auth/phone action register : accepte désormais (prénom ET nom) OU pseudo seul → fullName = pseudo || prénom+nom (serveur + demo-api)
+- demo-api.ts : DemoUser + identifier/passwordHash ; hash WebCrypto SHA-256 salé (format sha$salt$hash, repli FNV salé) ; route /api/auth/identifier register/login miroir du serveur Node (détection, PHONE_TAKEN, identifiant pris, notifications, logs)
+- auth-flow.tsx RÉÉCRIT de zéro : machine à états 8 écrans (welcome → login-choice / phone(mode signup|login) → verify → profile(pseudo ou nom) / creds → id-profile / login-creds) ; cartes d'options cliquables avec badge « Recommandé », badges d'étape (Inscription · étape X sur Y), champ mot de passe avec œil afficher/masquer, écran connexion avec astuce « mot de passe oublié → connectez-vous avec votre numéro » ; panneau branding gauche conservé
+- Correctif serveur dev : route /api/auth/identifier en 404 (serveur démarré avant création du dossier) → redémarrage pkill "next dev" + nohup bun run dev
+- Tests LOCAL (Agent Browser + curl, API Node réelle) : accueil 2 options ✓ ; flux A complet (691554433 → OTP auto → Blaise Mbeutetsa → dashboard) ✓ ; flux B complet (jean.test/secret123 → Jean Testeur + 677112233 → dashboard) ✓ ; détection liaison (marie.num sur numéro de Marie Numero → linked:true même user id) ✓ ; PHONE_TAKEN (pirate sur numéro de Sylvie → erreur claire) ✓ ; identifiant déjà pris ✓ ; mauvais mdp 401 + bouton bloqué si <6 ✓ ; connexion identifiant → Karibu ✓ ; connexion par numéro connu → Karibu ✓ ; mobile 390×844 propre ✓ ; lint 0 erreur nouvelle
+- Déploiement : build-cloudflare.sh + wrangler (pages.dev) ; tests PRODUCTION (mode démo, WebCrypto) : accueil ✓ ; inscription identifiant prod.test.georges/623445566 → Karibu Georges Production ✓ ; connexion identifiant ✓ ; parcours numéro 655998877 → PSEUL SEUL sans nom → Karibu ✓ ; DÉTECTION prod : lie.georges sur numéro existant → « Numéro reconnu — compte de Pseudo Seul 2026 » → liaison + dashboard ✓ ; vue mobile ✓ ; push/APK/admin non régressés
+
+Stage Summary:
+- LA PAGE DE CONNEXION EST REFONTE : 2 parcours d'inscription complets et testés en production — numéro (nom/prénom ou pseudo seul, OTP auto façon WhatsApp) OU identifiant+mot de passe (pseudo + numéro de détection avec liaison automatique des comptes) ; 2 connexions (numéro+code, identifiant+mdp y compris le numéro)
+- Sécurité : PBKDF2-SHA256 120k (serveur), SHA-256 salé WebCrypto (démo), protection PHONE_TAKEN (pas de détournement de numéro), identifiants uniques normalisés
+- Les comptes existants (créés par numéro) restent 100 % compatibles : un identifiant peut leur être ajouté à tout moment via le parcours B
