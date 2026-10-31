@@ -17,10 +17,35 @@ import {
   COUNTRIES,
   Country,
   DEFAULT_COUNTRY,
-  flagEmoji,
+  flagUrl,
   resolveInitialCountry,
   saveCountryChoice,
 } from "@/lib/fc-countries";
+
+/* ─── Drapeau en image (Windows ne rend pas les emojis drapeaux) ───
+    Repli gracieux : si le PNG n'est pas chargé (hors-ligne…), on montre
+    le code du pays en toutes lettres, jamais un drapeau cassé. */
+function Flag({ iso, height = 19 }: { iso: string; height?: number }) {
+  const [failed, setFailed] = useState(false);
+  if (failed || !/^[A-Za-z]{2}$/.test(iso)) {
+    return (
+      <span className="inline-flex items-center justify-center font-bold text-[#5C6B60]" style={{ height }} aria-hidden="true">
+        {/^[A-Za-z]{2}$/.test(iso) ? iso.toUpperCase() : "🌐"}
+      </span>
+    );
+  }
+  return (
+    <img
+      src={flagUrl(iso)}
+      alt=""
+      loading="lazy"
+      onError={() => setFailed(true)}
+      style={{ height, width: "auto" }}
+      className="inline-block rounded-[3px] border border-black/10 object-cover shadow-sm"
+      draggable={false}
+    />
+  );
+}
 
 /* ─── Hook : pays courant + détection auto + mémoire du choix manuel ─── */
 export function usePhoneCountry() {
@@ -137,8 +162,8 @@ export function PhoneCountrySelect({
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <span className="text-[19px] leading-none" aria-hidden="true">
-          {flagEmoji(value.iso)}
+        <span className="flex items-center leading-none" aria-hidden="true">
+          <Flag iso={value.iso} height={19} />
         </span>
         <span className="whitespace-nowrap">+{value.dial}</span>
         <ChevronDown
@@ -191,8 +216,8 @@ export function PhoneCountrySelect({
                       selected ? "bg-[#2A4A3A]/10" : "hover:bg-[#2A4A3A]/5"
                     }`}
                   >
-                    <span className="w-7 shrink-0 text-[18px] leading-none" aria-hidden="true">
-                      {flagEmoji(c.iso)}
+                    <span className="flex w-7 shrink-0 items-center leading-none" aria-hidden="true">
+                      <Flag iso={c.iso} height={18} />
                     </span>
                     <span className="min-w-0 flex-1 truncate text-[#2B3530]">
                       {c.fr}
