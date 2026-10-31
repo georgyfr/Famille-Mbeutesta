@@ -300,6 +300,13 @@ export function flagEmoji(iso: string): string {
     .join("");
 }
 
+/** Drapeau en IMAGE (pas un emoji) : les emojis drapeaux régionaux ne
+ *  s'affichent pas sur Windows (Edge/Chrome montrent « CM » au lieu de 🇨🇲).
+ *  Les 239 PNG (flagcdn, 40 px) sont servis en local depuis /public/flags. */
+export function flagUrl(iso: string): string {
+  return `/flags/${iso.toLowerCase()}.png`;
+}
+
 /* ─── Normalisation visuelle : « 691234567 » → « 6 91 23 45 67 » ─── */
 export function onlyDigits(s: string): string {
   return s.replace(/\D/g, "");
