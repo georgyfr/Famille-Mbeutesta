@@ -34,7 +34,14 @@ export const collationMensuelle = (effectif: number) => effectif * TONTINE.monta
 
 /* ══════════════════════════ rôles du bureau ══════════════════════════ */
 
-export type RoleKey = "president" | "vice_president" | "commissaire" | "tresorier" | "censeur" | "membre";
+export type RoleKey =
+  | "president" | "vice_president" | "secretariat" | "commissaire" | "tresorier" | "censeur"
+  | "membre";
+
+/** Les deux rôles habilités à régler le taux mensuel et à valider les nouvelles
+ *  épargnes — décision de l'administrateur (2026-11) : ces actions appartiennent
+ *  au bureau, jamais aux simples membres (qui ne peuvent que VALIDER). */
+export const ROLES_TAUX_EPARGNE: RoleKey[] = ["president", "secretariat"];
 
 export type RoleMeta = {
   label: string;
@@ -54,6 +61,11 @@ export const ROLE_META: Record<RoleKey, RoleMeta> = {
     label: "Vice-président(e)", short: "Vice-prés.",
     badge: "bg-[#2F6B45]/12 text-[#2F6B45] border-[#2F6B45]/30", accent: "#2F6B45",
     summary: "Supplée le président et coordonne les préparatifs de chaque réunion.",
+  },
+  secretariat: {
+    label: "Secrétaire", short: "Secrétaire",
+    badge: "bg-[#6E4B71]/10 text-[#6E4B71] border-[#6E4B71]/30", accent: "#6E4B71",
+    summary: "Tient les procès-verbaux, archive les décisions du bureau et règle le taux avec le président.",
   },
   commissaire: {
     label: "Commissaire aux comptes", short: "Commissaire",
@@ -77,7 +89,7 @@ export const ROLE_META: Record<RoleKey, RoleMeta> = {
   },
 };
 
-export const ROLES_BUREAU: RoleKey[] = ["president", "vice_president", "commissaire", "tresorier", "censeur"];
+export const ROLES_BUREAU: RoleKey[] = ["president", "vice_president", "secretariat", "commissaire", "tresorier", "censeur"];
 
 /* ══════════════════════════ membres ══════════════════════════ */
 
@@ -100,19 +112,20 @@ export const MEMBRES_FICTIFS: Member[] = [
   { id: "f03", name: "Émile Tchoumi", role: "tresorier", phone: "+237 6 55 62 14 90", city: "Douala", since: "2016", tour: 3, fictif: true, isVous: false },
   { id: "f04", name: "Bernadette Kamga", role: "commissaire", phone: "+237 6 91 08 47 35", city: "Yaoundé", since: "2016", tour: 4, fictif: true, isVous: false },
   { id: "f05", name: "Roger Ndoumbe", role: "censeur", phone: "+237 6 78 33 91 26", city: "Douala", since: "2017", tour: 5, fictif: true, isVous: false },
-  { id: "f06", name: "Françoise Mbeutetsa", role: "membre", phone: "+33 6 42 51 88 07", city: "Paris (diaspora)", since: "2018", tour: 6, fictif: true, isVous: false },
+  { id: "f06", name: "Françoise Mbeutetsa", role: "secretariat", phone: "+33 6 42 51 88 07", city: "Paris (diaspora)", since: "2018", tour: 6, fictif: true, isVous: false },
   { id: "f07", name: "Patrick Talla", role: "membre", phone: "+237 6 96 74 20 51", city: "Douala", since: "2019", tour: 7, fictif: true, isVous: false },
   { id: "f08", name: "Chantal Djuidje", role: "membre", phone: "+237 6 70 19 56 84", city: "Bafoussam", since: "2020", tour: 8, fictif: true, isVous: false },
   { id: "f09", name: "Hervé Fotso", role: "membre", phone: "+237 6 57 82 40 63", city: "Yaoundé", since: "2021", tour: 9, fictif: true, isVous: false },
   { id: "f10", name: "Aurélie Simo", role: "membre", phone: "+1 514 236 7890", city: "Montréal (diaspora)", since: "2023", tour: 10, fictif: true, isVous: false },
 ];
 
-/** Effectif complet : les 10 fictifs + « Vous » (membre connecté), par ancienneté. */
-export function buildRoster(vousName?: string | null): Member[] {
+/** Effectif complet : les 10 fictifs + « Vous » (membre connecté, avec le rôle
+ *  renseigné à l'inscription dans la cantine), par ancienneté. */
+export function buildRoster(vousName?: string | null, vousRole?: RoleKey | null): Member[] {
   const vous: Member = {
     id: "vous",
     name: (vousName ?? "").trim() || "Vous",
-    role: "membre",
+    role: vousRole && vousRole !== "membre" ? vousRole : "membre",
     phone: "",
     city: "Ma position",
     since: String(new Date().getFullYear()),
@@ -445,6 +458,13 @@ export const MISSIONS: Record<Exclude<RoleKey, "membre">, Mission[]> = {
     { titre: "Tient le journal de caisse", detail: "Note chaque mouvement : encaissement, somme remise, collation, pénalité.", rythme: "En continu" },
     { titre: "Gère la caisse sociale", detail: "Adhésions et pénalités, débloquées sur décision du bureau.", rythme: "En continu" },
   ],
+  secretariat: [
+    { titre: "Tient les procès-verbaux", detail: "Rédige le compte rendu de chaque réunion et le lit au mois suivant.", rythme: "Chaque réunion" },
+    { titre: "Règle le taux mensuel", detail: "Avec le président, fixe et publie le taux des épargnes et prêts.", rythme: "À chaque décision" },
+    { titre: "Valide les épargnes", detail: "Vérifie chaque épargne proposée par un membre avant son inscription au registre.", rythme: "À la demande" },
+    { titre: "Archive les décisions", detail: "Conserve le journal des décisions du bureau — accessible à tous.", rythme: "En continu" },
+    { titre: "Tient la liste de présence", detail: "Appelle les membres et note présences, absences et excuses.", rythme: "Chaque réunion" },
+  ],
   censeur: [
     { titre: "Veille à l'équité", detail: "S'assure que chacun est traité à égalité, sans favoritisme.", rythme: "En permanence" },
     { titre: "Écoute les membres", detail: "Reçoit les observations confidentielles de chacun.", rythme: "En continu" },
@@ -545,17 +565,89 @@ export function moisCourantAnnee(annee: TourMois[], today = new Date()): number 
   return isoDate(today) < annee[0].iso ? -1 : 12;
 }
 
-/* — stockage local des épargnes — */
+/* — stockage local des épargnes —
+
+   WORKFLOW DE VALIDATION (décision de l'administrateur, 2026-11) :
+   1. Le membre saisit une épargne → statut « proposée » : elle attend la
+      validation du BUREAU (président ou secrétaire uniquement).
+   2. Le bureau valide → statut « validée » : la décision est notifiée au
+      membre, qui ne peut que la VALIDER (pas la modifier).
+   3. Si le membre ne valide pas dans les 7 JOURS, l'épargne est reconnue
+      comme validée par défaut (autoValideLe) — rien ne bloque l'épargne.
+   4. Une épargne validée ne peut plus être supprimée par le membre : seul le
+      bouton « Signaler un problème » reste disponible pour le membre.
+   Les épargnes saisies D'OFFICE par le bureau sont créées « validées ».
+   Les données anciennes (avant ce workflow) sont migrées en « validées
+   d'office, confirmées » — aucun blocage rétroactif. */
 
 const EPARGNES_KEY = "fc_tontine_epargnes_v1";
 
-export type Epargne = { id: string; month0: number; capital: number };
+export type StatutValidation = "proposée" | "validée";
+export type Origine = "membre" | "bureau";
+
+/** Champs de workflow partagés par les épargnes et les prêts (dettes). */
+export type Workflow = {
+  statut: StatutValidation; // « proposée » = attend le bureau ; « validée » = actée
+  origine: Origine; // qui a SAISI la ligne (membre = proposition, bureau = registre officiel)
+  valideLe: string | null; // ISO — validation du bureau
+  validePar: RoleKey | null; // rôle du bureau ayant validé (président / secrétaire / trésorier…)
+  membreConfirmeLe: string | null; // ISO — le membre a validé la décision du bureau
+  autoValideLe: string | null; // ISO — validée par défaut après 7 jours sans action du membre
+};
+
+export type Epargne = Workflow & { id: string; month0: number; capital: number };
+
+/** Complète les champs de workflow manquants. Deux cas :
+ *  1. Données MODERNES (workflow en place) : les valeurs explicites — y compris
+ *     les `null` — sont conservées telles quelles (une décision du bureau non
+ *     encore confirmée doit rester en attente du membre).
+ *  2. Données ANCIENNES (avant le workflow, aucun champ présent) : considérées
+ *     validées d'office et déjà confirmées par le membre — aucun blocage ni
+ *     invitation rétroactive. */
+export function migreWorkflow<T extends object>(x: T, origine: Origine = "bureau"): T & Workflow {
+  const w = x as Partial<Workflow>;
+  const moderne =
+    w.statut === "proposée" ||
+    w.statut === "validée" ||
+    w.valideLe !== undefined ||
+    w.membreConfirmeLe !== undefined ||
+    w.autoValideLe !== undefined ||
+    w.origine !== undefined;
+
+  if (moderne) {
+    return {
+      ...x,
+      statut: w.statut === "proposée" || w.statut === "validée" ? w.statut : "validée",
+      origine: w.origine === "membre" || w.origine === "bureau" ? w.origine : origine,
+      valideLe: typeof w.valideLe === "string" ? w.valideLe : null,
+      validePar: w.validePar ?? null,
+      membreConfirmeLe: typeof w.membreConfirmeLe === "string" ? w.membreConfirmeLe : null,
+      autoValideLe: typeof w.autoValideLe === "string" ? w.autoValideLe : null,
+    } as T & Workflow;
+  }
+
+  // Données anciennes : validées d'office, connues et acceptées du membre.
+  const now = new Date().toISOString();
+  return {
+    ...x,
+    statut: "validée",
+    origine,
+    valideLe: now,
+    validePar: null,
+    membreConfirmeLe: now,
+    autoValideLe: null,
+  } as T & Workflow;
+}
 
 export function loadEpargnes(): Epargne[] {
   try {
     const raw = localStorage.getItem(EPARGNES_KEY);
-    const list = raw ? (JSON.parse(raw) as Epargne[]) : [];
-    return Array.isArray(list) ? list.filter((e) => e && typeof e.month0 === "number" && typeof e.capital === "number" && e.capital > 0) : [];
+    const list = raw ? (JSON.parse(raw) as unknown[]) : [];
+    return Array.isArray(list)
+      ? list
+          .filter((e) => !!e && typeof (e as Epargne).month0 === "number" && typeof (e as Epargne).capital === "number" && (e as Epargne).capital > 0)
+          .map((e) => migreWorkflow(e as Epargne, "bureau"))
+      : [];
   } catch {
     return [];
   }
@@ -569,11 +661,19 @@ export function saveEpargnes(list: Epargne[]): void {
   }
 }
 
-/* — stockage local des prêts — */
+/* — stockage local des prêts (dettes) —
+
+   RÈGLE DU BUREAU (2026-11) : une dette est une décision du bureau.
+   Un membre ne peut SUPPRIMER ni MODIFIER une dette qui a été allouée par un
+   acteur du bureau (statut « validée ») — il peut seulement la rembourser ou
+   la SIGNALER. Sa propre demande (statut « proposée », non encore actée par
+   le bureau) reste supprimable. La validation suit le même circuit que les
+   épargnes : bureau (président, secrétaire ou trésorier) → membre (7 jours
+   pour valider, sinon validée par défaut). */
 
 const PRETS_KEY = "fc_tontine_prets_v1";
 
-export type Pret = {
+export type Pret = Workflow & {
   id: string;
   month0: number; // mois de la réunion où le prêt a été demandé
   capital: number; // somme prêtée par la réunion
@@ -584,9 +684,11 @@ export type Pret = {
 export function loadPrets(): Pret[] {
   try {
     const raw = localStorage.getItem(PRETS_KEY);
-    const list = raw ? (JSON.parse(raw) as Pret[]) : [];
+    const list = raw ? (JSON.parse(raw) as unknown[]) : [];
     return Array.isArray(list)
-      ? list.filter((p) => p && typeof p.month0 === "number" && typeof p.capital === "number" && p.capital > 0)
+      ? list
+          .filter((p) => !!p && typeof (p as Pret).month0 === "number" && typeof (p as Pret).capital === "number" && (p as Pret).capital > 0)
+          .map((p) => migreWorkflow(p as Pret, "bureau"))
       : [];
   } catch {
     return [];
