@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { api } from "@/lib/fc-client";
 import { installDemoApi } from "@/lib/demo-api";
+import { consumedRestore, installStorageMirror } from "@/lib/fc-storage-mirror";
 import {
   initPushDebugListener, initServiceWorker, setDeferredInstallPrompt,
 } from "@/lib/fc-push";
@@ -68,6 +70,12 @@ export function MainApp() {
     const res = await api<{ session: SessionData | null }>("/api/auth/session");
     setSession(res.ok ? res.session : null);
     setLoading(false);
+    // Session restaurée automatiquement (le navigateur avait vidé le stockage)
+    // → accueil chaleureux au lieu de l'écran d'inscription.
+    const restored = consumedRestore();
+    if (restored && res.ok && res.session) {
+      toast.success("Espace restauré automatiquement — bienvenue à nouveau 👋");
+    }
   }, []);
 
   useEffect(() => {
@@ -78,30 +86,44 @@ export function MainApp() {
       return;
     }
     removeLegacyApp();
-    // Mode démo (build statique Cloudflare) : simule les API côté navigateur
-    if (process.env.NEXT_PUBLIC_DEMO_MODE === "1") installDemoApi();
-    // L'utilisateur a-t-il déjà repoussé l'assistant de localisation ?
-    const t0 = setTimeout(() => {
-      try {
-        setLocSkipped(localStorage.getItem("fc_loc_skipped") === "1");
-      } catch {
-        /* rien */
+    let cleanupTimers: () => void = () => undefined;
+    // Démarrage : en mode démo (site statique Cloudflare), on RESTAURE d'abord
+    // compte + épargnes si le navigateur a vidé le localStorage (WebView
+    // WhatsApp/Opéra…), puis on simule les API — l'utilisateur ne doit JAMAIS
+    // se réinscrire à chaque clic sur le lien.
+    void (async () => {
+      if (process.env.NEXT_PUBLIC_DEMO_MODE === "1") {
+        try {
+          await installStorageMirror();
+          installDemoApi();
+        } catch {
+          installDemoApi();
+        }
       }
-    }, 0);
+      // L'utilisateur a-t-il déjà repoussé l'assistant de localisation ?
+      const t0 = setTimeout(() => {
+        try {
+          setLocSkipped(localStorage.getItem("fc_loc_skipped") === "1");
+        } catch {
+          /* rien */
+        }
+      }, 0);
 
-    // Service Worker (push app fermée) + invite d'installation PWA différée (Ma sécurité)
-    void initServiceWorker();
-    initPushDebugListener();
-    window.addEventListener("beforeinstallprompt", setDeferredInstallPrompt);
+      // Service Worker (push app fermée) + invite d'installation PWA différée (Ma sécurité)
+      void initServiceWorker();
+      initPushDebugListener();
+      window.addEventListener("beforeinstallprompt", setDeferredInstallPrompt);
 
-    const min = setTimeout(() => setSplashMin(false), 700);
-    const t = setTimeout(loadSession, 0);
-    return () => {
-      clearTimeout(t);
-      clearTimeout(min);
-      clearTimeout(t0);
-      window.removeEventListener("beforeinstallprompt", setDeferredInstallPrompt);
-    };
+      const min = setTimeout(() => setSplashMin(false), 700);
+      const t = setTimeout(loadSession, 0);
+      cleanupTimers = () => {
+        clearTimeout(t);
+        clearTimeout(min);
+        clearTimeout(t0);
+        window.removeEventListener("beforeinstallprompt", setDeferredInstallPrompt);
+      };
+    })();
+    return () => cleanupTimers();
   }, [loadSession]);
 
   const handleReady = useCallback(async () => {

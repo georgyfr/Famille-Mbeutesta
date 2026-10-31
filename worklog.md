@@ -982,3 +982,31 @@ Stage Summary:
   - Calculs inchangés (intérêts simples : soldeEpargneAuMois = capital + im×k, im = capital×taux/100) ; totalInterets/totalCapital conservés pour les KPI
 - TESTS LOCAL (390×844 + 1280) : avril 20 000 → produit +3 600 (6 mois × 600), valeur 23 600, prévu 24 800 ✓ ; juin 15 000 → +1 800 (4 × 450), 16 800, 17 700 ✓ ; global : avril 20 000 / mai 20 600 / juin 36 200 / juillet 37 250 (+600+450) / août 38 300 / sept 39 350 / oct 40 400 / nov 41 450 (À venir) / déc 42 500 = 35 000 + 7 500 ✓ ; dépliage juin : 15 000 → 15 450 → 15 900 ✓ ; eslint+tsc 0 erreur ; localStorage vidé à la fermeture du navigateur de test (contexte temporaire — les épargnes de démo disparaissent, comportement normal)
 - BUILD + DÉPLOIEMENT : build-cloudflare.sh OK ; déploiement b1d023f9 ; PRODUCTION vérifiée (agent-browser) : connexion démo → épargnes avril 20 000 + juin 15 000 → « Mes mois d'épargne » (2 lignes) + calendrier global identique au local ✓ ; 0 erreur page
+
+## Task 32 — RECONNEXION AUTOMATIQUE (miroir de stockage) + onglet « Mes finances » recoloré [2026-10-31]
+
+- SIGNALEMENT (capture https://ibb.co/h1D1Y105) : « à chaque fois que je clique de nouveau sur le lien, je dois me réinscrire ou me reconnecter… pourquoi l'application ne mémorise pas immédiatement la dernière connexion ? » ; remplacer « Mes épargnes » par « Mes finances » dans les onglets ; attribuer d'autres couleurs pour différencier de l'épargne ; « assure-toi que Famille.Mbeutetsa fonctionne bien »
+- CAUSE : certains navigateurs (WebView WhatsApp/Facebook, réglage « effacer à la fermeture » d'Opera/Samsung, navigation privée) VIDENT le localStorage à chaque relancement — compte, épargnes et prêts disparus → réinscription forcée
+- SOLUTION (nouveau src/lib/fc-storage-mirror.ts) — triple écriture + restauration au démarrage AVANT toute lecture de session :
+  1. localStorage (stockage normal) ; 2. IndexedDB « fc-mirror » (compartiment indépendant, survit à l'effacement du localStorage) — snapshot complet des 6 clés (fc_demo_db_v2, épargnes, prêts, taux, payes, fc_loc_skipped) ; 3. cookies 10 ans : « fc_anchor » (miniature du compte : uid, did, nom, téléphone, branche) + « fc_ep_data » (épargnes/prêts/taux compactés « e=3:10000;p=;t=3 »)
+  - setItem de Storage.prototype patché → chaque écriture de l'app recopie en arrière-plan (debounce 600 ms) ; filet pagehide/visibilitychange
+  - Restauration en cascade : base présente → rien ; sinon IndexedDB ; sinon cookies (recrée compte + session + épargnes via seedMinimalDb + notification « Espace restauré automatiquement »)
+  - Déconnexion EXPLICITE → cookies fc_anchor/fc_ep_data effacés (pas d'auto-reconnexion) ; stockage ILLISIBLE → cookies INTACTS (dernier rempart — bug corrigé : la 1ʳᵉ version écrasait les cookies au pagehide après effacement)
+  - Taux par défaut JAMAIS 0 dans le cookie de données (Number(null)=0 → forcé à 3)
+  - main-app.tsx : boot async — installStorageMirror() await → installDemoApi() → loadSession() ; toast « Espace restauré automatiquement — bienvenue à nouveau 👋 » (consumedRestore)
+- RENOMMAGE + COULEURS (tontine-page.tsx) : onglet principal « Mes épargnes » → « **Mes finances** » (icône Wallet, alias hash finances/finance) ; univers FINANCES en SARCELLE #3D6B72 (réunions/membres/stats restent vert #1E4D2B) ; sous-onglets : « Mes épargnes » actif = sarcelle, « Mes prêts » actif = TERRACOTTA #B85C33 ; Block interne renommé « Mes épargnes — vue d'ensemble » ; aria-labels mis à jour
+- TESTS LOCAL (build démo servi sur :4173, agent-browser) :
+  - Inscription démo (Cameroun +237 / 691234567) → cookies fc_anchor + fc_ep_data présents, IndexedDB alimentée
+  - WIPE localStorage seul → reload → session restaurée (IndexedDB), épargne avril 10 000 intacte, décembre 12 400 ✓
+  - WIPE localStorage + IndexedDB → reload → session restaurée DEPUIS LES COULIS SEULS (compte Jean recréé, épargne mai 15 000 : mai 15 450 → juin 15 900 … décembre 18 150 = 15 000 + 7 × 450 ✓, fc_loc_skipped restauré)
+  - Toast « Espace restauré automatiquement » affiché ✓
+  - Déconnexion explicite → cookies effacés, reload → écran de connexion (pas de reconnexion fantôme) ✓
+  - « Mes finances » : onglet actif rgb(61,107,114) ; sous-onglets sarcelle/terracotta rgb(184,92,51) ✓ ; mobile 390 + desktop 1280 OK
+- ENV recréés (3ᵉ perte workspace) : .env.cloudflare + .env.github (token Cloudflare vérifié actif, expire 2027-10-27)
+- BUILD + DÉPLOIEMENT : build-cloudflare.sh OK ×3 (itérations correctifs) ; wrangler pages deploy → **déploiement 3bbfa2e7** (18 fichiers uploadés)
+- VÉRIFICATIONS PRODUCTION (agent-browser, https://famille-mbeutetsa.pages.dev) :
+  - Inscription démo Cameroun +237 → épargne avril 10 000 enregistrée (décembre 12 400, cookie « e=3:10000;p=;t=3 ») ✓
+  - Onglet « Mes finances » (ancien libellé absent), actif sarcelle ; sous-onglets sarcelle/terracotta ✓
+  - WIPE localStorage → reload → PAS d'écran de connexion, session « Jean Mbeutetsa » restaurée, épargne avril restaurée, onglet Mes finances conservé (#tontine/cotisations) ✓
+  - Mobile 390 : nav collée en bas (bottom=844), rendu conforme (capture /tmp/prod-finances-mobile.png) ; 0 erreur page
+- Rappel : la refonte épargnes de la Task 31 (section « Mes mois d'épargne » + calendrier des sommes perçues 10 000 → 10 300 → 10 600 → 10 900) est déjà en production (b1d023f9) — la présente demande visait la reconnexion + le renommage/couleurs

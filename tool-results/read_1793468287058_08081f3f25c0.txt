@@ -1,0 +1,580 @@
+     1→// ─────────────────────────────────────────────────────────────────────────────
+     2→// Moteur de la TONTINE FAMILIALE — Famille.Mbeutetsa
+     3→//
+     4→// Une seule tontine, présente par défaut (pas de création, pas de liste).
+     5→// Effectif : 10 personnes fictives « en attente d'activation » (elles jouent
+     6→// les rôles du bureau et les simples membres) + « Vous » (membre connecté).
+     7→// Calendrier : réunion le 2ᵉ dimanche de chaque mois ; 11 tours
+     8→// (janvier → novembre, chacun reçoit la somme une fois) puis assemblée
+     9→// générale en décembre. Tous les montants affichés dans la page sont
+    10→// DÉRIVÉS de ces données — rien n'est codé en dur dans l'interface.
+    11→// ─────────────────────────────────────────────────────────────────────────────
+    12→
+    13→/* ══════════════════════════ règles de la tontine ══════════════════════════ */
+    14→
+    15→export const TONTINE = {
+    16→  montantCotisation: 10_000, // FCFA par membre et par réunion
+    17→  montantCollation: 2_000, // FCFA par personne et par réunion
+    18→  fraisAdhesion: 5_000, // une seule fois — alimente la caisse sociale
+    19→  penaliteRetard: 500,
+    20→  penaliteAbsence: 1_000,
+    21→  jourLabel: "2ᵉ dimanche du mois",
+    22→} as const;
+    23→
+    24→export const MOIS_FR = [
+    25→  "janvier", "février", "mars", "avril", "mai", "juin",
+    26→  "juillet", "août", "septembre", "octobre", "novembre", "décembre",
+    27→];
+    28→export const MOIS_FR_SHORT = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Aoû", "Sep", "Oct", "Nov", "Déc"];
+    29→
+    30→/** Somme remise au bénéficiaire : tout le monde cotise sauf le bénéficiaire. */
+    31→export const potMensuel = (effectif: number) => (effectif - 1) * TONTINE.montantCotisation;
+    32→/** Collation : tout le monde y contribue, y compris le bénéficiaire. */
+    33→export const collationMensuelle = (effectif: number) => effectif * TONTINE.montantCollation;
+    34→
+    35→/* ══════════════════════════ rôles du bureau ══════════════════════════ */
+    36→
+    37→export type RoleKey = "president" | "vice_president" | "commissaire" | "tresorier" | "censeur" | "membre";
+    38→
+    39→export type RoleMeta = {
+    40→  label: string;
+    41→  short: string;
+    42→  badge: string; // classes du badge de rôle
+    43→  accent: string; // couleur d'accent (icônes, bordures)
+    44→  summary: string;
+    45→};
+    46→
+    47→export const ROLE_META: Record<RoleKey, RoleMeta> = {
+    48→  president: {
+    49→    label: "Président(e)", short: "Président",
+    50→    badge: "bg-[#1E4D2B] text-white border-transparent", accent: "#1E4D2B",
+    51→    summary: "Conduit les réunions, représente la tontine et veille au règlement.",
+    52→  },
+    53→  vice_president: {
+    54→    label: "Vice-président(e)", short: "Vice-prés.",
+    55→    badge: "bg-[#2F6B45]/12 text-[#2F6B45] border-[#2F6B45]/30", accent: "#2F6B45",
+    56→    summary: "Supplée le président et coordonne les préparatifs de chaque réunion.",
+    57→  },
+    58→  commissaire: {
+    59→    label: "Commissaire aux comptes", short: "Commissaire",
+    60→    badge: "bg-[#3D6B72]/10 text-[#3D6B72] border-[#3D6B72]/30", accent: "#3D6B72",
+    61→    summary: "Contrôle les caisses et audite le journal de caisse chaque trimestre.",
+    62→  },
+    63→  tresorier: {
+    64→    label: "Trésorier(ère)", short: "Trésorier",
+    65→    badge: "bg-[#C89F62]/18 text-[#8A6420] border-[#C89F62]/45", accent: "#8A6420",
+    66→    summary: "Encaisse les cotisations, remet la somme du mois au bénéficiaire et tient le journal de caisse.",
+    67→  },
+    68→  censeur: {
+    69→    label: "Censeur", short: "Censeur",
+    70→    badge: "bg-[#B85C33]/10 text-[#B85C33] border-[#B85C33]/30", accent: "#B85C33",
+    71→    summary: "Veille à l'équité, écoute les membres et protège leur dignité.",
+    72→  },
+    73→  membre: {
+    74→    label: "Membre", short: "Membre",
+    75→    badge: "bg-[#2A4A3A]/8 text-[#5C6B60] border-[#E5DCC0]", accent: "#5C6B60",
+    76→    summary: "Cotise chaque mois et participe aux réunions du 2ᵉ dimanche.",
+    77→  },
+    78→};
+    79→
+    80→export const ROLES_BUREAU: RoleKey[] = ["president", "vice_president", "commissaire", "tresorier", "censeur"];
+    81→
+    82→/* ══════════════════════════ membres ══════════════════════════ */
+    83→
+    84→export type Member = {
+    85→  id: string;
+    86→  name: string;
+    87→  role: RoleKey;
+    88→  phone: string;
+    89→  city: string;
+    90→  since: string; // année d'adhésion
+    91→  tour: number; // 1..11 → mois de réception de la somme (1 = janvier)
+    92→  fictif: boolean; // personne fictive en attente d'activation
+    93→  isVous: boolean;
+    94→};
+    95→
+    96→/** Les 10 personnes fictives — simples membres et titulaires du bureau. */
+    97→export const MEMBRES_FICTIFS: Member[] = [
+    98→  { id: "f01", name: "Joseph Mbeutetsa", role: "president", phone: "+237 6 99 41 27 08", city: "Douala", since: "2015", tour: 1, fictif: true, isVous: false },
+    99→  { id: "f02", name: "Marie-Louise Nguetsop", role: "vice_president", phone: "+237 6 77 85 30 12", city: "Bafoussam", since: "2015", tour: 2, fictif: true, isVous: false },
+   100→  { id: "f03", name: "Émile Tchoumi", role: "tresorier", phone: "+237 6 55 62 14 90", city: "Douala", since: "2016", tour: 3, fictif: true, isVous: false },
+   101→  { id: "f04", name: "Bernadette Kamga", role: "commissaire", phone: "+237 6 91 08 47 35", city: "Yaoundé", since: "2016", tour: 4, fictif: true, isVous: false },
+   102→  { id: "f05", name: "Roger Ndoumbe", role: "censeur", phone: "+237 6 78 33 91 26", city: "Douala", since: "2017", tour: 5, fictif: true, isVous: false },
+   103→  { id: "f06", name: "Françoise Mbeutetsa", role: "membre", phone: "+33 6 42 51 88 07", city: "Paris (diaspora)", since: "2018", tour: 6, fictif: true, isVous: false },
+   104→  { id: "f07", name: "Patrick Talla", role: "membre", phone: "+237 6 96 74 20 51", city: "Douala", since: "2019", tour: 7, fictif: true, isVous: false },
+   105→  { id: "f08", name: "Chantal Djuidje", role: "membre", phone: "+237 6 70 19 56 84", city: "Bafoussam", since: "2020", tour: 8, fictif: true, isVous: false },
+   106→  { id: "f09", name: "Hervé Fotso", role: "membre", phone: "+237 6 57 82 40 63", city: "Yaoundé", since: "2021", tour: 9, fictif: true, isVous: false },
+   107→  { id: "f10", name: "Aurélie Simo", role: "membre", phone: "+1 514 236 7890", city: "Montréal (diaspora)", since: "2023", tour: 10, fictif: true, isVous: false },
+   108→];
+   109→
+   110→/** Effectif complet : les 10 fictifs + « Vous » (membre connecté), par ancienneté. */
+   111→export function buildRoster(vousName?: string | null): Member[] {
+   112→  const vous: Member = {
+   113→    id: "vous",
+   114→    name: (vousName ?? "").trim() || "Vous",
+   115→    role: "membre",
+   116→    phone: "",
+   117→    city: "Ma position",
+   118→    since: String(new Date().getFullYear()),
+   119→    tour: 11,
+   120→    fictif: false,
+   121→    isVous: true,
+   122→  };
+   123→  return [...MEMBRES_FICTIFS, vous];
+   124→}
+   125→
+   126→/** Mois du tour n (1-based) : tour 1 = janvier… tour 11 = novembre. */
+   127→export const moisDuTour = (tour: number) => MOIS_FR[tour - 1] ?? "—";
+   128→
+   129→/* ══════════════════════════ calendrier — les 2ᵉ dimanches ══════════════════════════ */
+   130→
+   131→/** Jour du 2ᵉ dimanche du mois (8 à 14). */
+   132→export function secondSunday(year: number, month0: number): number {
+   133→  const dow = new Date(year, month0, 1).getDay(); // 0 = dimanche
+   134→  return 1 + ((7 - dow) % 7) + 7;
+   135→}
+   136→
+   137→export function isoDate(d: Date): string {
+   138→  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+   139→}
+   140→
+   141→export type EtatMois = "passe" | "courant" | "futur";
+   142→
+   143→export type TourMois = {
+   144→  month0: number; // 0..11
+   145→  mois: string;
+   146→  annee: number;
+   147→  jour: number; // jour du 2ᵉ dimanche
+   148→  date: Date;
+   149→  iso: string; // yyyy-mm-dd de la réunion
+   150→  tour: number | null; // null en décembre (AG)
+   151→  beneficiary: Member | null; // null en décembre (AG)
+   152→  ag: boolean; // assemblée générale
+   153→  pot: number;
+   154→  collation: number;
+   155→  total: number;
+   156→  etat: EtatMois; // le nom du bénéficiaire n'apparaît que passé/courant (le moment venu)
+   157→};
+   158→
+   159→/** Construit les 12 mois de l'année : 11 tours + l'AG de décembre. */
+   160→export function buildAnnee(year: number, roster: Member[], today = new Date()): TourMois[] {
+   161→  const byTour = new Map<number, Member>();
+   162→  roster.forEach((m) => byTour.set(m.tour, m));
+   163→  const moisCourant = today.getMonth();
+   164→  return MOIS_FR.map((mois, m0) => {
+   165→    const jour = secondSunday(year, m0);
+   166→    const date = new Date(year, m0, jour);
+   167→    const ag = m0 === 11;
+   168→    const beneficiary = ag ? null : byTour.get(m0 + 1) ?? null;
+   169→    const pot = ag ? 0 : potMensuel(roster.length);
+   170→    const collation = ag ? 0 : collationMensuelle(roster.length);
+   171→    const etat: EtatMois = m0 < moisCourant ? "passe" : m0 === moisCourant ? "courant" : "futur";
+   172→    return {
+   173→      month0: m0, mois, annee: year, jour, date,
+   174→      iso: `${year}-${String(m0 + 1).padStart(2, "0")}-${String(jour).padStart(2, "0")}`,
+   175→      tour: ag ? null : m0 + 1, beneficiary, ag, pot, collation, total: pot + collation, etat,
+   176→    };
+   177→  });
+   178→}
+   179→
+   180→/** État de la réunion d'un mois au niveau du jour : passée / aujourd'hui / à venir. */
+   181→export function etatReunion(t: TourMois, today = new Date()): "passee" | "aujourdhui" | "avenir" {
+   182→  const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+   183→  const d0 = new Date(t.annee, t.month0, t.jour).getTime();
+   184→  if (d0 < t0) return "passee";
+   185→  if (d0 === t0) return "aujourdhui";
+   186→  return "avenir";
+   187→}
+   188→
+   189→/** Nombre de jours avant la réunion (négatif = passée). */
+   190→export function joursAvant(t: TourMois, today = new Date()): number {
+   191→  const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+   192→  const d0 = new Date(t.annee, t.month0, t.jour).getTime();
+   193→  return Math.round((d0 - t0) / 86_400_000);
+   194→}
+   195→
+   196→/* ══════════════════════════ suivi personnel des versements ══════════════════════════ */
+   197→
+   198→const PAYES_KEY = "fc_tontine_payes_v1";
+   199→
+   200→/** Clé d'un versement : à quelle personne, pour quelle réunion. */
+   201→export const payeKey = (memberId: string, annee: number, month0: number) => `${memberId}:${annee}:${month0}`;
+   202→
+   203→export type Payes = Record<string, string>; // clé → date ISO du versement déclaré
+   204→
+   205→export function loadPayes(): Payes {
+   206→  try {
+   207→    const raw = localStorage.getItem(PAYES_KEY);
+   208→    return raw ? (JSON.parse(raw) as Payes) : {};
+   209→  } catch {
+   210→    return {};
+   211→  }
+   212→}
+   213→
+   214→export function savePayes(p: Payes): void {
+   215→  try {
+   216→    localStorage.setItem(PAYES_KEY, JSON.stringify(p));
+   217→  } catch {
+   218→    /* stockage indisponible — le suivi reste en mémoire pour la session */
+   219→  }
+   220→}
+   221→
+   222→/** Ce que je dois, à chaque personne : 10 000 de cotisation + 2 000 de collation. */
+   223→export const detteParPersonne = () => TONTINE.montantCotisation + TONTINE.montantCollation;
+   224→
+   225→export type DetteRow = {
+   226→  member: Member;
+   227→  tour: TourMois;
+   228→  amount: number;
+   229→  checked: boolean; // cochée = ma part pour cette personne est versée
+   230→  paidAt: string | null;
+   231→};
+   232→
+   233→/** Personnes à qui je dois encore cotiser : bénéficiaires des réunions déjà arrivées. */
+   234→export function mesDettes(annee: TourMois[], vousId: string, payes: Payes, today = new Date()): DetteRow[] {
+   235→  const todayIso = isoDate(today);
+   236→  return annee
+   237→    .filter((t) => !t.ag && t.beneficiary && t.beneficiary.id !== vousId && t.iso <= todayIso)
+   238→    .map((t) => {
+   239→      const m = t.beneficiary!;
+   240→      const paidAt = payes[payeKey(m.id, t.annee, t.month0)] ?? null;
+   241→      return { member: m, tour: t, amount: detteParPersonne(), checked: !!paidAt, paidAt };
+   242→    });
+   243→}
+   244→
+   245→export type StatutVersement = "paye" | "a_payer" | "avenir" | "mon_tour" | "ag";
+   246→
+   247→export type VersementRow = {
+   248→  tour: TourMois;
+   249→  member: Member | null;
+   250→  cotis: number;
+   251→  colla: number;
+   252→  total: number;
+   253→  statut: StatutVersement;
+   254→  paidAt: string | null;
+   255→};
+   256→
+   257→/** Échéancier annuel de mes versements (vue « Mes versements »). */
+   258→export function mesVersements(annee: TourMois[], vousId: string, payes: Payes, today = new Date()): VersementRow[] {
+   259→  const todayIso = isoDate(today);
+   260→  return annee.map((t) => {
+   261→    if (t.ag) return { tour: t, member: null, cotis: 0, colla: 0, total: 0, statut: "ag" as StatutVersement, paidAt: null };
+   262→    const b = t.beneficiary!;
+   263→    if (b.id === vousId) {
+   264→      return { tour: t, member: b, cotis: 0, colla: TONTINE.montantCollation, total: TONTINE.montantCollation, statut: "mon_tour" as StatutVersement, paidAt: null };
+   265→    }
+   266→    const paidAt = payes[payeKey(b.id, t.annee, t.month0)] ?? null;
+   267→    if (paidAt) return { tour: t, member: b, cotis: TONTINE.montantCotisation, colla: TONTINE.montantCollation, total: detteParPersonne(), statut: "paye" as StatutVersement, paidAt };
+   268→    if (t.iso <= todayIso) return { tour: t, member: b, cotis: TONTINE.montantCotisation, colla: TONTINE.montantCollation, total: detteParPersonne(), statut: "a_payer" as StatutVersement, paidAt: null };
+   269→    return { tour: t, member: b, cotis: TONTINE.montantCotisation, colla: TONTINE.montantCollation, total: detteParPersonne(), statut: "avenir" as StatutVersement, paidAt: null };
+   270→  });
+   271→}
+   272→
+   273→/** Statut de cotisation d'un membre pour la réunion du mois courant. */
+   274→export function statutMembreDuMois(
+   275→  m: Member,
+   276→  moisCourant: TourMois | undefined,
+   277→  payes: Payes,
+   278→  today = new Date(),
+   279→): { label: string; cls: string } {
+   280→  const neutre = "bg-[#2A4A3A]/8 text-[#5C6B60] border-[#E5DCC0]";
+   281→  if (!moisCourant) return { label: "—", cls: neutre };
+   282→  if (moisCourant.ag) return { label: `AG le ${moisCourant.jour}`, cls: "bg-[#3D6B72]/10 text-[#3D6B72] border-[#3D6B72]/30" };
+   283→  if (moisCourant.beneficiary?.id === m.id) {
+   284→    return etatReunion(moisCourant, today) === "passee"
+   285→      ? { label: "A reçu la réunion ✓", cls: "bg-[#2F6B45]/12 text-[#2F6B45] border-[#2F6B45]/30" }
+   286→      : { label: "Son tour — reçoit la réunion", cls: "bg-[#C89F62]/18 text-[#8A6420] border-[#C89F62]/45" };
+   287→  }
+   288→  if (etatReunion(moisCourant, today) === "avenir") {
+   289→    return { label: `Réunion le ${moisCourant.jour}`, cls: neutre };
+   290→  }
+   291→  if (m.isVous) {
+   292→    const paid = !!payes[payeKey(m.id, moisCourant.annee, moisCourant.month0)];
+   293→    return paid
+   294→      ? { label: "Payé ✓", cls: "bg-[#2F6B45]/12 text-[#2F6B45] border-[#2F6B45]/30" }
+   295→      : { label: "En attente", cls: "bg-[#A5473D]/10 text-[#A5473D] border-[#A5473D]/30" };
+   296→  }
+   297→  // Membres fictifs — registre du trésorier : déterministe (≈ 1 sur 4 en attente).
+   298→  const paye = (m.tour + moisCourant.month0) % 4 !== 0;
+   299→  return paye
+   300→    ? { label: "Payé ✓", cls: "bg-[#2F6B45]/12 text-[#2F6B45] border-[#2F6B45]/30" }
+   301→    : { label: "En attente", cls: "bg-[#C89F62]/18 text-[#8A6420] border-[#C89F62]/45" };
+   302→}
+   303→
+   304→/* ══════════════════════════ trésorerie — journal & caisses ══════════════════════════ */
+   305→
+   306→export type Anomalie = { month0: number; memberId: string; type: "retard" | "absence"; montant: number; note: string };
+   307→
+   308→/** Événements déterministes de l'année (alimentent pénalités, journal, classement). */
+   309→export const ANOMALIES: Anomalie[] = [
+   310→  { month0: 2, memberId: "f07", type: "retard", montant: TONTINE.penaliteRetard, note: "Cotisation remise après la réunion — pénalité de retard." },
+   311→  { month0: 4, memberId: "f09", type: "absence", montant: TONTINE.penaliteAbsence, note: "Absence non excusée — pénalité versée à la caisse sociale." },
+   312→  { month0: 8, memberId: "f07", type: "retard", montant: TONTINE.penaliteRetard, note: "Cotisation remise après la réunion — pénalité de retard." },
+   313→];
+   314→
+   315→/** Mois où le vice-président préside à la place du président. */
+   316→export const SUPPLEANCES = [3, 8]; // avril, septembre
+   317→
+   318→export type JournalRow = {
+   319→  tour: TourMois;
+   320→  encaisse: number;
+   321→  pot: number;
+   322→  collation: number;
+   323→  caisseSociale: number; // solde cumulé en fin de mois
+   324→  penalites: number; // pénalités du mois
+   325→  etat: "cloture" | "en_cours" | "avenir";
+   326→  note: string;
+   327→};
+   328→
+   329→/** Journal de caisse de l'année — soldes dérivés des règles et des anomalies. */
+   330→export function journalDeCaisse(annee: TourMois[], roster: Member[], today = new Date()): JournalRow[] {
+   331→  const n = roster.length;
+   332→  let caisse = n * TONTINE.fraisAdhesion; // adhésions encaissées en janvier
+   333→  return annee.map((t) => {
+   334→    const penalites = t.etat === "futur" ? 0 : ANOMALIES.filter((a) => a.month0 === t.month0).reduce((s, a) => s + a.montant, 0);
+   335→    if (t.ag) {
+   336→      return { tour: t, encaisse: 0, pot: 0, collation: 0, caisseSociale: caisse, penalites: 0, etat: t.etat === "futur" ? ("avenir" as const) : ("cloture" as const), note: "Assemblée générale — aucun mouvement" };
+   337→    }
+   338→    if (t.etat === "futur") {
+   339→      return { tour: t, encaisse: t.total, pot: t.pot, collation: t.collation, caisseSociale: caisse, penalites: 0, etat: "avenir" as const, note: "Projection" };
+   340→    }
+   341→    caisse += penalites;
+   342→    return {
+   343→      tour: t, encaisse: t.total, pot: t.pot, collation: t.collation, caisseSociale: caisse, penalites,
+   344→      etat: t.etat === "courant" ? ("en_cours" as const) : ("cloture" as const),
+   345→      note: penalites > 0 ? `+ ${penalites.toLocaleString("fr-FR")} de pénalités` : "",
+   346→    };
+   347→  });
+   348→}
+   349→
+   350→export type ClassementRow = {
+   351→  member: Member;
+   352→  parts: number; // réunions où le membre devait cotiser (déjà arrivées)
+   353→  versees: number; // parts versées
+   354→  retards: number;
+   355→  penalites: number;
+   356→  ponctualite: number | null; // %
+   357→  totalVerse: number;
+   358→};
+   359→
+   360→/** Classement des cotisants — les fictifs selon le registre, « Vous » selon votre suivi. */
+   361→export function classementCotisants(annee: TourMois[], roster: Member[], payes: Payes, vousId: string, today = new Date()): ClassementRow[] {
+   362→  const todayIso = isoDate(today);
+   363→  const toursEcoules = annee.filter((t) => !t.ag && t.iso <= todayIso);
+   364→  return roster.map((m) => {
+   365→    const mes = toursEcoules.filter((t) => t.beneficiary?.id !== m.id);
+   366→    const parts = mes.length;
+   367→    const anoms = ANOMALIES.filter((a) => a.memberId === m.id && mes.some((t) => t.month0 === a.month0));
+   368→    const versees = m.isVous
+   369→      ? mes.filter((t) => payes[payeKey(m.id, t.annee, t.month0)]).length
+   370→      : parts; // registre officiel : versé, même avec pénalité de retard
+   371→    const ponctualite = parts > 0 ? Math.round((versees / parts) * 100) : null;
+   372→    return {
+   373→      member: m, parts, versees,
+   374→      retards: anoms.length,
+   375→      penalites: anoms.reduce((s, a) => s + a.montant, 0),
+   376→      ponctualite,
+   377→      totalVerse: versees * detteParPersonne(),
+   378→    };
+   379→  }).sort((a, b) => {
+   380→    const pa = a.ponctualite ?? -1;
+   381→    const pb = b.ponctualite ?? -1;
+   382→    if (pb !== pa) return pb - pa;
+   383→    if (b.totalVerse !== a.totalVerse) return b.totalVerse - a.totalVerse;
+   384→    return a.member.tour - b.member.tour;
+   385→  });
+   386→}
+   387→
+   388→/** Projection de fin d'année — tous les montants dérivés des règles. */
+   389→export function projectionAnnee(annee: TourMois[], roster: Member[]) {
+   390→  const tours = annee.filter((t) => !t.ag);
+   391→  const nbTours = tours.length;
+   392→  const pot = potMensuel(roster.length);
+   393→  const colla = collationMensuelle(roster.length);
+   394→  const penalites = ANOMALIES.reduce((s, a) => s + a.montant, 0);
+   395→  return {
+   396→    nbTours,
+   397→    totalCollecte: nbTours * (pot + colla),
+   398→    totalPots: nbTours * pot,
+   399→    totalCollations: nbTours * colla,
+   400→    caisseSociale: roster.length * TONTINE.fraisAdhesion + penalites,
+   401→    penalites,
+   402→  };
+   403→}
+   404→
+   405→/** Caisses à l'instant présent (tours déjà arrivés). */
+   406→export function caissesDuMoment(annee: TourMois[], roster: Member[], today = new Date()) {
+   407→  const todayIso = isoDate(today);
+   408→  const arrivés = annee.filter((t) => !t.ag && t.iso <= todayIso);
+   409→  const penalites = ANOMALIES.filter((a) => arrivés.some((t) => t.month0 === a.month0)).reduce((s, a) => s + a.montant, 0);
+   410→  return {
+   411→    collecte: arrivés.reduce((s, t) => s + t.total, 0),
+   412→    potsVerses: arrivés.reduce((s, t) => s + t.pot, 0),
+   413→    collations: arrivés.reduce((s, t) => s + t.collation, 0),
+   414→    caisseSociale: roster.length * TONTINE.fraisAdhesion + penalites,
+   415→  };
+   416→}
+   417→
+   418→/* ══════════════════════════ missions des rôles ══════════════════════════ */
+   419→
+   420→export type Mission = { titre: string; detail: string; rythme: string };
+   421→
+   422→export const MISSIONS: Record<Exclude<RoleKey, "membre">, Mission[]> = {
+   423→  president: [
+   424→    { titre: "Préside les réunions", detail: "Ouvre, conduit et clôture la réunion du 2ᵉ dimanche.", rythme: "Chaque mois" },
+   425→    { titre: "Représente la tontine", detail: "Porte la parole de l'association auprès des familles et invités.", rythme: "En permanence" },
+   426→    { titre: "Veille au règlement", detail: "Fait respecter les règles ; aucune pénalité sans passage au conseil.", rythme: "En permanence" },
+   427→    { titre: "Autorise les échanges de places", detail: "Valide tout échange de tour entre deux membres.", rythme: "À la demande" },
+   428→    { titre: "Confirme le calendrier", detail: "Publie l'ordre des tours et le calendrier de l'année en janvier.", rythme: "Chaque janvier" },
+   429→  ],
+   430→  vice_president: [
+   431→    { titre: "Supplée le président", detail: "Préside la réunion quand le président est absent ou empêché.", rythme: "À la demande" },
+   432→    { titre: "Coordonne les préparatifs", detail: "Prépare le lieu (chez le bénéficiaire) et la collation avec lui.", rythme: "Chaque mois" },
+   433→    { titre: "Prépare l'ordre du jour", detail: "Avec le président, avant chaque réunion.", rythme: "Chaque mois" },
+   434→    { titre: "Recueille la parole des membres", detail: "Transmet suggestions et réclamations au bureau.", rythme: "En continu" },
+   435→  ],
+   436→  commissaire: [
+   437→    { titre: "Contrôle les caisses", detail: "Vérifie caisse sociale, cotisations et collations, reçus à l'appui.", rythme: "Chaque trimestre" },
+   438→    { titre: "Audite le journal de caisse", detail: "Compare encaissements, sommes remises et dépenses du trésorier.", rythme: "Chaque trimestre" },
+   439→    { titre: "Alerte le bureau", detail: "Signale toute anomalie au président et au censeur.", rythme: "Immédiatement" },
+   440→    { titre: "Rend compte à l'assemblée", detail: "Présente le rapport annuel des comptes à l'AG de décembre.", rythme: "Décembre" },
+   441→  ],
+   442→  tresorier: [
+   443→    { titre: "Encaisse les cotisations", detail: "Reçoit la part de chacun et la collation à chaque réunion.", rythme: "Chaque réunion" },
+   444→    { titre: "Verse la somme au bénéficiaire", detail: "Remet la somme du mois, devant témoin, au bénéficiaire.", rythme: "Chaque réunion" },
+   445→    { titre: "Tient le journal de caisse", detail: "Note chaque mouvement : encaissement, somme remise, collation, pénalité.", rythme: "En continu" },
+   446→    { titre: "Gère la caisse sociale", detail: "Adhésions et pénalités, débloquées sur décision du bureau.", rythme: "En continu" },
+   447→  ],
+   448→  censeur: [
+   449→    { titre: "Veille à l'équité", detail: "S'assure que chacun est traité à égalité, sans favoritisme.", rythme: "En permanence" },
+   450→    { titre: "Écoute les membres", detail: "Reçoit les observations confidentielles de chacun.", rythme: "En continu" },
+   451→    { titre: "Alerte en cas de dérive", detail: "Peut réunir le bureau si une règle n'est plus respectée.", rythme: "Au besoin" },
+   452→    { titre: "Protège les personnes", detail: "Veille à la dignité des membres en difficulté — aide discrète.", rythme: "En permanence" },
+   453→  ],
+   454→};
+   455→
+   456→/* ══════════════════════════ épargnes & prêts — taux mensuel paramétrable ══════════════════════════
+   457→
+   458→   ÉPARGNE — intérêts SIMPLES : chaque réunion tenue après le dépôt ajoute
+   459→   capital × taux, sur la base du capital uniquement (jamais sur les intérêts).
+   460→   10 000 épargnés en mars à 3 % : avril 10 300 · mai 10 600 · juin 10 900 …
+   461→   jusqu'en décembre de l'année du dépôt, où le tout est récupéré.
+   462→
+   463→   PRÊT — argent emprunté à la réunion : les intérêts courent au taux du mois
+   464→   pendant 3 MOIS (10 000 empruntés en février → 10 900 après 3 mois). Passée
+   465→   l'échéance sans remboursement, la dette est recalculée chaque mois à taux
+   466→   composé SUR LA NOUVELLE BASE (3 % de 10 900 le mois suivant, etc.). */
+   467→
+   468→export const TAUX_DEFAUT = 3; // % par mois — valeur par défaut, paramétrable par le bureau
+   469→
+   470→export const uid = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+   471→
+   472→const TAUX_KEY = "fc_tontine_taux_v1";
+   473→
+   474→/** Taux mensuel partagé (épargnes et prêts), en % — borné 0 à 20. */
+   475→export function loadTaux(): number {
+   476→  try {
+   477→    const raw = localStorage.getItem(TAUX_KEY);
+   478→    if (!raw || raw.trim() === "") return TAUX_DEFAUT;
+   479→    const v = Number(raw);
+   480→    return isFinite(v) && v >= 0 && v <= 20 ? Math.round(v * 10) / 10 : TAUX_DEFAUT;
+   481→  } catch {
+   482→    return TAUX_DEFAUT;
+   483→  }
+   484→}
+   485→
+   486→export function saveTaux(t: number): void {
+   487→  try {
+   488→    localStorage.setItem(TAUX_KEY, String(Math.round(t * 10) / 10));
+   489→  } catch {
+   490→    /* stockage indisponible — réglage gardé en mémoire pour la session */
+   491→  }
+   492→}
+   493→
+   494→/** Intérêt d'UN mois d'épargne : capital × taux (base constante — non cumulatif). */
+   495→export const interetEpargneMois = (capital: number, tauxPct: number) => Math.round(capital * (tauxPct / 100));
+   496→
+   497→/** Solde d'une épargne après n mois comptés : capital + n × intérêt mensuel. */
+   498→export const soldeEpargneAuMois = (capital: number, tauxPct: number, n: number) =>
+   499→  n <= 0 ? capital : capital + interetEpargneMois(capital, tauxPct) * n;
+   500→
+   501→/** Dette d'un prêt au mois `cible` (hors remboursement) : 3 mois d'intérêts
+   502→ *  simples sur le capital, puis capitalisation mensuelle sur la nouvelle base. */
+   503→export function dettePretAuMois(capital: number, tauxPct: number, depart: number, cible: number): number {
+   504→  if (cible <= depart) return capital;
+   505→  const r = tauxPct / 100;
+   506→  const parMois = Math.round(capital * r);
+   507→  let solde = capital;
+   508→  for (let m = depart + 1; m <= Math.min(cible, 11); m++) {
+   509→    solde += m - depart <= 3 ? parMois : Math.round(solde * r);
+   510→  }
+   511→  return solde;
+   512→}
+   513→
+   514→/** Nombre de réunions déjà tenues APRÈS le mois de départ (l'épargne ou le
+   515→ *  prêt commence à courir le mois suivant) — plafonné à décembre. */
+   516→export function moisEcoules(depart: number, annee: TourMois[], today = new Date()): number {
+   517→  const todayIso = isoDate(today);
+   518→  let n = 0;
+   519→  for (let m = depart + 1; m <= 11; m++) {
+   520→    if (annee[m] && annee[m].iso <= todayIso) n++;
+   521→  }
+   522→  return n;
+   523→}
+   524→
+   525→/* — stockage local des épargnes — */
+   526→
+   527→const EPARGNES_KEY = "fc_tontine_epargnes_v1";
+   528→
+   529→export type Epargne = { id: string; month0: number; capital: number };
+   530→
+   531→export function loadEpargnes(): Epargne[] {
+   532→  try {
+   533→    const raw = localStorage.getItem(EPARGNES_KEY);
+   534→    const list = raw ? (JSON.parse(raw) as Epargne[]) : [];
+   535→    return Array.isArray(list) ? list.filter((e) => e && typeof e.month0 === "number" && typeof e.capital === "number" && e.capital > 0) : [];
+   536→  } catch {
+   537→    return [];
+   538→  }
+   539→}
+   540→
+   541→export function saveEpargnes(list: Epargne[]): void {
+   542→  try {
+   543→    localStorage.setItem(EPARGNES_KEY, JSON.stringify(list));
+   544→  } catch {
+   545→    /* stockage indisponible */
+   546→  }
+   547→}
+   548→
+   549→/* — stockage local des prêts — */
+   550→
+   551→const PRETS_KEY = "fc_tontine_prets_v1";
+   552→
+   553→export type Pret = {
+   554→  id: string;
+   555→  month0: number; // mois de la réunion où le prêt a été demandé
+   556→  capital: number; // somme prêtée par la réunion
+   557→  rembourseMois: number | null; // mois du remboursement (null = en cours)
+   558→  rembourseMontant: number; // somme versée au moment du remboursement
+   559→};
+   560→
+   561→export function loadPrets(): Pret[] {
+   562→  try {
+   563→    const raw = localStorage.getItem(PRETS_KEY);
+   564→    const list = raw ? (JSON.parse(raw) as Pret[]) : [];
+   565→    return Array.isArray(list)
+   566→      ? list.filter((p) => p && typeof p.month0 === "number" && typeof p.capital === "number" && p.capital > 0)
+   567→      : [];
+   568→  } catch {
+   569→    return [];
+   570→  }
+   571→}
+   572→
+   573→export function savePrets(list: Pret[]): void {
+   574→  try {
+   575→    localStorage.setItem(PRETS_KEY, JSON.stringify(list));
+   576→  } catch {
+   577→    /* stockage indisponible */
+   578→  }
+   579→}
+   580→
