@@ -18,10 +18,13 @@
 //   #tontine/commissaire     → Page du Commissaire aux comptes
 //   #tontine/tresorier       → Page du Trésorier (journal de caisse, caisses)
 //   #tontine/censeur         → Page du Censeur
-//   #tontine/cotisations     → Mes épargnes (dépôts mois par mois, taux
-//                              paramétrable, intérêts simples jusqu'en décembre)
-//   #tontine/dettes         → Mes prêts (argent emprunté à la réunion :
-//                              3 mois d'intérêts puis capitalisation)
+//   #tontine/cotisations     → Mes finances · Mes épargnes (dépôts mois par
+//                              mois, taux paramétrable, intérêts simples
+//                              jusqu'en décembre)
+//   #tontine/dettes         → Mes finances · Mes prêts (argent emprunté à la
+//                              réunion : 3 mois d'intérêts puis capitalisation)
+//                              — l'univers FINANCES porte la couleur sarcelle
+//                              (#3D6B72) pour se distinguer du reste (vert).
 //   #tontine/stats           → Statistiques (chiffres clés, donut, barres,
 //                              classement, projection)
 //
@@ -169,6 +172,7 @@ const PAGES_BUREAU: TPage[] = ["president", "vice_president", "commissaire", "tr
 const HASH_ALIASES: Record<string, TPage> = {
   reunion: "reunion", membres: "membres",
   cotisations: "cotisations", epargnes: "cotisations", epargne: "cotisations", historique: "cotisations",
+  finances: "cotisations", finance: "cotisations",
   dettes: "dettes", prets: "dettes", pret: "dettes",
   stats: "stats", president: "president", "vice-president": "vice_president",
   commissaire: "commissaire", tresorier: "tresorier", censeur: "censeur",
@@ -295,9 +299,14 @@ function EntetePage() {
 const ONGLETS_PRINCIPAUX: { key: TPage; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { key: "reunion", label: "Réunions", icon: CalendarDays },
   { key: "membres", label: "Membres", icon: Users },
-  { key: "cotisations", label: "Mes épargnes", icon: PiggyBank },
+  { key: "cotisations", label: "Mes finances", icon: Wallet },
   { key: "stats", label: "Statistiques", icon: BarChart3 },
 ];
+
+/** L'univers FINANCES porte sa propre couleur — sarcelle #3D6B72 — pour se
+ *  différencier du vert de la tontine (réunions, membres, statistiques). */
+const FINANCES_ACCENT = "#3D6B72";
+const PRETS_ACCENT = "#B85C33";
 
 function OngletsPrincipaux({ page, onGo }: { page: TPage; onGo: (p: TPage) => void }) {
   const actif = page === "dettes" ? "cotisations" : page;
@@ -312,8 +321,9 @@ function OngletsPrincipaux({ page, onGo }: { page: TPage; onGo: (p: TPage) => vo
             aria-selected={on}
             onClick={() => onGo(key)}
             className={`flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[10.5px] font-bold leading-tight transition-all sm:text-[12px] ${
-              on ? "bg-[#1E4D2B] text-white shadow-sm" : "text-[#2A4A3A] hover:bg-[#2A4A3A]/5"
+              on ? "text-white shadow-sm" : "text-[#2A4A3A] hover:bg-[#2A4A3A]/5"
             }`}
+            style={on ? { background: key === "cotisations" ? FINANCES_ACCENT : "#1E4D2B" } : undefined}
           >
             <Icon className="h-4 w-4" />
             <span className="truncate">{label}</span>
@@ -1396,17 +1406,19 @@ function TableObservations({ annee, roster }: { annee: TourMois[]; roster: Membe
   );
 }
 
-/* ══════════════════════════ page MES ÉPARGNES & MES PRÊTS ══════════════════════════ */
+/* ══════════════════════════ page MES FINANCES · ÉPARGNES & PRÊTS ══════════════════════════ */
 
-/** Sous-onglets épargnes / prêts — chacun a son URL. */
+/** Sous-onglets épargnes / prêts — chacun a son URL. L'univers FINANCES a sa
+ *  propre identité visuelle : sarcelle pour l'épargne, terracotta pour les
+ *  prêts — différencié du vert de la tontine. */
 function SousOngletsFinances({ mode, onSub }: { mode: "cotisations" | "dettes"; onSub: (p: TPage) => void }) {
-  const onglets: { key: TPage; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-    { key: "cotisations", label: "Mes épargnes", icon: PiggyBank },
-    { key: "dettes", label: "Mes prêts", icon: HandCoins },
+  const onglets: { key: TPage; label: string; icon: React.ComponentType<{ className?: string }>; accent: string }[] = [
+    { key: "cotisations", label: "Mes épargnes", icon: PiggyBank, accent: FINANCES_ACCENT },
+    { key: "dettes", label: "Mes prêts", icon: HandCoins, accent: PRETS_ACCENT },
   ];
   return (
-    <div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-1.5" role="tablist" aria-label="Mes épargnes et mes prêts">
-      {onglets.map(({ key, label, icon: Icon }) => {
+    <div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-1.5" role="tablist" aria-label="Mes finances — épargnes et prêts">
+      {onglets.map(({ key, label, icon: Icon, accent }) => {
         const on = mode === key;
         return (
           <button
@@ -1415,8 +1427,9 @@ function SousOngletsFinances({ mode, onSub }: { mode: "cotisations" | "dettes"; 
             aria-selected={on}
             onClick={() => onSub(key)}
             className={`flex min-h-[46px] items-center justify-center gap-1.5 rounded-xl px-2 text-[12.5px] font-bold transition-all ${
-              on ? "bg-[#1E4D2B] text-white shadow-sm" : "text-[#2A4A3A] hover:bg-[#2A4A3A]/5"
+              on ? "text-white shadow-sm" : "text-[#2A4A3A] hover:bg-[#2A4A3A]/5"
             }`}
+            style={on ? { background: accent } : undefined}
           >
             <Icon className="h-4 w-4" /> {label}
           </button>
@@ -1573,7 +1586,7 @@ function EpargnesPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) =
       <SousOngletsFinances mode="cotisations" onSub={onSub} />
 
       <Block
-        title="Mes épargnes"
+        title="Mes épargnes — vue d'ensemble"
         icon={<PiggyBank className="h-4.5 w-4.5" />}
         note="L'argent mis de côté à la tontine — indépendant de la cotisation mensuelle. Chaque dépôt porte intérêt à partir du mois suivant, jusqu'en décembre de l'année du dépôt."
       >
