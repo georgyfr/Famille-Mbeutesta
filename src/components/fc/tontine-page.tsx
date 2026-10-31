@@ -41,10 +41,20 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertTriangle, ArrowLeft, BarChart3, CalendarDays, Check, ChevronRight, Coins, Coffee, Crown, Eye,
-  FileSearch, Gift, HandCoins, Info, Lock, MapPin, Percent, Phone, PiggyBank, Plus, ScrollText,
-  Trash2, TrendingUp, UserCheck, Users, Wallet, X,
+  ClipboardList, FileSearch, FileText, Flag, Gift, HandCoins, Hourglass, Info, Lock, MapPin, Percent, Phone, PiggyBank, Plus,
+  ScrollText, ShieldAlert, Stamp, Trash2, TrendingUp, UserCheck, Users, Wallet, X,
 } from "lucide-react";
 import { FcButton, FcCard, FcSpinner } from "./ui";
+import {
+  DELAI_VALIDATION_JOURS, RAPPEL_SIGNALEMENT_JOURS,
+  appliqueAutoValidations, appliqueAutoValidationsDecisions, bureauValide, collecterRappels,
+  dateCourte, deposerSignalement, enAttenteMembre, enregistrerDecisionTaux, estBureau, joursDepuis,
+  libelleMotif, loadDecisions, loadSignalements, loadVousRole, MOTIFS_SIGNALEMENT,
+  membrePeutSupprimer, membreValide, peutGererDettes, peutGererTaux,
+  peutTraiterSignalements, peutValiderEpargnes, saveDecisions, saveSignalements,
+  signalementsOuverts, traiterSignalement,
+  type DecisionTaux, type MotifSignalement, type Signalement,
+} from "./tontine-bureau";
 import {
   ANOMALIES, MOIS_FR_SHORT, MISSIONS, ROLE_META, SUPPLEANCES, TAUX_DEFAUT, TONTINE,
   buildAnnee, buildRoster, caissesDuMoment, classementCotisants, collationMensuelle,
@@ -153,6 +163,7 @@ function MiniKpi({ label, value, sub, tone }: { label: string; value: string; su
 const ROLE_ICON: Record<RoleKey, React.ComponentType<{ className?: string }>> = {
   president: Crown,
   vice_president: UserCheck,
+  secretariat: FileText,
   commissaire: FileSearch,
   tresorier: Wallet,
   censeur: Eye,
@@ -163,11 +174,11 @@ const ROLE_ICON: Record<RoleKey, React.ComponentType<{ className?: string }>> = 
 
 type TPage =
   | "reunion" | "membres" | "cotisations" | "dettes" | "stats"
-  | "president" | "vice_president" | "commissaire" | "tresorier" | "censeur";
+  | "president" | "vice_president" | "secretariat" | "commissaire" | "tresorier" | "censeur";
 
 type BureauPage = Exclude<RoleKey, "membre">;
 
-const PAGES_BUREAU: TPage[] = ["president", "vice_president", "commissaire", "tresorier", "censeur"];
+const PAGES_BUREAU: TPage[] = ["president", "vice_president", "secretariat", "commissaire", "tresorier", "censeur"];
 
 const HASH_ALIASES: Record<string, TPage> = {
   reunion: "reunion", membres: "membres",
@@ -175,6 +186,7 @@ const HASH_ALIASES: Record<string, TPage> = {
   finances: "cotisations", finance: "cotisations",
   dettes: "dettes", prets: "dettes", pret: "dettes",
   stats: "stats", president: "president", "vice-president": "vice_president",
+  secretaire: "secretariat", secretariat: "secretariat",
   commissaire: "commissaire", tresorier: "tresorier", censeur: "censeur",
   // Anciens liens partagés (avant la refonte) — redirigés vers la page la plus proche
   receveur: "reunion", caisses: "tresorier", reglement: "reunion",
@@ -209,6 +221,14 @@ export function TontinePage({ onBack, vousName }: { onBack: () => void; vousName
   const [page, setPage] = useState<TPage>("reunion");
   const [payes, setPayes] = useState<Payes>({});
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
+  // Rôle renseigné à l'inscription — détermine les droits (taux, validations,
+  // dettes) et la page du bureau qui est « la vôtre ».
+  const [vousRole, setVousRole] = useState<RoleKey | null>(null);
+  // Signalements — version incrémentée à chaque mutation pour rafraîchir les
+  // blocs qui y réagissent (bannières, badges, blocs du bureau).
+  const [sigVersion, setSigVersion] = useState(0);
+  const [signalements, setSignalements] = useState<Signalement[]>([]);
+  const [signaler, setSignaler] = useState<{ cible: Signalement["cible"]; cibleId: string | null; cibleLabel: string } | null>(null);
 
   useEffect(() => {
     const sync = () => setPage(routeFromHash());
@@ -217,6 +237,23 @@ export function TontinePage({ onBack, vousName }: { onBack: () => void; vousName
     const t = setTimeout(() => {
       sync();
       setPayes(loadPayes());
+      const role = loadVousRole() ?? "membre";
+      setVousRole(role);
+      // Rappels de signalements — TOUS LES 3 JOURS la notification réapparaît
+      // tant que le bureau n'a pas traité le problème signalé.
+      const dus = collecterRappels(loadSignalements());
+      setSignalements(loadSignalements());
+      if (dus.length > 0) {
+        const bureautif = estBureau(role);
+        for (const s of dus) {
+          toast.warning(`Rappel de signalement — ${s.cibleLabel}`, {
+            description: bureautif
+              ? `Signalé par ${s.auteur} le ${dateCourte(s.creeLe)} — « ${libelleMotif(s.motif)} ». À traiter dans la page de votre bureau.`
+              : `Le bureau a été notifié à nouveau (rappel tous les ${RAPPEL_SIGNALEMENT_JOURS} jours).`,
+            duration: 8000,
+          });
+        }
+      }
       setMounted(true);
     }, 0);
     return () => {
@@ -225,8 +262,10 @@ export function TontinePage({ onBack, vousName }: { onBack: () => void; vousName
     };
   }, []);
 
-  const roster = useMemo(() => buildRoster(vousName), [vousName]);
+  const roster = useMemo(() => buildRoster(vousName, vousRole), [vousName, vousRole]);
   const annee = useMemo(() => (mounted ? buildAnnee(new Date().getFullYear(), roster) : []), [mounted, roster]);
+  const roleActif: RoleKey = vousRole ?? "membre";
+  const ouverts = signalementsOuverts(signalements);
 
   const goPage = (p: TPage) => {
     setPage(p);
@@ -237,6 +276,12 @@ export function TontinePage({ onBack, vousName }: { onBack: () => void; vousName
       /* ignore */
     }
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  /** Rafraîchit l'état des signalements après une mutation (dépôt, traitement). */
+  const refreshSignalements = () => {
+    setSignalements(loadSignalements());
+    setSigVersion((v) => v + 1);
   };
 
   if (!mounted || annee.length === 0) {
@@ -252,10 +297,25 @@ export function TontinePage({ onBack, vousName }: { onBack: () => void; vousName
 
   return (
     <div className="space-y-3.5">
-      <EntetePage />
+      <EntetePage vousRole={roleActif} onGo={goPage} nbOuverts={ouverts.length} sigVersion={sigVersion} />
 
       <OngletsPrincipaux page={page} onGo={goPage} />
-      <OngletsBureau page={page} onGo={goPage} />
+      <OngletsBureau page={page} onGo={goPage} vousRole={roleActif} nbSignalementsOuverts={ouverts.length} />
+
+      {/* Bannière de rappel — les signalements ouverts reviennent tous les 3 jours
+          jusqu'à traitement par le bureau. */}
+      {ouverts.length > 0 && (
+        <div className="flex items-start gap-2 rounded-2xl border border-[#B85C33]/40 bg-[#B85C33]/10 p-3 text-[12px] leading-relaxed text-[#B85C33]">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>
+            <strong>{ouverts.length} signalement{ouverts.length > 1 ? "s" : ""} en attente</strong> — tous les membres du bureau sont notifiés, et la
+            notification réapparaît tous les {RAPPEL_SIGNALEMENT_JOURS} jours jusqu’au traitement.
+            {estBureau(roleActif)
+              ? " Traitez-les depuis la page de votre rôle ci-dessous."
+              : " Le bureau vous tiendra informé(e) de la suite donnée."}
+          </p>
+        </div>
+      )}
 
       {page === "reunion" && <ReunionPage annee={annee} roster={roster} />}
       {page === "membres" && (
@@ -265,32 +325,102 @@ export function TontinePage({ onBack, vousName }: { onBack: () => void; vousName
         />
       )}
       {PAGES_BUREAU.includes(page) && (
-        <RolePage role={page as BureauPage} annee={annee} roster={roster} payes={payes} />
+        <RolePage
+          role={page as BureauPage} annee={annee} roster={roster} payes={payes}
+          vousRole={roleActif} vousName={vousName} sigVersion={sigVersion}
+          onSignaler={(c) => setSignaler(c)}
+        />
       )}
-      {page === "cotisations" && <EpargnesPage annee={annee} onSub={goPage} />}
-      {page === "dettes" && <PretsPage annee={annee} onSub={goPage} />}
+      {page === "cotisations" && (
+        <EpargnesPage
+          annee={annee} onSub={goPage} vousRole={roleActif} vousName={vousName}
+          sigVersion={sigVersion} onSignaler={(c) => setSignaler(c)}
+        />
+      )}
+      {page === "dettes" && (
+        <PretsPage
+          annee={annee} onSub={goPage} vousRole={roleActif} vousName={vousName}
+          sigVersion={sigVersion} onSignaler={(c) => setSignaler(c)}
+        />
+      )}
       {page === "stats" && <StatsPage annee={annee} roster={roster} payes={payes} />}
 
       <FcButton variant="outline" onClick={onBack} className="w-full">
         <ArrowLeft className="h-4 w-4" /> Retour à l&apos;accueil
       </FcButton>
+
+      {/* Pop-up de signalement — enregistré, notifié à tout le bureau, rappelé
+          tous les 3 jours jusqu’à traitement. */}
+      {signaler && (
+        <SignalementModal
+          cible={signaler.cible}
+          cibleId={signaler.cibleId}
+          cibleLabel={signaler.cibleLabel}
+          auteur={vousName ?? ""}
+          auteurRole={roleActif}
+          onClose={() => setSignaler(null)}
+          onDepose={() => {
+            setSignaler(null);
+            refreshSignalements();
+          }}
+        />
+      )}
     </div>
   );
 }
 
 /* ══════════════════════════ en-tête + onglets ══════════════════════════ */
 
-function EntetePage() {
+function EntetePage({ vousRole = "membre", onGo, nbOuverts = 0, sigVersion = 0 }: {
+  vousRole?: RoleKey; onGo?: (p: TPage) => void; nbOuverts?: number; sigVersion?: number;
+}) {
+  void sigVersion; // le badge se rafraîchit à chaque mutation de signalement
+  const meta = ROLE_META[vousRole];
+  const Icon = ROLE_ICON[vousRole];
+  const laVotre = vousRole !== "membre";
   return (
     <FcCard className="overflow-hidden">
       <div className="flex items-center gap-3 bg-[#1E4D2B] px-5 py-4 text-white">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#C89F62] text-[#2B2416]">
           <PiggyBank className="h-5.5 w-5.5" />
         </span>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="fc-serif text-[18px] font-bold leading-tight">Tontine familiale</p>
           <p className="text-[12px] opacity-85">Une seule tontine · réunion le 2ᵉ dimanche de chaque mois</p>
         </div>
+        {nbOuverts > 0 && onGo && (
+          <button
+            onClick={() => onGo("president")}
+            className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/12 transition-colors hover:bg-white/20"
+            aria-label={`${nbOuverts} signalement${nbOuverts > 1 ? "s" : ""} en attente — voir le bureau`}
+            title={`${nbOuverts} signalement${nbOuverts > 1 ? "s" : ""} en attente`}
+          >
+            <ShieldAlert className="h-5 w-5 text-[#F5C8B8]" />
+            <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#A5473D] px-1 text-[9px] font-bold text-white">
+              {nbOuverts > 9 ? "9+" : nbOuverts}
+            </span>
+          </button>
+        )}
+      </div>
+      {/* Le rôle joué dans la cantine — renseigné à l'inscription, il ouvre la
+          page du bureau correspondante (URL dédiée). */}
+      <div className="flex items-center justify-between gap-2 border-t border-[#E5DCC0] bg-[#FFFDF6] px-4 py-2.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <Chip cls={meta.badge}>
+            <Icon className="h-3 w-3" /> {meta.label}
+          </Chip>
+          <span className="truncate text-[11px] text-[#8A9288]">
+            {laVotre ? "votre page du bureau est ci-dessous" : "membre simple — vous validez les décisions du bureau"}
+          </span>
+        </div>
+        {laVotre && onGo && (
+          <button
+            onClick={() => onGo(vousRole as BureauPage)}
+            className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-bold text-[#1E4D2B] underline decoration-[#C89F62] decoration-2 underline-offset-2 hover:bg-[#C89F62]/15"
+          >
+            Ma page →
+          </button>
+        )}
       </div>
     </FcCard>
   );
@@ -334,35 +464,49 @@ function OngletsPrincipaux({ page, onGo }: { page: TPage; onGo: (p: TPage) => vo
   );
 }
 
-function OngletsBureau({ page, onGo }: { page: TPage; onGo: (p: TPage) => void }) {
+function OngletsBureau({ page, onGo, vousRole, nbSignalementsOuverts }: {
+  page: TPage; onGo: (p: TPage) => void; vousRole: RoleKey; nbSignalementsOuverts: number;
+}) {
   const boutons: { key: TPage; label: string; role: RoleKey }[] = [
     { key: "president", label: "Président", role: "president" },
     { key: "vice_president", label: "Vice-prés.", role: "vice_president" },
+    { key: "secretariat", label: "Secrétaire", role: "secretariat" },
     { key: "commissaire", label: "Commissaire", role: "commissaire" },
     { key: "tresorier", label: "Trésorier", role: "tresorier" },
     { key: "censeur", label: "Censeur", role: "censeur" },
   ];
   return (
     <div>
-      <p className="mb-1 px-1 text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">
-        Le bureau de l&apos;association — chaque rôle a sa page
+      <p className="mb-1 flex flex-wrap items-center gap-x-2 px-1 text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">
+        <span>Le bureau de l&apos;association — chaque rôle a sa page</span>
+        {nbSignalementsOuverts > 0 && (
+          <span className="inline-flex items-center gap-1 normal-case text-[#B85C33]">
+            <ShieldAlert className="h-3 w-3" /> {nbSignalementsOuverts} signalement{nbSignalementsOuverts > 1 ? "s" : ""}
+          </span>
+        )}
       </p>
-      <div className="grid grid-cols-5 gap-1.5 rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-1.5" role="tablist" aria-label="Pages des rôles du bureau">
+      {/* 6 rôles en 2 rangées de 3 — l'app tient sur max-w-md, 6 colonnes
+          serreraient trop les libellés, quelle que soit la largeur de l'écran. */}
+      <div className="grid grid-cols-3 gap-1.5 rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-1.5" role="tablist" aria-label="Pages des rôles du bureau">
         {boutons.map(({ key, label, role }) => {
           const Icon = ROLE_ICON[role];
           const on = page === key;
+          const laVotre = vousRole === role;
           return (
             <button
               key={key}
               role="tab"
               aria-selected={on}
               onClick={() => onGo(key)}
-              className={`flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[10px] font-bold leading-tight transition-all sm:text-[11.5px] ${
+              className={`relative flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[10px] font-bold leading-tight transition-all sm:text-[11.5px] ${
                 on ? "bg-[#1E4D2B] text-white shadow-sm" : "text-[#2A4A3A] hover:bg-[#2A4A3A]/5"
               }`}
             >
               <Icon className={`h-4 w-4 ${on ? "text-[#C89F62]" : "text-[#8A6420]"}`} />
               <span className="truncate">{label}</span>
+              {laVotre && (
+                <span aria-hidden="true" className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#C89F62]" title="Votre rôle — vos outils sont ici" />
+              )}
             </button>
           );
         })}
@@ -1034,12 +1178,19 @@ function PanneauMembre({ m, annee, onGoRole, onFermer }: {
 
 /* ══════════════════════════ pages du BUREAU (une page par rôle) ══════════════════════════ */
 
-function RolePage({ role, annee, roster, payes }: {
+function RolePage({ role, annee, roster, payes, vousRole, vousName, sigVersion, onSignaler }: {
   role: BureauPage; annee: TourMois[]; roster: Member[]; payes: Payes;
+  vousRole: RoleKey; vousName?: string | null; sigVersion: number;
+  onSignaler: (c: { cible: Signalement["cible"]; cibleId: string | null; cibleLabel: string }) => void;
 }) {
   const meta = ROLE_META[role];
   const Icon = ROLE_ICON[role];
   const holder = roster.find((m) => m.role === role)!;
+  // Les outils actifs de la page ne s'ouvrent que si C'EST VOTRE rôle dans la
+  // cantine (rôle renseigné à l'inscription) — sinon la page reste un poste
+  // d'observation : on voit le travail du bureau, sans y toucher.
+  const maPage = vousRole === role;
+  void sigVersion; // les blocs se rechargent à chaque mutation de signalement
 
   return (
     <div className="space-y-3.5">
@@ -1063,6 +1214,19 @@ function RolePage({ role, annee, roster, payes }: {
           </div>
           <Chip cls={meta.badge}>{meta.short}</Chip>
         </div>
+        {!maPage && (
+          <p className="flex items-start gap-2 border-t border-[#E5DCC0] bg-[#FBF7EA] px-4 py-2.5 text-[11.5px] leading-relaxed text-[#5C6B60]">
+            <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#8A9288]" />
+            Page de {holder.name} — les actions ci-dessous sont réservées au titulaire du rôle
+            {vousRole !== "membre" ? ` (vous êtes ${ROLE_META[vousRole].label})` : " (vous êtes membre simple)"}. Vous pouvez tout consulter et signaler un problème si besoin.
+          </p>
+        )}
+        {maPage && (
+          <p className="flex items-start gap-2 border-t border-[#E5DCC0] bg-[#2F6B45]/8 px-4 py-2.5 text-[11.5px] font-semibold leading-relaxed text-[#2F6B45]">
+            <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            C&apos;est votre page — vos outils de gestion de la cantine sont actifs ci-dessous (URL dédiée : {hashFor(role as TPage)}).
+          </p>
+        )}
       </FcCard>
 
       <Block title={`Missions — ${meta.label}`} icon={<ScrollText className="h-4.5 w-4.5" />}>
@@ -1088,9 +1252,57 @@ function RolePage({ role, annee, roster, payes }: {
 
       {role === "president" && <TablePresidence annee={annee} roster={roster} />}
       {role === "vice_president" && <TableSuppleances annee={annee} roster={roster} />}
+      {role === "secretariat" && <TableSecretariat annee={annee} roster={roster} />}
       {role === "commissaire" && <TableControles annee={annee} roster={roster} />}
       {role === "tresorier" && <TableTresorerie annee={annee} roster={roster} />}
       {role === "censeur" && <TableObservations annee={annee} roster={roster} />}
+
+      {/* ── Outils du rôle — actifs seulement pour le titulaire connecté ── */}
+
+      {(role === "president" || role === "secretariat") && (
+        <Block
+          title="Taux mensuel — réglage réservé au bureau"
+          icon={<Percent className="h-4.5 w-4.5" />}
+          note={`Le pourcentage ne peut JAMAIS être modifié par un simple membre : seul le président ou la secrétaire le règle${peutGererTaux(vousRole) ? "" : " — vous êtes en consultation"}. Il s'applique aux épargnes et aux prêts dès la réunion suivante.`}
+        >
+          <TauxParametrable
+            editable={peutGererTaux(vousRole)}
+            taux={loadTaux()}
+            vousRole={vousRole}
+            onAppliquer={(t) => {
+              const ancienne = loadTaux();
+              const decisions = enregistrerDecisionTaux(ancienne, t, vousRole);
+              appliqueAutoValidationsDecisions(decisions);
+            }}
+            onSignaler={onSignaler}
+          />
+        </Block>
+      )}
+
+      {(role === "president" || role === "secretariat") && (
+        <BureauValidations
+          annee={annee}
+          vousRole={vousRole}
+          champ="epargnes"
+          actif={peutValiderEpargnes(vousRole)}
+          onSignaler={onSignaler}
+        />
+      )}
+
+      {peutGererDettes(vousRole) && (role === "president" || role === "secretariat" || role === "tresorier") && (
+        <>
+          <BureauValidations
+            annee={annee}
+            vousRole={vousRole}
+            champ="prets"
+            actif={peutGererDettes(vousRole)}
+            onSignaler={onSignaler}
+          />
+          <GestionDettes annee={annee} roster={roster} vousRole={vousRole} actif={peutGererDettes(vousRole)} onSignaler={onSignaler} />
+        </>
+      )}
+
+      <BureauSignalements vousRole={vousRole} sigVersion={sigVersion} onSignaler={onSignaler} />
     </div>
   );
 }
@@ -1439,8 +1651,14 @@ function SousOngletsFinances({ mode, onSub }: { mode: "cotisations" | "dettes"; 
   );
 }
 
-/** Taux mensuel partagé (épargnes + prêts) — paramétrable par le bureau. */
-function TauxParametrable({ taux, onAppliquer }: { taux: number; onAppliquer: (t: number) => void }) {
+/** Taux mensuel partagé (épargnes + prêts) — réglage RÉSERVÉ au bureau :
+ *  président et secrétaire. Un membre voit le taux en lecture seule, avec un
+ *  bouton « Signaler un problème » s'il estime qu'il est incorrect. */
+function TauxParametrable({ taux, onAppliquer, editable = false, vousRole, onSignaler }: {
+  taux: number; onAppliquer: (t: number) => void;
+  editable?: boolean; vousRole?: RoleKey;
+  onSignaler?: (c: { cible: Signalement["cible"]; cibleId: string | null; cibleLabel: string }) => void;
+}) {
   const [val, setVal] = useState(String(taux));
   useEffect(() => {
     setVal(String(taux));
@@ -1452,15 +1670,44 @@ function TauxParametrable({ taux, onAppliquer }: { taux: number; onAppliquer: (t
       return;
     }
     onAppliquer(t);
-    toast.success(`Taux mensuel réglé à ${fmtTaux(t)} — épargnes et prêts mis à jour.`);
+    toast.success(`Décision du bureau enregistrée — taux mensuel réglé à ${fmtTaux(t)} (épargnes et prêts mis à jour).`);
   };
+
+  // MEMBRE : lecture seule verrouillée — le taux ne doit jamais être modifié
+  // par un membre ; il ne peut que le constater, le valider, ou le signaler.
+  if (!editable) {
+    return (
+      <div className="mt-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#E5DCC0] bg-[#FFFDF6] px-3.5 py-3">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#C89F62]/18 text-[#8A6420]">
+              <Lock className="h-4 w-4" />
+            </span>
+            <div>
+              <p className="text-[13.5px] font-bold text-[#1E4D2B]">Taux en vigueur : {fmtTaux(taux)} par mois</p>
+              <p className="text-[11px] text-[#8A9288]">
+                Réservé au président et à la secrétaire{vousRole && vousRole !== "membre" ? ` — vous êtes ${ROLE_META[vousRole].short}` : ""}.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Chip cls={CHIP_GOLD}>Par défaut : {fmtTaux(TAUX_DEFAUT)}</Chip>
+            {onSignaler && (
+              <SignalerButton onClick={() => onSignaler({ cible: "taux", cibleId: null, cibleLabel: `Taux mensuel (${fmtTaux(taux)})` })} />
+            )}
+          </div>
+        </div>
+        <p className="mt-2 rounded-xl bg-[#2A4A3A]/5 px-3.5 py-2.5 text-[11.5px] leading-relaxed text-[#5C6B60]">
+          Le pourcentage est une <strong className="text-[#1E4D2B]">décision du bureau</strong> : un membre ne peut pas le modifier. Chaque changement
+          rejoint le journal des décisions et vous est soumis pour validation — sans action de votre part, il est reconnu comme validé après 7 jours.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <Block
-      title="Taux mensuel paramétrable"
-      icon={<Percent className="h-4.5 w-4.5" />}
-      note={`Le pourcentage est réglé par le bureau (actuellement ${fmtTaux(taux)} par mois) et partagé par les épargnes et les prêts. Il s'applique dès que la réunion du mois est achevée.`}
-    >
-      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+    <div className="mt-2.5">
+      <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1 rounded-xl border border-[#E5DCC0] bg-[#FFFDF6] px-3 py-2">
           <input
             type="number"
@@ -1479,8 +1726,14 @@ function TauxParametrable({ taux, onAppliquer }: { taux: number; onAppliquer: (t
           Appliquer le taux
         </FcButton>
         <Chip cls={CHIP_GOLD}>Par défaut : {fmtTaux(TAUX_DEFAUT)} par mois</Chip>
+        {onSignaler && (
+          <SignalerButton onClick={() => onSignaler({ cible: "taux", cibleId: null, cibleLabel: `Taux mensuel (${fmtTaux(taux)})` })} />
+        )}
       </div>
-    </Block>
+      <p className="mt-2 text-[11px] leading-relaxed text-[#8A9288]">
+        Chaque réglage est signé de votre rôle et notifié au membre — qui dispose de 7 jours pour le valider, sinon il est reconnu validé par défaut.
+      </p>
+    </div>
   );
 }
 
@@ -1524,21 +1777,40 @@ function CalendrierMois({ t, accent, titre, note }: { t: TourMois; accent?: stri
   );
 }
 
-/* ── page MES ÉPARGNES — dépôts mois par mois, intérêts simples jusqu'en décembre ── */
+/* ── page MES ÉPARGNES — dépôts mois par mois, intérêts simples jusqu'en décembre ──
 
-function EpargnesPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) => void }) {
+   WORKFLOW (règlement du bureau) : le membre ajoute une épargne → PROPOSITION
+   (en attente de validation du président ou de la secrétaire) → le bureau
+   valide → le membre ne peut que VALIDER la décision (7 jours, sinon validée
+   par défaut). Une épargne validée n'est plus supprimable par le membre :
+   seul le signalement reste possible. Le président / la secrétaire enregistrent
+   leurs épargnes directement validées (registre du bureau). */
+
+function EpargnesPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler }: {
+  annee: TourMois[]; onSub: (p: TPage) => void; vousRole: RoleKey; vousName?: string | null;
+  sigVersion: number; onSignaler: (c: { cible: Signalement["cible"]; cibleId: string | null; cibleLabel: string }) => void;
+}) {
   const [epargnes, setEpargnes] = useState<Epargne[]>([]);
+  const [decisions, setDecisions] = useState<DecisionTaux[]>([]);
   const [taux, setTaux] = useState<number>(TAUX_DEFAUT);
   const [moisChoisi, setMoisChoisi] = useState<string>(String(new Date().getMonth()));
   const [montant, setMontant] = useState("10000");
+  void sigVersion; // les blocs de signalements se rafraîchissent via leur propre version
+
+  const recharge = () => {
+    const ep = loadEpargnes();
+    appliqueAutoValidations(ep, []); // 7 jours sans validation du membre → validée par défaut
+    setEpargnes(ep);
+    setTaux(loadTaux());
+    setDecisions(appliqueAutoValidationsDecisions(loadDecisions()));
+  };
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      setEpargnes(loadEpargnes());
-      setTaux(loadTaux());
-    }, 0);
+    const t = setTimeout(recharge, 0);
     return () => clearTimeout(t);
   }, []);
+
+  const bureauEpargne = peutValiderEpargnes(vousRole); // président / secrétaire
 
   const ajouter = () => {
     const m0 = Number(moisChoisi);
@@ -1547,23 +1819,64 @@ function EpargnesPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) =
       toast.error("Indiquez le montant de l'épargne (supérieur à 0).");
       return;
     }
-    const next = [...epargnes, { id: uid(), month0: m0, capital }].sort((a, b) => a.month0 - b.month0 || a.id.localeCompare(b.id));
+    const now = new Date().toISOString();
+    // Le bureau (président / secrétaire) inscrit d'office une épargne validée ;
+    // le membre propose une épargne qui attend la validation du bureau.
+    const e: Epargne = bureauEpargne
+      ? { id: uid(), month0: m0, capital, statut: "validée", origine: "bureau", valideLe: now, validePar: vousRole, membreConfirmeLe: null, autoValideLe: null }
+      : { id: uid(), month0: m0, capital, statut: "proposée", origine: "membre", valideLe: null, validePar: null, membreConfirmeLe: null, autoValideLe: null };
+    const next = [...epargnes, e].sort((a, b) => a.month0 - b.month0 || a.id.localeCompare(b.id));
     setEpargnes(next);
     saveEpargnes(next);
-    toast.success(`Épargne de ${fmtFcfa(capital)} enregistrée pour ${cap(annee[m0].mois)} ✓`);
+    if (bureauEpargne) {
+      toast.success(`Épargne de ${fmtFcfa(capital)} inscrite au registre pour ${cap(annee[m0].mois)} — le membre dispose de 7 jours pour la valider.`);
+    } else {
+      toast.success(`Épargne de ${fmtFcfa(capital)} proposée pour ${cap(annee[m0].mois)} — en attente de validation du bureau (président ou secrétaire).`);
+    }
     setMontant("");
   };
 
   const supprimer = (id: string) => {
-    const next = epargnes.filter((e) => e.id !== id);
+    const e = epargnes.find((x) => x.id === id);
+    if (!e) return;
+    // Un membre ne peut pas supprimer une épargne actée par le bureau — il la signale.
+    if (!bureauEpargne && !membrePeutSupprimer(e)) {
+      toast.error("Épargne validée par le bureau — non modifiable par un membre. Utilisez « Signaler un problème ».");
+      return;
+    }
+    const next = epargnes.filter((x) => x.id !== id);
     setEpargnes(next);
     saveEpargnes(next);
     toast.info("Épargne supprimée.");
   };
 
+  /** Le membre VALIDE la décision du bureau (il ne peut que valider). */
+  const validerDecision = (id: string) => {
+    const next = epargnes.map((x) => (x.id === id ? membreValide(x) : x));
+    setEpargnes(next);
+    saveEpargnes(next);
+    toast.success("Merci — décision du bureau validée ✓");
+  };
+
+  /** Le bureau VALIDE la proposition d'un membre (président / secrétaire). */
+  const validerProposition = (id: string) => {
+    const next = epargnes.map((x) => (x.id === id ? bureauValide(x, vousRole) : x));
+    setEpargnes(next);
+    saveEpargnes(next);
+    toast.success(`Proposition validée — le membre dispose de ${DELAI_VALIDATION_JOURS} jours pour confirmer.`);
+  };
+
   const appliquerTaux = (t: number) => {
+    const decisions2 = enregistrerDecisionTaux(taux, t, vousRole);
     setTaux(t);
-    saveTaux(t);
+    setDecisions(appliqueAutoValidationsDecisions(decisions2));
+  };
+
+  const validerDecisionTaux = (id: string) => {
+    const next = decisions.map((d) => (d.id === id ? membreValide(d) : d));
+    setDecisions(next);
+    saveDecisions(next);
+    toast.success("Merci — décision du bureau validée ✓");
   };
 
   const rows = epargnes.map((e) => {
@@ -1597,9 +1910,53 @@ function EpargnesPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) =
         </div>
       </Block>
 
-      <TauxParametrable taux={taux} onAppliquer={appliquerTaux} />
+      {/* Décisions du bureau en attente de validation — le membre ne peut que VALIDER :
+          7 jours sans action → reconnu validé par défaut. */}
+      {decisions.some((d) => enAttenteMembre(d)) && (
+        <Block
+          title="Décisions du bureau — à valider"
+          icon={<Stamp className="h-4.5 w-4.5" />}
+          note={`Le bureau a réglé le taux mensuel. Vous ne pouvez que VALIDER cette décision ; sans action de votre part, elle est reconnue validée après ${DELAI_VALIDATION_JOURS} jours.`}
+        >
+          <div className="mt-2 space-y-2">
+            {decisions.filter((d) => enAttenteMembre(d)).map((d) => (
+              <div key={d.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#C89F62]/45 bg-[#C89F62]/8 px-3.5 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-[13px] font-bold text-[#1E4D2B]">
+                    Taux mensuel : {fmtTaux(d.ancienne)} → {fmtTaux(d.valeur)}
+                  </p>
+                  <p className="text-[11px] text-[#8A9288]">
+                    Décision de {ROLE_META[d.role].label.toLowerCase()} du {dateCourte(d.le)} — appliquée aux épargnes et prêts.
+                  </p>
+                </div>
+                <FcButton onClick={() => validerDecisionTaux(d.id)} className="w-auto">
+                  <Check className="h-4 w-4" /> Valider
+                </FcButton>
+              </div>
+            ))}
+          </div>
+        </Block>
+      )}
 
-      <Block title="Nouvelle épargne" icon={<Plus className="h-4.5 w-4.5" />} note="Choisissez le mois du dépôt et la somme mise de côté : elle apparaît aussitôt dans « Mes mois d'épargne » avec sa prévision de fin d'année.">
+      <Block title="Taux mensuel — décision du bureau" icon={<Percent className="h-4.5 w-4.5" />} note={`Le pourcentage est réglé par le bureau (actuellement ${fmtTaux(taux)} par mois) et partagé par les épargnes et les prêts. Un membre ne peut pas le modifier — il le valide ou le signale.`}>
+        <TauxParametrable
+          editable={peutGererTaux(vousRole)}
+          taux={taux}
+          vousRole={vousRole}
+          onAppliquer={appliquerTaux}
+          onSignaler={onSignaler}
+        />
+      </Block>
+
+      <Block
+        title={bureauEpargne ? "Nouvelle épargne — registre du bureau" : "Nouvelle épargne — proposition du membre"}
+        icon={<Plus className="h-4.5 w-4.5" />}
+        note={
+          bureauEpargne
+            ? "En tant que président / secrétaire, l'épargne est inscrite d'office au registre, validée — le membre la valide ensuite (7 jours, sinon validée par défaut)."
+            : "Choisissez le mois du dépôt et la somme : votre épargne part au bureau (président ou secrétaire) pour validation, puis vous n'aurez plus qu'à la valider. Elle apparaît aussitôt dans « Mes mois d'épargne » et met les calendriers à jour."
+        }
+      >
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <select
             value={moisChoisi}
@@ -1627,7 +1984,7 @@ function EpargnesPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) =
             <span className="text-[11px] font-bold text-[#8A9288]">FCFA</span>
           </div>
           <FcButton onClick={ajouter} className="w-auto">
-            Enregistrer l&apos;épargne
+            {bureauEpargne ? "Inscrire l'épargne" : "Proposer l'épargne"}
           </FcButton>
         </div>
       </Block>
@@ -1658,7 +2015,12 @@ function EpargnesPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) =
                   annee={annee}
                   taux={taux}
                   todayIso={todayIso}
+                  bureauMode={bureauEpargne}
+                  onValider={() => validerDecision(r.e.id)}
                   onSupprimer={() => supprimer(r.e.id)}
+                  onSignaler={() =>
+                    onSignaler({ cible: "epargne", cibleId: r.e.id, cibleLabel: `Épargne de ${annee[r.e.month0].mois} · ${fmtN(r.e.capital)} FCFA` })
+                  }
                 />
               ))}
             </div>
@@ -1676,22 +2038,34 @@ function EpargnesPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) =
           </Block>
         </>
       )}
+
+      {/* Mes signalements — dépôt, suivi et suite donnée par le bureau. */}
+      <MesSignalements cible="epargne" sigVersion={sigVersion} onSignaler={() => onSignaler({ cible: "epargne", cibleId: null, cibleLabel: "Mes épargnes (général)" })} />
     </div>
   );
 }
 
 /** Ligne « Mes mois d'épargne » — période, somme, production et prévision fin d'année ;
  *  dépliable : l'évolution mois par mois de CETTE épargne, avec la somme perçue
- *  qui grandit chaque mois (10 000 → 10 300 → 10 600 → 10 900…) au lieu du seul « + ». */
+ *  qui grandit chaque mois (10 000 → 10 300 → 10 600 → 10 900…) au lieu du seul « + ».
+ *  Bandeau de workflow : proposition en attente du bureau / décision à valider
+ *  (7 jours) / validée — et actions Valider · Signaler · Supprimer (gated). */
 function LigneMoisEpargne({
-  e, annee, taux, todayIso, onSupprimer,
-}: { e: Epargne; annee: TourMois[]; taux: number; todayIso: string; onSupprimer: () => void }) {
+  e, annee, taux, todayIso, bureauMode, onValider, onSupprimer, onSignaler,
+}: {
+  e: Epargne; annee: TourMois[]; taux: number; todayIso: string; bureauMode: boolean;
+  onValider: () => void; onSupprimer: () => void;
+  onSignaler: () => void;
+}) {
   const [ouvert, setOuvert] = useState(false);
   const t = annee[e.month0];
   const n = moisEcoules(e.month0, annee);
   const im = interetEpargneMois(e.capital, taux);
   const valeur = soldeEpargneAuMois(e.capital, taux, n);
   const decembre = soldeEpargneAuMois(e.capital, taux, 11 - e.month0);
+  const supprimable = bureauMode || membrePeutSupprimer(e);
+  const attenteMembre = enAttenteMembre(e);
+  const joursRestants = attenteMembre && e.valideLe ? Math.max(DELAI_VALIDATION_JOURS - joursDepuis(e.valideLe), 0) : null;
 
   // Évolution de CETTE épargne, du mois du dépôt jusqu'à décembre
   const lignes: { m: number; percu: number; interet: number | null; statut: "depot" | "ecoule" | "avenir" | "decembre" | "recuperee" }[] = [];
@@ -1720,24 +2094,74 @@ function LigneMoisEpargne({
 
   return (
     <div className="overflow-hidden rounded-2xl border border-[#C89F62]/45 bg-[#FFFDF6] shadow-sm">
+      {/* Bandeau de workflow — proposition · décision à valider · validée */}
+      {e.statut === "proposée" ? (
+        <p className="flex items-start gap-1.5 bg-[#C89F62]/14 px-3.5 py-2 text-[11px] font-semibold leading-relaxed text-[#8A6420]">
+          <Hourglass className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          Proposition en attente — le bureau (président ou secrétaire) doit valider cette épargne. Vous pouvez encore la supprimer ou la signaler.
+        </p>
+      ) : attenteMembre ? (
+        <p className="flex items-start gap-1.5 bg-[#2F6B45]/10 px-3.5 py-2 text-[11px] font-semibold leading-relaxed text-[#2F6B45]">
+          <Stamp className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          Validée par le bureau{e.validePar ? ` (${ROLE_META[e.validePar].label.toLowerCase()})` : ""} le {e.valideLe ? dateCourte(e.valideLe) : "—"} — vous ne pouvez que la VALIDER
+          {joursRestants !== null ? ` · ${joursRestants} jour${joursRestants > 1 ? "s" : ""} restant${joursRestants > 1 ? "s" : ""} avant validation par défaut` : ""}.
+        </p>
+      ) : e.autoValideLe ? (
+        <p className="flex items-start gap-1.5 bg-[#2A4A3A]/8 px-3.5 py-2 text-[11px] font-semibold leading-relaxed text-[#5C6B60]">
+          <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          Validée par défaut — {DELAI_VALIDATION_JOURS} jours écoulés sans action ({dateCourte(e.autoValideLe)}).
+        </p>
+      ) : (
+        <p className="flex items-start gap-1.5 bg-[#2F6B45]/8 px-3.5 py-2 text-[11px] font-semibold leading-relaxed text-[#2F6B45]">
+          <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          Validée ✓{e.validePar ? ` — par ${ROLE_META[e.validePar].label.toLowerCase()}` : ""}
+          {e.membreConfirmeLe ? ` · confirmée par vous le ${dateCourte(e.membreConfirmeLe)}` : ""}
+        </p>
+      )}
+
       <div className="flex items-start justify-between gap-2 px-3.5 pt-3.5">
         <div className="min-w-0">
           <h4 className="fc-serif text-[15px] font-bold capitalize text-[#1E4D2B]">{t.mois}</h4>
-          <p className="text-[11px] text-[#8A9288]">Déposée à la réunion du {fmtDateCourte(t.iso)}</p>
+          <p className="text-[11px] text-[#8A9288]">Déposée à la réunion du {fmtDateCourte(t.iso)}{e.origine === "bureau" ? " · inscrite par le bureau" : " · proposée par vous"}</p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <Chip cls={CHIP_GOLD}>{fmtFcfa(e.capital)}</Chip>
-          <button
-            type="button"
-            onClick={onSupprimer}
-            aria-label={`Supprimer l'épargne de ${t.mois}`}
-            title="Supprimer cette épargne"
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#E5DCC0] bg-[#FFFDF6] text-[#8A9288] transition-colors hover:border-[#A5473D]/40 hover:text-[#A5473D]"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          {onSignaler && (
+            <SignalerButton onClick={onSignaler} label={`Signaler un problème sur l'épargne de ${t.mois}`} />
+          )}
+          {supprimable ? (
+            <button
+              type="button"
+              onClick={onSupprimer}
+              aria-label={`Supprimer l'épargne de ${t.mois}`}
+              title="Supprimer cette épargne"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#E5DCC0] bg-[#FFFDF6] text-[#8A9288] transition-colors hover:border-[#A5473D]/40 hover:text-[#A5473D]"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          ) : (
+            <span
+              aria-hidden="true"
+              title="Épargne validée par le bureau — non supprimable par un membre (signalez un problème si besoin)"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#E5DCC0] bg-[#FBF7EA] text-[#B9B2A0]"
+            >
+              <Lock className="h-3.5 w-3.5" />
+            </span>
+          )}
         </div>
       </div>
+
+      {/* Le membre VALIDE la décision du bureau — le seul geste qui lui reste */}
+      {attenteMembre && (
+        <div className="mx-3.5 mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#2F6B45]/30 bg-[#2F6B45]/8 px-3 py-2.5">
+          <p className="text-[11.5px] font-semibold text-[#2F6B45]">
+            Décision du bureau — validez cette épargne ({fmtFcfa(e.capital)} en {t.mois}).
+          </p>
+          <FcButton onClick={onValider} className="w-auto">
+            <Check className="h-4 w-4" /> Valider
+          </FcButton>
+        </div>
+      )}
 
       {/* Trois chiffres clés : ce que l'épargne a produit, sa valeur et la prévision de fin d'année */}
       <div className="mt-2.5 grid grid-cols-3 gap-2 px-3.5">
@@ -1870,19 +2294,29 @@ function CalendrierEpargnesGlobal({
 
 /* ── page MES PRÊTS — argent emprunté à la réunion, 3 mois puis capitalisation ── */
 
-function PretsPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) => void }) {
+function PretsPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler }: {
+  annee: TourMois[]; onSub: (p: TPage) => void; vousRole: RoleKey; vousName?: string | null;
+  sigVersion: number; onSignaler: (c: { cible: Signalement["cible"]; cibleId: string | null; cibleLabel: string }) => void;
+}) {
   const [prets, setPrets] = useState<Pret[]>([]);
   const [taux, setTaux] = useState<number>(TAUX_DEFAUT);
   const [moisChoisi, setMoisChoisi] = useState<string>(String(new Date().getMonth()));
   const [montant, setMontant] = useState("10000");
+  void sigVersion;
+
+  const recharge = () => {
+    const pr = loadPrets();
+    appliqueAutoValidations([], pr); // 7 jours sans validation du membre → validée par défaut
+    setPrets(pr);
+    setTaux(loadTaux());
+  };
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      setPrets(loadPrets());
-      setTaux(loadTaux());
-    }, 0);
+    const t = setTimeout(recharge, 0);
     return () => clearTimeout(t);
   }, []);
+
+  const bureauDettes = peutGererDettes(vousRole); // président / secrétaire / trésorier
 
   const ajouter = () => {
     const m0 = Number(moisChoisi);
@@ -1891,19 +2325,43 @@ function PretsPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) => v
       toast.error("Indiquez la somme demandée (supérieure à 0).");
       return;
     }
-    const pret: Pret = { id: uid(), month0: m0, capital, rembourseMois: null, rembourseMontant: 0 };
+    const now = new Date().toISOString();
+    // Le bureau alloue la dette directement (registre officiel) ; le membre
+    // envoie une DEMANDE qui attend la validation du bureau.
+    const pret: Pret = bureauDettes
+      ? { id: uid(), month0: m0, capital, rembourseMois: null, rembourseMontant: 0, statut: "validée", origine: "bureau", valideLe: now, validePar: vousRole, membreConfirmeLe: null, autoValideLe: null }
+      : { id: uid(), month0: m0, capital, rembourseMois: null, rembourseMontant: 0, statut: "proposée", origine: "membre", valideLe: null, validePar: null, membreConfirmeLe: null, autoValideLe: null };
     const next = [...prets, pret].sort((a, b) => a.month0 - b.month0 || a.id.localeCompare(b.id));
     setPrets(next);
     savePrets(next);
-    toast.success(`Prêt de ${fmtFcfa(capital)} enregistré pour ${cap(annee[m0].mois)} ✓`);
+    if (bureauDettes) {
+      toast.success(`Dette de ${fmtFcfa(capital)} allouée pour ${cap(annee[m0].mois)} — le membre dispose de 7 jours pour la valider.`);
+    } else {
+      toast.success(`Demande de prêt de ${fmtFcfa(capital)} envoyée pour ${cap(annee[m0].mois)} — le bureau (président, secrétaire ou trésorier) doit l'acter.`);
+    }
     setMontant("");
   };
 
   const supprimer = (id: string) => {
-    const next = prets.filter((p) => p.id !== id);
+    const p = prets.find((x) => x.id === id);
+    if (!p) return;
+    // RÈGLE DU BUREAU : un membre ne peut NI supprimer NI modifier une dette
+    // allouée par un acteur du bureau — il peut la rembourser ou la signaler.
+    if (!bureauDettes && !membrePeutSupprimer(p)) {
+      toast.error("Dette allouée par le bureau — non modifiable ni supprimable par un membre. Utilisez « Signaler un problème ».");
+      return;
+    }
+    const next = prets.filter((x) => x.id !== id);
     setPrets(next);
     savePrets(next);
     toast.info("Prêt supprimé.");
+  };
+
+  const validerDecision = (id: string) => {
+    const next = prets.map((x) => (x.id === id ? membreValide(x) : x));
+    setPrets(next);
+    savePrets(next);
+    toast.success("Merci — décision du bureau validée ✓");
   };
 
   const rembourser = (id: string, moisR: number) => {
@@ -1919,8 +2377,8 @@ function PretsPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) => v
   };
 
   const appliquerTaux = (t: number) => {
+    enregistrerDecisionTaux(taux, t, vousRole);
     setTaux(t);
-    saveTaux(t);
   };
 
   const mc = moisCourantAnnee(annee); // mois de l'année contenant aujourd'hui (0..12)
@@ -1942,7 +2400,7 @@ function PretsPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) => v
       <Block
         title="Mes prêts"
         icon={<HandCoins className="h-4.5 w-4.5" />}
-        note="L'argent emprunté à la réunion. La dette gagne le taux chaque mois dès le mois du prêt — montant constant pendant chaque bloc de 3 mois ; à chaque échéance des 3 mois sans remboursement, la dette totale devient la nouvelle base pour 3 nouveaux mois."
+        note="L'argent emprunté à la réunion. La dette gagne le taux chaque mois dès le mois du prêt — montant constant pendant chaque bloc de 3 mois ; à chaque échéance des 3 mois sans remboursement, la dette totale devient la nouvelle base pour 3 nouveaux mois. Les dettes sont allouées par le bureau : un membre ne peut ni les modifier ni les supprimer — il les rembourse ou les signale."
       >
         <div className="mt-2 grid grid-cols-3 gap-2">
           <MiniKpi label="Somme empruntée" value={fmtFcfa(totalEmprunte)} sub={`${rows.length} prêt(s) sur l'année`} tone="text-[#1E4D2B]" />
@@ -1951,9 +2409,25 @@ function PretsPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) => v
         </div>
       </Block>
 
-      <TauxParametrable taux={taux} onAppliquer={appliquerTaux} />
+      <Block title="Taux mensuel — décision du bureau" icon={<Percent className="h-4.5 w-4.5" />} note={`Le pourcentage est réglé par le bureau (actuellement ${fmtTaux(taux)} par mois). Un membre ne peut pas le modifier — il le valide ou le signale.`}>
+        <TauxParametrable
+          editable={peutGererTaux(vousRole)}
+          taux={taux}
+          vousRole={vousRole}
+          onAppliquer={appliquerTaux}
+          onSignaler={onSignaler}
+        />
+      </Block>
 
-      <Block title="Nouveau prêt" icon={<Plus className="h-4.5 w-4.5" />} note="Choisissez le mois de la demande et la somme empruntée : seuls les mois où vous avez emprunté apparaissent ci-dessous.">
+      <Block
+        title={bureauDettes ? "Nouvelle dette — registre du bureau" : "Nouvelle demande de prêt"}
+        icon={<Plus className="h-4.5 w-4.5" />}
+        note={
+          bureauDettes
+            ? "En tant qu'acteur du bureau, la dette est allouée d'office au membre — il ne pourra ni la modifier ni la supprimer, seulement la rembourser ou la signaler."
+            : "Choisissez le mois et la somme demandée : votre demande part au bureau pour acte — une fois allouée, la dette ne peut plus être modifiée par vous (seuls remboursement et signalement restent possibles)."
+        }
+      >
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <select
             value={moisChoisi}
@@ -1981,7 +2455,7 @@ function PretsPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) => v
             <span className="text-[11px] font-bold text-[#8A9288]">FCFA</span>
           </div>
           <FcButton onClick={ajouter} className="w-auto">
-            Demander le prêt
+            {bureauDettes ? "Allouer la dette" : "Demander le prêt"}
           </FcButton>
         </div>
       </Block>
@@ -1999,12 +2473,22 @@ function PretsPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) => v
       ) : (
         <>
           {rows.map((r) => (
-            <CartePret key={r.p.id} p={r.p} annee={annee} taux={taux} onSupprimer={() => supprimer(r.p.id)} onRembourser={rembourser} />
+            <CartePret
+              key={r.p.id}
+              p={r.p}
+              annee={annee}
+              taux={taux}
+              bureauMode={bureauDettes}
+              onValider={() => validerDecision(r.p.id)}
+              onSupprimer={() => supprimer(r.p.id)}
+              onRembourser={rembourser}
+              onSignaler={() => onSignaler({ cible: "pret", cibleId: r.p.id, cibleLabel: `Dette de ${annee[r.p.month0].mois} · ${fmtN(r.p.capital)} FCFA` })}
+            />
           ))}
           <Block
             title="Total de mes dettes"
             icon={<Coins className="h-4.5 w-4.5" />}
-            note="Les dettes de chaque prêt sont sommées : voici ce que vous devez à la réunion à ce jour."
+            note="Les dettes de chaque prêt sont sommées : voici ce que vous devez à la réunion à ce jour. Chaque ligne porte son bouton de signalement."
           >
             <TableWrap label="Total de mes dettes">
               <thead>
@@ -2013,18 +2497,30 @@ function PretsPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) => v
                   <th className={TH}>Somme prêtée</th>
                   <th className={TH}>Dette à ce jour</th>
                   <th className={TH}>Statut</th>
+                  <th className={TH}>Signaler</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r, i) => (
                   <tr key={r.p.id} className={i % 2 === 0 ? "bg-[#FFFDF6]" : "bg-[#FBF7EA]"}>
-                    <td className={`${TD} whitespace-nowrap font-bold capitalize text-[#2B3530]`}>{annee[r.p.month0].mois}</td>
+                    <td className={`${TD} whitespace-nowrap font-bold capitalize text-[#2B3530]`}>
+                      {annee[r.p.month0].mois}
+                      {r.p.statut === "proposée" && <span className="block text-[10px] font-semibold text-[#8A6420]">demande en attente du bureau</span>}
+                      {r.p.origine === "bureau" && r.p.statut !== "proposée" && <span className="block text-[10px] font-semibold text-[#8A9288]">allouée par le bureau</span>}
+                    </td>
                     <td className={`${TD} whitespace-nowrap font-semibold text-[#1E4D2B]`}>{fmtN(r.p.capital)}</td>
                     <td className={`${TD} whitespace-nowrap font-bold ${r.rembourse ? "text-[#8A9288]" : "text-[#A5473D]"}`}>{r.rembourse ? "—" : fmtN(r.dette)}</td>
                     <td className={TD}>
                       <Chip cls={r.rembourse ? CHIP_OK : r.enRetard ? CHIP_ROUGE : r.avenir ? CHIP_NEUTRE : CHIP_GOLD}>
                         {r.rembourse ? `Remboursé ✓ ${fmtN(r.p.rembourseMontant)} versés` : r.enRetard ? "En retard — non remboursé" : r.avenir ? "À venir" : "En cours"}
                       </Chip>
+                    </td>
+                    <td className={TD}>
+                      <SignalerButton
+                        small
+                        label={`Signaler la dette de ${annee[r.p.month0].mois}`}
+                        onClick={() => onSignaler({ cible: "pret", cibleId: r.p.id, cibleLabel: `Dette de ${annee[r.p.month0].mois} · ${fmtN(r.p.capital)} FCFA` })}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -2033,21 +2529,29 @@ function PretsPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) => v
                   <td className={`${TD} whitespace-nowrap font-bold text-[#1E4D2B]`}>{fmtN(totalEmprunte)}</td>
                   <td className={`${TD} whitespace-nowrap font-bold text-[#A5473D]`}>{fmtN(totalDette)}</td>
                   <td className={TD}>—</td>
+                  <td className={TD}>—</td>
                 </tr>
               </tbody>
             </TableWrap>
           </Block>
         </>
       )}
+
+      {/* Mes signalements de dettes — suivi et suite donnée par le bureau. */}
+      <MesSignalements cible="pret" sigVersion={sigVersion} onSignaler={() => onSignaler({ cible: "pret", cibleId: null, cibleLabel: "Mes prêts / dettes (général)" })} />
     </div>
   );
 }
 
 type LignePret = { m: number; interet: number | null; dette: number | null; statut: string; detail: string };
 
-/** Carte d'un prêt : calendrier du mois du prêt + évolution de la dette + remboursement. */
-function CartePret({ p, annee, taux, onSupprimer, onRembourser }: {
-  p: Pret; annee: TourMois[]; taux: number; onSupprimer: () => void; onRembourser: (id: string, moisR: number) => void;
+/** Carte d'un prêt : calendrier du mois du prêt + évolution de la dette + remboursement.
+ *  Une dette allouée par le bureau est VERROUILLÉE pour le membre : ni modification
+ *  ni suppression — uniquement remboursement, validation de la décision, signalement. */
+function CartePret({ p, annee, taux, bureauMode, onValider, onSupprimer, onRembourser, onSignaler }: {
+  p: Pret; annee: TourMois[]; taux: number; bureauMode: boolean;
+  onValider: () => void; onSupprimer: () => void; onRembourser: (id: string, moisR: number) => void;
+  onSignaler: () => void;
 }) {
   const todayIso = isoDate(new Date());
   const t = annee[p.month0];
@@ -2060,6 +2564,9 @@ function CartePret({ p, annee, taux, onSupprimer, onRembourser }: {
   const detteEcheance = dettePretAuMois(p.capital, taux, p.month0, moisEcheance + 1);
   const interetBase = Math.round(detteEcheance * (taux / 100));
   const prochaineEcheance = moisEcheance + 3 <= 11 ? annee[moisEcheance + 3].mois : null;
+  const supprimable = bureauMode || membrePeutSupprimer(p);
+  const attenteMembre = !rembourse && enAttenteMembre(p);
+  const joursRestants = attenteMembre && p.valideLe ? Math.max(DELAI_VALIDATION_JOURS - joursDepuis(p.valideLe), 0) : null;
 
   // Mois disponibles pour enregistrer un remboursement : du mois suivant le prêt au mois courant
   const moisRemboursement: number[] = [];
@@ -2117,22 +2624,66 @@ function CartePret({ p, annee, taux, onSupprimer, onRembourser }: {
 
   return (
     <FcCard className="p-4">
+      {/* Bandeau de workflow — demande en attente · décision à valider · allouée par le bureau */}
+      {p.statut === "proposée" ? (
+        <p className="mb-2.5 flex items-start gap-1.5 rounded-xl bg-[#C89F62]/14 px-3 py-2 text-[11px] font-semibold leading-relaxed text-[#8A6420]">
+          <Hourglass className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          Demande en attente — le bureau (président, secrétaire ou trésorier) doit allouer cette dette. Tant qu'elle n'est pas actée, vous pouvez la supprimer.
+        </p>
+      ) : attenteMembre ? (
+        <p className="mb-2.5 flex items-start gap-1.5 rounded-xl bg-[#A5473D]/10 px-3 py-2 text-[11px] font-semibold leading-relaxed text-[#A5473D]">
+          <Stamp className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          Dette allouée par le bureau{p.validePar ? ` (${ROLE_META[p.validePar].label.toLowerCase()})` : ""} le {p.valideLe ? dateCourte(p.valideLe) : "—"} — vous ne pouvez que la VALIDER ou la signaler
+          {joursRestants !== null ? ` · ${joursRestants} jour${joursRestants > 1 ? "s" : ""} restant${joursRestants > 1 ? "s" : ""} avant validation par défaut` : ""}.
+        </p>
+      ) : p.origine === "bureau" ? (
+        <p className="mb-2.5 flex items-start gap-1.5 rounded-xl bg-[#2A4A3A]/8 px-3 py-2 text-[11px] font-semibold leading-relaxed text-[#5C6B60]">
+          <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          Dette allouée par le bureau — non modifiable ni supprimable par un membre. Remboursez-la ou signalez tout problème.
+        </p>
+      ) : null}
+
+      {/* Le membre VALIDE la décision du bureau d'allouer cette dette */}
+      {attenteMembre && (
+        <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#2F6B45]/30 bg-[#2F6B45]/8 px-3 py-2.5">
+          <p className="text-[11.5px] font-semibold text-[#2F6B45]">
+            Décision du bureau — validez cette dette de {fmtFcfa(p.capital)} ({t.mois}).
+          </p>
+          <FcButton onClick={onValider} className="w-auto">
+            <Check className="h-4 w-4" /> Valider
+          </FcButton>
+        </div>
+      )}
+
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="fc-serif text-[15.5px] font-bold capitalize text-[#1E4D2B]">Prêt de {t.mois}</h3>
-          <p className="text-[11px] text-[#8A9288]">Demandé à la réunion du {fmtDateCourte(t.iso)} — {fmtTaux(taux)} par mois pendant 3 mois, puis nouvelle base tous les 3 mois</p>
+          <h3 className="fc-serif text-[15.5px] font-bold capitalize text-[#1E4D2B]">{p.origine === "bureau" && p.statut !== "proposée" ? "Dette de" : "Prêt de"} {t.mois}</h3>
+          <p className="text-[11px] text-[#8A9288]">{p.origine === "bureau" && p.statut !== "proposée" ? "Allouée par le bureau à la réunion du" : "Demandé à la réunion du"} {fmtDateCourte(t.iso)} — {fmtTaux(taux)} par mois pendant 3 mois, puis nouvelle base tous les 3 mois</p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <Chip cls={rembourse ? CHIP_OK : enRetard ? CHIP_ROUGE : CHIP_GOLD}>{rembourse ? "Remboursé ✓" : `Dette : ${fmtN(detteJour)}`}</Chip>
-          <button
-            type="button"
-            onClick={onSupprimer}
-            aria-label={`Supprimer le prêt de ${t.mois}`}
-            title="Supprimer ce prêt"
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#E5DCC0] bg-[#FFFDF6] text-[#8A9288] transition-colors hover:border-[#A5473D]/40 hover:text-[#A5473D]"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          {onSignaler && (
+            <SignalerButton onClick={onSignaler} label={`Signaler un problème sur la dette de ${t.mois}`} />
+          )}
+          {supprimable ? (
+            <button
+              type="button"
+              onClick={onSupprimer}
+              aria-label={`Supprimer le prêt de ${t.mois}`}
+              title="Supprimer ce prêt"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#E5DCC0] bg-[#FFFDF6] text-[#8A9288] transition-colors hover:border-[#A5473D]/40 hover:text-[#A5473D]"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          ) : (
+            <span
+              aria-hidden="true"
+              title="Dette allouée par le bureau — non supprimable par un membre (remboursez-la ou signalez un problème)"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#E5DCC0] bg-[#FBF7EA] text-[#B9B2A0]"
+            >
+              <Lock className="h-3.5 w-3.5" />
+            </span>
+          )}
         </div>
       </div>
 
@@ -2450,5 +3001,700 @@ function BarresEncaissements({ annee }: { annee: TourMois[] }) {
         );
       })}
     </div>
+  );
+}
+
+/* ══════════════════════════ SIGNALEMENTS — bouton, pop-up, bureau ══════════════════════════ */
+
+/** Bouton « Signaler un problème » — présent sur chaque élément (épargne,\n *  dette, taux…). Ouvre le pop-up de signalement enregistré. */
+function SignalerButton({ onClick, label, small }: { onClick: () => void; label?: string; small?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label ?? "Signaler un problème"}
+      title={label ?? "Signaler un problème — le bureau est notifié (rappel tous les 3 jours)"}
+      className={`flex shrink-0 items-center justify-center gap-1 rounded-lg border border-[#B85C33]/40 bg-[#B85C33]/10 font-bold text-[#B85C33] transition-colors hover:bg-[#B85C33]/20 ${
+        small ? "h-8 px-2 text-[10.5px]" : "h-8 w-8"
+      }`}
+    >
+      <Flag className={small ? "h-3 w-3" : "h-3.5 w-3.5"} />
+      {small && <span>Signaler</span>}
+    </button>
+  );
+}
+
+/** Pop-up de signalement — enregistré localement, notifié à TOUS les membres du\n *  bureau ; sans action, la notification réapparaît tous les 3 JOURS jusqu'au\n *  traitement. */
+function SignalementModal({ cible, cibleId, cibleLabel, auteur, auteurRole, onClose, onDepose }: {
+  cible: Signalement["cible"]; cibleId: string | null; cibleLabel: string;
+  auteur: string; auteurRole: RoleKey;
+  onClose: () => void; onDepose: () => void;
+}) {
+  const [motif, setMotif] = useState<MotifSignalement>(cible === "pret" ? "dette_mal_inseree" : cible === "taux" ? "taux" : "montant");
+  const [message, setMessage] = useState("");
+  const envoyer = () => {
+    if (message.trim().length < 5) {
+      toast.error("Décrivez le problème en quelques mots (au moins 5 caractères).");
+      return;
+    }
+    deposerSignalement({ cible, cibleId, cibleLabel, motif, message, auteur, auteurRole });
+    toast.success("Signalement enregistré — tous les membres du bureau sont notifiés 🔔", {
+      description: `Sans action du bureau, un rappel réapparaîtra tous les ${RAPPEL_SIGNALEMENT_JOURS} jours jusqu'au traitement.`,
+      duration: 7000,
+    });
+    onDepose();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-[#2B2416]/55 p-3 backdrop-blur-[2px] sm:items-center"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Signaler un problème"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="w-full max-w-md rounded-2xl border border-[#E5DCC0] bg-[#FFFDF6] shadow-2xl">
+        <div className="flex items-center justify-between gap-2 rounded-t-2xl bg-[#B85C33] px-4 py-3 text-white">
+          <div className="flex items-center gap-2">
+            <Flag className="h-4.5 w-4.5" />
+            <p className="fc-serif text-[15.5px] font-bold">Signaler un problème</p>
+          </div>
+          <button onClick={onClose} aria-label="Fermer" className="rounded-lg p-1.5 hover:bg-white/15">
+            <X className="h-4.5 w-4.5" />
+          </button>
+        </div>
+        <div className="space-y-3 p-4">
+          <div className="rounded-xl bg-[#FBF7EA] px-3.5 py-2.5">
+            <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Élément visé</p>
+            <p className="text-[13px] font-bold text-[#1E4D2B]">{cibleLabel}</p>
+          </div>
+          <div>
+            <label htmlFor="fc-sig-motif" className="mb-1 block px-1 text-[11px] font-bold uppercase tracking-wide text-[#8A9288]">
+              Nature du problème
+            </label>
+            <select
+              id="fc-sig-motif"
+              value={motif}
+              onChange={(e) => setMotif(e.target.value as MotifSignalement)}
+              className="min-h-[46px] w-full rounded-xl border border-[#E5DCC0] bg-[#FFFDF6] px-3 text-[13.5px] font-semibold text-[#2B3530] outline-none focus-visible:outline-2 focus-visible:outline-[#C89F62]"
+            >
+              {Object.entries(MOTIFS_SIGNALEMENT).map(([k, lbl]) => (
+                <option key={k} value={k}>{lbl}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="fc-sig-msg" className="mb-1 block px-1 text-[11px] font-bold uppercase tracking-wide text-[#8A9288]">
+              Décrivez le problème
+            </label>
+            <textarea
+              id="fc-sig-msg"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              rows={4}
+              maxLength={600}
+              placeholder="Ex : le trésorier a inséré une dette de 15 000 FCFA en mars alors que je n'ai rien emprunté ce mois-là…"
+              className="w-full rounded-xl border border-[#E5DCC0] bg-[#FFFDF6] px-3 py-2.5 text-[13px] leading-relaxed text-[#2B3530] outline-none focus-visible:outline-2 focus-visible:outline-[#C89F62]"
+            />
+            <p className="mt-1 px-1 text-right text-[10.5px] text-[#8A9288]">{message.length}/600</p>
+          </div>
+          <div className="flex items-start gap-2 rounded-xl border border-[#C89F62]/40 bg-[#C89F62]/10 p-3 text-[11.5px] leading-relaxed text-[#7A5B2E]">
+            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>
+              Tous les membres du bureau (président, vice-président, secrétaire, trésorier, commissaire, censeur) sont notifiés.
+              <strong> Rappel automatique tous les {RAPPEL_SIGNALEMENT_JOURS} jours</strong> tant que le problème n&apos;est pas traité.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <FcButton variant="outline" onClick={onClose} className="flex-1">
+              Annuler
+            </FcButton>
+            <FcButton onClick={envoyer} className="flex-1">
+              <Flag className="h-4 w-4" /> Enregistrer
+            </FcButton>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Bloc du bureau — les signalements reçus, avec traitement (résolu / rejeté).\n *  Visible sur CHAQUE page du bureau : tout le bureau est responsable du suivi. */
+function BureauSignalements({ vousRole, sigVersion, onSignaler }: {
+  vousRole: RoleKey; sigVersion: number; onSignaler?: (c: { cible: Signalement["cible"]; cibleId: string | null; cibleLabel: string }) => void;
+}) {
+  const [list, setList] = useState<Signalement[]>([]);
+  const [resolutions, setResolutions] = useState<Record<string, string>>({});
+  const peuxTraiter = peutTraiterSignalements(vousRole);
+
+  useEffect(() => {
+    const t = setTimeout(() => setList(loadSignalements()), 0);
+    return () => clearTimeout(t);
+  }, [sigVersion]);
+
+  const traiter = (id: string, statut: "resolu" | "rejete") => {
+    const next = traiterSignalement(id, statut, resolutions[id] ?? "", vousRole);
+    setList(next);
+    toast.success(statut === "resolu" ? "Signalement marqué résolu — le membre voit la suite donnée ✓" : "Signalement rejeté — motif enregistré.");
+  };
+
+  const ouverts = list.filter((s) => s.statut === "ouvert");
+  const traites = list.filter((s) => s.statut !== "ouvert");
+
+  return (
+    <Block
+      title="Signalements — les problèmes déclarés par les membres"
+      icon={<ShieldAlert className="h-4.5 w-4.5" />}
+      chip={ouverts.length > 0 ? <Chip cls={CHIP_ROUGE}>{ouverts.length} en attente</Chip> : <Chip cls={CHIP_OK}>Aucun ouvert</Chip>}
+      note={`Chaque élément porte un bouton « Signaler un problème ». Tous les acteurs du bureau sont notifiés, et la notification RÉAPPARAÎT TOUS LES ${RAPPEL_SIGNALEMENT_JOURS} JOURS tant qu'aucune suite n'est donnée.${peuxTraiter ? "" : " (consultation — le traitement se fait depuis la page d'un acteur du bureau)"}`}
+    >
+      {list.length === 0 ? (
+        <p className="mt-3 rounded-xl bg-[#2F6B45]/8 px-3.5 py-3 text-[12.5px] font-semibold text-[#2F6B45]">
+          Aucun signalement — la cantine est sereine.
+        </p>
+      ) : (
+        <div className="mt-3 space-y-2.5">
+          {[...ouverts, ...traites].map((s) => {
+            const jours = joursDepuis(s.creeLe);
+            const ouvert = s.statut === "ouvert";
+            const rappelProche = ouvert && jours >= RAPPEL_SIGNALEMENT_JOURS;
+            return (
+              <div
+                key={s.id}
+                className={`rounded-2xl border p-3.5 ${ouvert ? "border-[#B85C33]/40 bg-[#FFFDF6]" : "border-[#E5DCC0] bg-[#FBF7EA] opacity-80"}`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[13px] font-bold text-[#1E4D2B]">{s.cibleLabel}</p>
+                  <Chip cls={s.statut === "resolu" ? CHIP_OK : s.statut === "rejete" ? CHIP_NEUTRE : rappelProche ? CHIP_ROUGE : CHIP_GOLD}>
+                    {s.statut === "resolu" ? "Résolu ✓" : s.statut === "rejete" ? "Rejeté" : rappelProche ? `Rappel — ${jours} jours sans suite` : "En attente du bureau"}
+                  </Chip>
+                </div>
+                <p className="mt-1 text-[11.5px] text-[#5C6B60]">
+                  <strong>{libelleMotif(s.motif)}</strong> — signalé par {s.auteur}{s.auteurRole && s.auteurRole !== "membre" ? ` (${ROLE_META[s.auteurRole].short})` : ""} le {dateCourte(s.creeLe)}
+                </p>
+                <p className="mt-1.5 rounded-lg bg-[#FBF7EA] px-3 py-2 text-[12px] leading-relaxed text-[#2B3530]">{s.message}</p>
+                {!ouvert && s.resolution && (
+                  <p className="mt-1.5 rounded-lg bg-[#2F6B45]/8 px-3 py-2 text-[12px] font-semibold leading-relaxed text-[#2F6B45]">
+                    Suite donnée{s.traitePar ? ` par ${ROLE_META[s.traitePar].label.toLowerCase()}` : ""} : {s.resolution}
+                  </p>
+                )}
+                {ouvert && peuxTraiter && (
+                  <div className="mt-2 space-y-2">
+                    <input
+                      value={resolutions[s.id] ?? ""}
+                      onChange={(e) => setResolutions((r) => ({ ...r, [s.id]: e.target.value }))}
+                      placeholder="Suite donnée (ex : dette de 15 000 corrigée en 5 000 après vérification)"
+                      aria-label={`Suite donnée au signalement de ${s.cibleLabel}`}
+                      className="min-h-[42px] w-full rounded-xl border border-[#E5DCC0] bg-[#FFFDF6] px-3 text-[12.5px] text-[#2B3530] outline-none focus-visible:outline-2 focus-visible:outline-[#C89F62]"
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <FcButton onClick={() => traiter(s.id, "resolu")} className="w-auto">
+                        <Check className="h-4 w-4" /> Marquer résolu
+                      </FcButton>
+                      <FcButton variant="outline" onClick={() => traiter(s.id, "rejete")} className="w-auto">
+                        <X className="h-4 w-4" /> Rejeter
+                      </FcButton>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {onSignaler && (
+        <div className="mt-3">
+          <FcButton variant="outline" onClick={() => onSignaler({ cible: "autre", cibleId: null, cibleLabel: "Problème général de la cantine" })} className="w-auto">
+            <Flag className="h-4 w-4" /> Signaler un autre problème
+          </FcButton>
+        </div>
+      )}
+    </Block>
+  );
+}
+
+/** Bloc du bureau — les propositions des membres qui attendent validation\n *  (épargnes : président + secrétaire · dettes : acteurs du bureau). */
+function BureauValidations({ annee, vousRole, champ, actif, onSignaler }: {
+  annee: TourMois[]; vousRole: RoleKey; champ: "epargnes" | "prets"; actif: boolean;
+  onSignaler: (c: { cible: Signalement["cible"]; cibleId: string | null; cibleLabel: string }) => void;
+}) {
+  const [items, setItems] = useState<(Epargne | Pret)[]>([]);
+  const estEpargnes = champ === "epargnes";
+
+  useEffect(() => {
+    const t = setTimeout(() => setItems((estEpargnes ? loadEpargnes() : loadPrets()) as (Epargne | Pret)[]), 0);
+    return () => clearTimeout(t);
+  }, [estEpargnes]);
+
+  const enAttente = items.filter((x) => x.statut === "proposée");
+  const aValiderMembre = items.filter((x) => enAttenteMembre(x));
+
+  const agir = () => {
+    const next = (estEpargnes ? loadEpargnes() : loadPrets()) as (Epargne | Pret)[];
+    setItems(next);
+  };
+
+  const valider = (id: string) => {
+    if (estEpargnes) {
+      const ep = loadEpargnes();
+      saveEpargnes(ep.map((x) => (x.id === id ? bureauValide(x, vousRole) : x)));
+    } else {
+      const pr = loadPrets();
+      savePrets(pr.map((x) => (x.id === id ? bureauValide(x, vousRole) : x)));
+    }
+    agir();
+    toast.success(`Validé — le membre dispose de ${DELAI_VALIDATION_JOURS} jours pour confirmer (sinon validé par défaut).`);
+  };
+
+  const rejeter = (id: string) => {
+    if (estEpargnes) {
+      saveEpargnes(loadEpargnes().filter((x) => x.id !== id));
+    } else {
+      savePrets(loadPrets().filter((x) => x.id !== id));
+    }
+    agir();
+    toast.info("Proposition rejetée et retirée du registre.");
+  };
+
+  return (
+    <Block
+      title={estEpargnes ? "Épargnes proposées — à valider par le bureau" : "Demandes de prêt — à acter par le bureau"}
+      icon={<ClipboardList className="h-4.5 w-4.5" />}
+      chip={enAttente.length > 0 ? <Chip cls={CHIP_GOLD}>{enAttente.length} en attente</Chip> : <Chip cls={CHIP_OK}>Rien en attente</Chip>}
+      note={
+        estEpargnes
+          ? "Seuls le PRÉSIDENT et la SECRÉTAIRE valident les nouvelles épargnes des membres — jamais un membre lui-même. Une fois validée, l'épargne est confirmée par le membre (7 jours, sinon validée par défaut)."
+          : "Les acteurs du bureau (président, secrétaire, trésorier) actent les demandes de prêt : la dette allouée devient non modifiable par le membre (remboursement ou signalement uniquement)."
+      }
+    >
+      {enAttente.length === 0 ? (
+        <p className="mt-3 rounded-xl bg-[#2F6B45]/8 px-3.5 py-3 text-[12.5px] font-semibold text-[#2F6B45]">
+          Aucune proposition en attente — le registre est à jour.
+        </p>
+      ) : (
+        <TableWrap label={estEpargnes ? "Épargnes à valider" : "Demandes de prêt à acter"}>
+          <thead>
+            <tr className={estEpargnes ? "bg-[#8A6420] text-white" : "bg-[#A5473D] text-white"}>
+              <th className={TH}>Membre</th>
+              <th className={TH}>Mois</th>
+              <th className={TH}>{estEpargnes ? "Somme déposée" : "Somme demandée"}</th>
+              <th className={TH}>Déposée</th>
+              <th className={TH}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {enAttente.map((x, i) => (
+              <tr key={x.id} className={i % 2 === 0 ? "bg-[#FFFDF6]" : "bg-[#FBF7EA]"}>
+                <td className={`${TD} whitespace-nowrap font-semibold text-[#2B3530]`}>Vous (membre)</td>
+                <td className={`${TD} whitespace-nowrap font-bold capitalize text-[#2B3530]`}>{annee[x.month0]?.mois ?? "—"}</td>
+                <td className={`${TD} whitespace-nowrap font-bold ${estEpargnes ? "text-[#1E4D2B]" : "text-[#A5473D]"}`}>{fmtN(x.capital)}</td>
+                <td className={`${TD} whitespace-nowrap text-[#8A9288]`}>{x.valideLe ? dateCourte(x.valideLe) : "aujourd'hui"}</td>
+                <td className={TD}>
+                  {actif ? (
+                    <div className="flex gap-1.5">
+                      <FcButton onClick={() => valider(x.id)} className="w-auto">
+                        <Check className="h-4 w-4" /> Valider
+                      </FcButton>
+                      <FcButton variant="outline" onClick={() => rejeter(x.id)} className="w-auto">
+                        <X className="h-4 w-4" /> Rejeter
+                      </FcButton>
+                    </div>
+                  ) : (
+                    <span className="flex items-center gap-1 text-[11px] text-[#8A9288]">
+                      <Lock className="h-3 w-3" /> Réservé au{estEpargnes ? " président / à la secrétaire" : " bureau"}
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </TableWrap>
+      )}
+      {aValiderMembre.length > 0 && (
+        <p className="mt-2 rounded-xl bg-[#C89F62]/12 px-3.5 py-2.5 text-[11.5px] leading-relaxed text-[#8A6420]">
+          {aValiderMembre.length} décision{aValiderMembre.length > 1 ? "s" : ""} récente{aValiderMembre.length > 1 ? "s" : ""} attend encore la validation du membre — sans action de sa part sous {DELAI_VALIDATION_JOURS} jours, elle sera reconnue validée par défaut.
+        </p>
+      )}
+      {onSignaler && enAttente.length > 0 && (
+        <div className="mt-3">
+          <SignalerButton
+            small
+            label="Signaler un problème sur une proposition en attente"
+            onClick={() => onSignaler({ cible: estEpargnes ? "epargne" : "pret", cibleId: null, cibleLabel: estEpargnes ? "Proposition d'épargne en attente" : "Demande de prêt en attente" })}
+          />
+        </div>
+      )}
+    </Block>
+  );
+}
+
+/** Bloc du bureau — allouer, corriger, retirer les DETTES des membres.\n *  Une dette passée ici est allouée par un acteur du bureau : le membre ne\n *  pourra ni la modifier ni la supprimer (remboursement ou signalement). */
+function GestionDettes({ annee, roster, vousRole, actif, onSignaler }: {
+  annee: TourMois[]; roster: Member[]; vousRole: RoleKey; actif: boolean;
+  onSignaler: (c: { cible: Signalement["cible"]; cibleId: string | null; cibleLabel: string }) => void;
+}) {
+  const [prets, setPrets] = useState<Pret[]>([]);
+  const [membreId, setMembreId] = useState<string>("vous");
+  const [moisChoisi, setMoisChoisi] = useState<string>(String(new Date().getMonth()));
+  const [montant, setMontant] = useState("10000");
+  const [edition, setEdition] = useState<string | null>(null);
+  const [editCapital, setEditCapital] = useState("");
+  const [editMois, setEditMois] = useState("0");
+
+  useEffect(() => {
+    const t = setTimeout(() => setPrets(loadPrets()), 0);
+    return () => clearTimeout(t);
+  }, []);
+
+  const allouer = () => {
+    const capital = Math.round(Number(montant));
+    if (!isFinite(capital) || capital <= 0) {
+      toast.error("Indiquez le montant de la dette (supérieur à 0).");
+      return;
+    }
+    const m0 = Number(moisChoisi);
+    const m = roster.find((x) => x.id === membreId);
+    const pret: Pret = {
+      id: uid(), month0: m0, capital, rembourseMois: null, rembourseMontant: 0,
+      statut: "validée", origine: "bureau", valideLe: new Date().toISOString(), validePar: vousRole,
+      membreConfirmeLe: null, autoValideLe: null,
+    };
+    const next = [...prets, pret].sort((a, b) => a.month0 - b.month0 || a.id.localeCompare(b.id));
+    setPrets(next);
+    savePrets(next);
+    toast.success(`Dette de ${fmtFcfa(capital)} allouée à ${m?.name ?? "membre"} pour ${cap(annee[m0].mois)} — le membre la validera (7 jours, sinon validée par défaut).`);
+    setMontant("");
+  };
+
+  const retirer = (id: string) => {
+    const next = prets.filter((p) => p.id !== id);
+    setPrets(next);
+    savePrets(next);
+    toast.info("Dette retirée du registre du bureau.");
+  };
+
+  const ouvrirEdition = (p: Pret) => {
+    setEdition(p.id);
+    setEditCapital(String(p.capital));
+    setEditMois(String(p.month0));
+  };
+
+  const enregistrerEdition = () => {
+    if (!edition) return;
+    const capital = Math.round(Number(editCapital));
+    if (!isFinite(capital) || capital <= 0) {
+      toast.error("Montant invalide.");
+      return;
+    }
+    const next = prets.map((p) => (p.id === edition ? { ...p, capital, month0: Number(editMois) } : p));
+    setPrets(next);
+    savePrets(next);
+    setEdition(null);
+    toast.success("Dette corrigée dans le registre du bureau ✓");
+  };
+
+  return (
+    <Block
+      title="Dettes des membres — registre du bureau"
+      icon={<HandCoins className="h-4.5 w-4.5" />}
+      chip={<Chip cls={CHIP_ROUGE}>{prets.filter((p) => p.rembourseMois === null).length} dette(s) en cours</Chip>}
+      note="Allouez ici les dettes aux membres. Une dette allouée par le bureau ne peut être ni modifiée ni supprimée par le membre — s'il y a une erreur, il la signale et vous la corrigez ici."
+    >
+      {actif ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <select
+            value={membreId}
+            onChange={(e) => setMembreId(e.target.value)}
+            aria-label="Membre concerné"
+            className="min-h-[44px] rounded-xl border border-[#E5DCC0] bg-[#FFFDF6] px-3 text-[13px] font-semibold text-[#2B3530] outline-none focus-visible:outline-2 focus-visible:outline-[#C89F62]"
+          >
+            {roster.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}{m.isVous ? " (vous)" : ` — ${ROLE_META[m.role].short}`}
+              </option>
+            ))}
+          </select>
+          <select
+            value={moisChoisi}
+            onChange={(e) => setMoisChoisi(e.target.value)}
+            aria-label="Mois de la dette"
+            className="min-h-[44px] rounded-xl border border-[#E5DCC0] bg-[#FFFDF6] px-3 text-[13px] font-semibold text-[#2B3530] outline-none focus-visible:outline-2 focus-visible:outline-[#C89F62]"
+          >
+            {annee.map((t) => (
+              <option key={t.month0} value={t.month0}>{cap(t.mois)} — {fmtDateCourte(t.iso)}</option>
+            ))}
+          </select>
+          <div className="flex items-center gap-1 rounded-xl border border-[#E5DCC0] bg-[#FFFDF6] px-3 py-2">
+            <input
+              type="number"
+              inputMode="numeric"
+              min={500}
+              step={500}
+              value={montant}
+              onChange={(e) => setMontant(e.target.value)}
+              aria-label="Montant de la dette en FCFA"
+              className="w-24 bg-transparent text-right text-[14px] font-bold text-[#1E4D2B] outline-none"
+            />
+            <span className="text-[11px] font-bold text-[#8A9288]">FCFA</span>
+          </div>
+          <FcButton onClick={allouer} className="w-auto">
+            <Plus className="h-4 w-4" /> Allouer la dette
+          </FcButton>
+        </div>
+      ) : (
+        <p className="mt-2 flex items-center gap-1.5 rounded-xl bg-[#2A4A3A]/5 px-3.5 py-2.5 text-[12px] font-semibold text-[#5C6B60]">
+          <Lock className="h-3.5 w-3.5" /> Consultation — l'allocation des dettes appartient au président, à la secrétaire et au trésorier.
+        </p>
+      )}
+
+      {prets.length > 0 ? (
+        <TableWrap label="Registre des dettes">
+          <thead>
+            <tr className="bg-[#A5473D] text-white">
+              <th className={TH}>Membre</th>
+              <th className={TH}>Mois</th>
+              <th className={TH}>Somme</th>
+              <th className={TH}>Statut</th>
+              <th className={TH}>Actions du bureau</th>
+            </tr>
+          </thead>
+          <tbody>
+            {prets.map((p, i) => {
+              const m = roster.find((x) => x.id === "vous");
+              const enEdition = edition === p.id;
+              return (
+                <tr key={p.id} className={i % 2 === 0 ? "bg-[#FFFDF6]" : "bg-[#FBF7EA]"}>
+                  <td className={`${TD} whitespace-nowrap font-semibold text-[#2B3530]`}>{m?.name ?? "Vous"}{p.origine === "bureau" ? "" : " (proposition)"}</td>
+                  <td className={`${TD} whitespace-nowrap font-bold capitalize text-[#2B3530]`}>
+                    {enEdition ? (
+                      <select
+                        value={editMois}
+                        onChange={(e) => setEditMois(e.target.value)}
+                        aria-label="Mois corrigé de la dette"
+                        className="min-h-[36px] rounded-lg border border-[#E5DCC0] bg-[#FFFDF6] px-2 text-[12px] font-semibold text-[#2B3530] outline-none"
+                      >
+                        {annee.map((t) => (
+                          <option key={t.month0} value={t.month0}>{cap(t.mois)}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      annee[p.month0]?.mois ?? "—"
+                    )}
+                  </td>
+                  <td className={`${TD} whitespace-nowrap font-bold text-[#A5473D]`}>
+                    {enEdition ? (
+                      <input
+                        type="number"
+                        value={editCapital}
+                        onChange={(e) => setEditCapital(e.target.value)}
+                        aria-label="Montant corrigé de la dette"
+                        className="w-20 rounded-lg border border-[#E5DCC0] bg-[#FFFDF6] px-2 py-1 text-right text-[12px] font-bold text-[#1E4D2B] outline-none"
+                      />
+                    ) : (
+                      fmtN(p.capital)
+                    )}
+                  </td>
+                  <td className={TD}>
+                    <Chip cls={p.rembourseMois !== null ? CHIP_OK : p.statut === "proposée" ? CHIP_GOLD : enAttenteMembre(p) ? CHIP_TEAL : CHIP_ROUGE}>
+                      {p.rembourseMois !== null ? "Remboursée ✓" : p.statut === "proposée" ? "Demande — à acter" : enAttenteMembre(p) ? "À valider par le membre" : "Allouée par le bureau"}
+                    </Chip>
+                  </td>
+                  <td className={TD}>
+                    {actif ? (
+                      enEdition ? (
+                        <div className="flex gap-1.5">
+                          <FcButton onClick={enregistrerEdition} className="w-auto">
+                            <Check className="h-4 w-4" /> Enregistrer
+                          </FcButton>
+                          <FcButton variant="outline" onClick={() => setEdition(null)} className="w-auto">
+                            Annuler
+                          </FcButton>
+                        </div>
+                      ) : (
+                        <div className="flex gap-1.5">
+                          <FcButton variant="outline" onClick={() => ouvrirEdition(p)} className="w-auto">
+                            Corriger
+                          </FcButton>
+                          <FcButton variant="outline" onClick={() => retirer(p.id)} className="w-auto">
+                            <Trash2 className="h-4 w-4" /> Retirer
+                          </FcButton>
+                        </div>
+                      )
+                    ) : (
+                      <span className="text-[11px] text-[#8A9288]">—</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </TableWrap>
+      ) : (
+        <p className="mt-3 rounded-xl bg-[#2F6B45]/8 px-3.5 py-3 text-[12.5px] font-semibold text-[#2F6B45]">
+          Aucune dette au registre — personne ne doit rien à la réunion.
+        </p>
+      )}
+      <div className="mt-3">
+        <SignalerButton
+          small
+          label="Signaler une erreur dans le registre des dettes"
+          onClick={() => onSignaler({ cible: "pret", cibleId: null, cibleLabel: "Registre des dettes du bureau" })}
+        />
+      </div>
+    </Block>
+  );
+}
+
+/** Suivi des MES signalements — dépôt, statut, suite donnée par le bureau. */
+function MesSignalements({ cible, sigVersion, onSignaler }: {
+  cible: Signalement["cible"]; sigVersion: number; onSignaler: () => void;
+}) {
+  const [list, setList] = useState<Signalement[]>([]);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const all = loadSignalements();
+      setList(all.filter((s) => s.cible === cible || s.cible === "autre"));
+    }, 0);
+    return () => clearTimeout(t);
+  }, [sigVersion, cible]);
+
+  if (list.length === 0) {
+    return (
+      <Block title="Mes signalements" icon={<Flag className="h-4.5 w-4.5" />} note="Un problème sur une épargne, une dette ou le taux ? Utilisez le bouton « Signaler un problème » — le bureau est notifié et rappelé tous les 3 jours.">
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="rounded-xl bg-[#2F6B45]/8 px-3.5 py-2.5 text-[12.5px] font-semibold text-[#2F6B45]">
+            Aucun signalement de votre part — tout est en ordre.
+          </p>
+          <FcButton variant="outline" onClick={onSignaler} className="w-auto">
+            <Flag className="h-4 w-4" /> Signaler un problème
+          </FcButton>
+        </div>
+      </Block>
+    );
+  }
+
+  return (
+    <Block
+      title="Mes signalements"
+      icon={<Flag className="h-4.5 w-4.5" />}
+      chip={
+        list.some((s) => s.statut === "ouvert")
+          ? <Chip cls={CHIP_GOLD}>{list.filter((s) => s.statut === "ouvert").length} en traitement</Chip>
+          : <Chip cls={CHIP_OK}>Tous traités</Chip>
+      }
+      note={`Vos signalements et la suite donnée par le bureau. Sans action, un rappel est renvoyé au bureau tous les ${RAPPEL_SIGNALEMENT_JOURS} jours.`}
+    >
+      <div className="mt-3 space-y-2">
+        {list.map((s) => (
+          <div key={s.id} className={`rounded-xl border p-3 ${s.statut === "ouvert" ? "border-[#B85C33]/40 bg-[#FFFDF6]" : "border-[#E5DCC0] bg-[#FBF7EA]"}`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[12.5px] font-bold text-[#1E4D2B]">{s.cibleLabel} — {libelleMotif(s.motif)}</p>
+              <Chip cls={s.statut === "resolu" ? CHIP_OK : s.statut === "rejete" ? CHIP_NEUTRE : CHIP_GOLD}>
+                {s.statut === "resolu" ? "Résolu ✓" : s.statut === "rejete" ? "Rejeté" : "En traitement"}
+              </Chip>
+            </div>
+            <p className="mt-1 text-[11.5px] leading-relaxed text-[#5C6B60]">« {s.message} »</p>
+            {s.resolution && (
+              <p className="mt-1.5 rounded-lg bg-[#2F6B45]/8 px-3 py-2 text-[12px] font-semibold leading-relaxed text-[#2F6B45]">
+                Suite donnée par le bureau : {s.resolution} ({dateCourte(s.traiteLe ?? s.creeLe)})
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    </Block>
+  );
+}
+
+/* ══════════════════════════ page SECRÉTAIRE — PV & décisions du bureau ══════════════════════════ */
+
+/** Secrétaire — procès-verbaux des réunions + journal des décisions du bureau\n *  (chaque réglage du taux y est archivé, avec la validation du membre). */
+function TableSecretariat({ annee, roster }: { annee: TourMois[]; roster: Member[] }) {
+  const secretaire = roster.find((m) => m.role === "secretariat");
+  const decisions = appliqueAutoValidationsDecisions(loadDecisions());
+  const todayIso = isoDate(new Date());
+
+  return (
+    <>
+      <Block
+        title="Procès-verbaux des réunions"
+        icon={<FileText className="h-4.5 w-4.5" />}
+        note={`La secrétaire${secretaire ? ` (${secretaire.name})` : ""} rédige le compte rendu de chaque réunion et le lit au mois suivant — les PV sont archivés dans le registre de la cantine.`}
+      >
+        <TableWrap label="Procès-verbaux de l'année">
+          <thead>
+            <tr className="bg-[#1E4D2B] text-white">
+              <th className={TH}>Mois</th>
+              <th className={TH}>Réunion</th>
+              <th className={TH}>PV</th>
+              <th className={TH}>Lecture au mois suivant</th>
+              <th className={TH}>Statut</th>
+            </tr>
+          </thead>
+          <tbody>
+            {annee.map((t, i) => {
+              const passe = t.iso <= todayIso;
+              return (
+                <tr key={t.month0} className={i % 2 === 0 ? "bg-[#FFFDF6]" : "bg-[#FBF7EA]"}>
+                  <td className={`${TD} whitespace-nowrap font-bold capitalize ${t.etat === "courant" ? "text-[#8A6420]" : "text-[#2B3530]"}`}>{t.mois}</td>
+                  <td className={`${TD} whitespace-nowrap text-[#5C6B60]`}>{fmtDateCourte(t.iso)}</td>
+                  <td className={TD}>{passe ? `PV n° ${t.month0 + 1}/${t.annee} déposé` : <span className="italic text-[#8A9288]">À rédiger après la réunion</span>}</td>
+                  <td className={`${TD} whitespace-nowrap text-[#5C6B60]`}>{t.month0 < 11 ? cap(annee[t.month0 + 1].mois) : "Assemblée générale"}</td>
+                  <td className={TD}>
+                    <Chip cls={passe ? CHIP_OK : CHIP_NEUTRE}>{passe ? "Déposé ✓" : "À venir"}</Chip>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </TableWrap>
+      </Block>
+
+      <Block
+        title="Journal des décisions du bureau"
+        icon={<ScrollText className="h-4.5 w-4.5" />}
+        note="Chaque réglage du taux mensuel est signé du rôle qui l'a pris et soumis au membre pour validation — 7 jours sans action, il est reconnu validé par défaut."
+      >
+        {decisions.length === 0 ? (
+          <p className="mt-3 rounded-xl bg-[#C89F62]/12 px-3.5 py-3 text-[12.5px] font-semibold text-[#8A6420]">
+            Aucune décision de taux enregistrée pour le moment — le taux par défaut s&apos;applique.
+          </p>
+        ) : (
+          <TableWrap label="Décisions du bureau">
+            <thead>
+              <tr className="bg-[#6E4B71] text-white">
+                <th className={TH}>Date</th>
+                <th className={TH}>Décision</th>
+                <th className={TH}>Signée par</th>
+                <th className={TH}>Validation du membre</th>
+              </tr>
+            </thead>
+            <tbody>
+              {decisions.map((d, i) => (
+                <tr key={d.id} className={i % 2 === 0 ? "bg-[#FFFDF6]" : "bg-[#FBF7EA]"}>
+                  <td className={`${TD} whitespace-nowrap text-[#5C6B60]`}>{dateCourte(d.le)}</td>
+                  <td className={`${TD} whitespace-nowrap font-bold text-[#1E4D2B]`}>
+                    Taux mensuel : {fmtTaux(d.ancienne)} → {fmtTaux(d.valeur)}
+                  </td>
+                  <td className={`${TD} whitespace-nowrap font-semibold text-[#6E4B71]`}>{ROLE_META[d.role].label}</td>
+                  <td className={TD}>
+                    {d.membreConfirmeLe ? (
+                      <Chip cls={CHIP_OK}>Validée par le membre ✓ ({dateCourte(d.membreConfirmeLe)})</Chip>
+                    ) : d.autoValideLe ? (
+                      <Chip cls={CHIP_NEUTRE}>Validée par défaut — 7 jours ({dateCourte(d.autoValideLe)})</Chip>
+                    ) : (
+                      <Chip cls={CHIP_GOLD}>
+                        En attente — {Math.max(DELAI_VALIDATION_JOURS - joursDepuis(d.valideLe), 0)} jour(s) restant(s)
+                      </Chip>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </TableWrap>
+        )}
+      </Block>
+    </>
   );
 }

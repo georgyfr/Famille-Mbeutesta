@@ -23,10 +23,41 @@ import { afterAuthPush, familyNotify } from "@/lib/fc-push";
 import { Country, countryByIso, groupPhone } from "@/lib/fc-countries";
 import { PhoneCountrySelect, usePhoneCountry } from "./phone-country-select";
 import { FcButton, FcCard, FcInput, FcSpinner, FcWatermark } from "./ui";
+import { saveVousRole } from "./tontine-bureau";
+import { ROLE_META, ROLES_BUREAU, type RoleKey } from "./tontine-data";
 import {
   ArrowLeft, AtSign, BellRing, Check, ChevronRight, Eye, EyeOff, KeyRound,
   Lock, Phone, RefreshCw, ShieldCheck, Smartphone, UserRound,
 } from "lucide-react";
+
+/* ───────────── Choix du rôle dans la cantine (à l'inscription) ─────────────
+ * Chaque personne renseigne le rôle qu'elle joue dans la cantine : simple
+ * membre ou l'un des six acteurs du bureau (président, vice-président,
+ * secrétaire, trésorier, commissaire aux comptes, censeur). Le rôle ouvre la
+ * page du bureau correspondante et ses droits (taux, validations, dettes). */
+const RÔLES_INSCRIPTION: RoleKey[] = ["membre", ...ROLES_BUREAU];
+
+function RolePicker({ role, onChange }: { role: RoleKey; onChange: (r: RoleKey) => void }) {
+  const meta = ROLE_META[role];
+  return (
+    <div className="mb-3">
+      <p className="mb-1.5 px-1 text-[12px] font-bold uppercase tracking-wide text-[#8A9288]">
+        Votre rôle dans la cantine
+      </p>
+      <select
+        value={role}
+        onChange={(e) => onChange(e.target.value as RoleKey)}
+        aria-label="Rôle joué dans la cantine"
+        className="min-h-[48px] w-full rounded-xl border border-[#E5DCC0] bg-[#FFFDF6] px-3 text-[14px] font-semibold text-[#2B3530] outline-none focus-visible:outline-2 focus-visible:outline-[#C89F62]"
+      >
+        {RÔLES_INSCRIPTION.map((r) => (
+          <option key={r} value={r}>{ROLE_META[r].label}</option>
+        ))}
+      </select>
+      <p className="mt-1.5 px-1 text-[12px] leading-relaxed text-[#5C6B60]">{meta.summary}</p>
+    </div>
+  );
+}
 
 const UNIVERSES: { icon: string; label: string; wide?: boolean }[] = [
   { icon: "👨‍👩‍👧‍👦", label: "U1 · La Famille" },
@@ -547,6 +578,7 @@ function ProfileScreen({
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [pseudo, setPseudo] = useState("");
+  const [role, setRole] = useState<RoleKey>("membre");
 
   const complete = (firstName.trim().length >= 2 && lastName.trim().length >= 2) || pseudo.trim().length >= 2;
 
@@ -574,6 +606,9 @@ function ProfileScreen({
       } catch {
         /* rien */
       }
+      // Rôle dans la cantine — renseigné à l'inscription, mémorisé sur l'appareil :
+      // il ouvre la page du bureau correspondante et les droits associés.
+      saveVousRole(role);
       toast.success(`Bienvenue dans la famille, ${res.user.fullName.split(" ")[0]} ! 🌳`);
       void afterAuthPush(true);
       void familyNotify({
@@ -629,11 +664,13 @@ function ProfileScreen({
           aria-label="Pseudo, facultatif"
         />
       </div>
-      <p className="mb-4 text-center text-[12px] leading-relaxed text-[#8A9288]">
+      <p className="mb-3 text-center text-[12px] leading-relaxed text-[#8A9288]">
         {pseudo.trim().length >= 2
           ? `Vous serez affiché sous le pseudo « ${pseudo.trim()} ».`
           : "Si vous préférez rester discret, laissez prénom et nom vides et indiquez juste un pseudo."}
       </p>
+
+      <RolePicker role={role} onChange={setRole} />
 
       <FcButton onClick={submit} disabled={busy || !complete} className="h-[54px] text-[17px]">
         {busy ? <FcSpinner /> : <Check className="h-5 w-5" />}
@@ -747,6 +784,7 @@ function IdProfileScreen({
 }) {
   const [pseudo, setPseudo] = useState("");
   const [digits, setDigits] = useState("");
+  const [role, setRole] = useState<RoleKey>("membre");
   const { country, setCountry } = usePhoneCountry();
   const maxD = maxDigitsFor(country);
 
@@ -781,6 +819,8 @@ function IdProfileScreen({
       } catch {
         /* rien */
       }
+      // Rôle dans la cantine — renseigné à l'inscription, mémorisé sur l'appareil.
+      saveVousRole(role);
       if (res.linked) {
         // DÉTECTION : le numéro correspondait à un compte existant → identifiant associé
         toast.success(
@@ -848,6 +888,10 @@ function IdProfileScreen({
             ? "9 chiffres commençant par 6 (mobile) ou 2 (fixe)."
             : `Numéro national ${country.fr} — l'indicatif +${country.dial} est ajouté automatiquement.`}
         </p>
+      </div>
+
+      <div className="mb-3">
+        <RolePicker role={role} onChange={setRole} />
       </div>
 
       <div className="mb-4 flex items-start gap-2 rounded-xl border border-[#C89F62]/40 bg-[#C89F62]/10 p-3">
