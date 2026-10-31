@@ -1566,6 +1566,7 @@ function EpargnesPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) =
   const totalCapital = rows.reduce((s, r) => s + r.e.capital, 0);
   const totalInterets = rows.reduce((s, r) => s + r.interets, 0);
   const totalDecembre = rows.reduce((s, r) => s + r.decembre, 0);
+  const todayIso = isoDate(new Date());
 
   return (
     <div className="space-y-3.5">
@@ -1585,7 +1586,7 @@ function EpargnesPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) =
 
       <TauxParametrable taux={taux} onAppliquer={appliquerTaux} />
 
-      <Block title="Nouvelle épargne" icon={<Plus className="h-4.5 w-4.5" />} note="Choisissez le mois du dépôt et la somme mise de côté : le calendrier du mois apparaît avec son évolution mois par mois.">
+      <Block title="Nouvelle épargne" icon={<Plus className="h-4.5 w-4.5" />} note="Choisissez le mois du dépôt et la somme mise de côté : elle apparaît aussitôt dans « Mes mois d'épargne » avec sa prévision de fin d'année.">
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <select
             value={moisChoisi}
@@ -1628,46 +1629,37 @@ function EpargnesPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) =
         </Block>
       ) : (
         <>
-          {rows.map((r) => (
-            <CarteEpargne key={r.e.id} e={r.e} annee={annee} taux={taux} onSupprimer={() => supprimer(r.e.id)} />
-          ))}
+          {/* Section « Mes mois d'épargne » — à la demande de l'administrateur (2026-10-31) :
+              toutes les épargnes réunies au même endroit, chacune avec sa période, sa somme,
+              sa production et la prévision de fin d'année. Remplace les cartes séparées. */}
           <Block
-            title="Total de mes épargnes"
-            icon={<Coins className="h-4.5 w-4.5" />}
-            note={`Intérêts simples : chaque mois écoulé ajoute ${fmtTaux(taux)} du capital de départ — jamais recalculés sur les intérêts.`}
+            title="Mes mois d'épargne"
+            icon={<CalendarDays className="h-4.5 w-4.5" />}
+            note={`Chaque épargne enregistrée apparaît ici avec sa période, la somme déposée, ce qu'elle a produit et la prévision de fin d'année — à ${fmtTaux(taux)} par mois.`}
           >
-            <TableWrap label="Total de mes épargnes">
-              <thead>
-                <tr className="bg-[#8A6420] text-white">
-                  <th className={TH}>Épargne</th>
-                  <th className={TH}>Somme épargnée</th>
-                  <th className={TH}>Mois d&apos;intérêts</th>
-                  <th className={TH}>Intérêts acquis</th>
-                  <th className={TH}>Valeur aujourd&apos;hui</th>
-                  <th className={TH}>Récupérée en décembre</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r, i) => (
-                  <tr key={r.e.id} className={i % 2 === 0 ? "bg-[#FFFDF6]" : "bg-[#FBF7EA]"}>
-                    <td className={`${TD} whitespace-nowrap font-bold capitalize text-[#2B3530]`}>{annee[r.e.month0].mois}</td>
-                    <td className={`${TD} whitespace-nowrap font-semibold text-[#1E4D2B]`}>{fmtN(r.e.capital)}</td>
-                    <td className={`${TDC} text-[#5C6B60]`}>{r.n}</td>
-                    <td className={`${TD} whitespace-nowrap font-semibold text-[#2F6B45]`}>{r.interets ? fmtN(r.interets) : "—"}</td>
-                    <td className={`${TD} whitespace-nowrap font-bold text-[#1E4D2B]`}>{fmtN(r.valeur)}</td>
-                    <td className={`${TD} whitespace-nowrap font-bold text-[#8A6420]`}>{fmtN(r.decembre)}</td>
-                  </tr>
-                ))}
-                <tr className="bg-[#C89F62]/14">
-                  <td className={`${TD} font-bold uppercase text-[#8A6420]`}>Total</td>
-                  <td className={`${TD} whitespace-nowrap font-bold text-[#1E4D2B]`}>{fmtN(totalCapital)}</td>
-                  <td className={TDC}>—</td>
-                  <td className={`${TD} whitespace-nowrap font-bold text-[#2F6B45]`}>{fmtN(totalInterets)}</td>
-                  <td className={`${TD} whitespace-nowrap font-bold text-[#1E4D2B]`}>{fmtN(totalCapital + totalInterets)}</td>
-                  <td className={`${TD} whitespace-nowrap font-bold text-[#8A6420]`}>{fmtN(totalDecembre)}</td>
-                </tr>
-              </tbody>
-            </TableWrap>
+            <div className="mt-2 space-y-2.5">
+              {rows.map((r) => (
+                <LigneMoisEpargne
+                  key={r.e.id}
+                  e={r.e}
+                  annee={annee}
+                  taux={taux}
+                  todayIso={todayIso}
+                  onSupprimer={() => supprimer(r.e.id)}
+                />
+              ))}
+            </div>
+          </Block>
+
+          {/* Calendrier global — la somme que je perçois chaque mois, TOUTES épargnes
+              confondues (au lieu du seul « + » du mois) : 10 300 en mai, 10 600 en juin,
+              10 900 en juillet… jusqu'à la récupération de décembre. */}
+          <Block
+            title="Calendrier de mes épargnes — mois par mois"
+            icon={<Coins className="h-4.5 w-4.5" />}
+            note={`Toutes mes épargnes réunies : chaque mois écoulé ajoute ${fmtTaux(taux)} du capital déposé — la somme perçue grandit d'un mois à l'autre jusqu'en décembre.`}
+          >
+            <CalendrierEpargnesGlobal epargnes={epargnes} annee={annee} taux={taux} todayIso={todayIso} />
           </Block>
         </>
       )}
@@ -1675,46 +1667,50 @@ function EpargnesPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) =
   );
 }
 
-/** Carte d'une épargne : calendrier du mois + tableau de l'épargne, du taux et du total. */
-function CarteEpargne({ e, annee, taux, onSupprimer }: { e: Epargne; annee: TourMois[]; taux: number; onSupprimer: () => void }) {
-  const todayIso = isoDate(new Date());
+/** Ligne « Mes mois d'épargne » — période, somme, production et prévision fin d'année ;
+ *  dépliable : l'évolution mois par mois de CETTE épargne, avec la somme perçue
+ *  qui grandit chaque mois (10 000 → 10 300 → 10 600 → 10 900…) au lieu du seul « + ». */
+function LigneMoisEpargne({
+  e, annee, taux, todayIso, onSupprimer,
+}: { e: Epargne; annee: TourMois[]; taux: number; todayIso: string; onSupprimer: () => void }) {
+  const [ouvert, setOuvert] = useState(false);
   const t = annee[e.month0];
   const n = moisEcoules(e.month0, annee);
   const im = interetEpargneMois(e.capital, taux);
   const valeur = soldeEpargneAuMois(e.capital, taux, n);
   const decembre = soldeEpargneAuMois(e.capital, taux, 11 - e.month0);
 
-  // Lignes du tableau du taux — du mois du dépôt jusqu'à décembre
-  const lignes: { m: number; interet: number | null; solde: number; statut: "depot" | "acquis" | "avenir" | "decembre" | "recuperee" }[] = [];
+  // Évolution de CETTE épargne, du mois du dépôt jusqu'à décembre
+  const lignes: { m: number; percu: number; interet: number | null; statut: "depot" | "ecoule" | "avenir" | "decembre" | "recuperee" }[] = [];
   for (let m = e.month0; m <= 11; m++) {
     const k = m - e.month0;
+    const tenue = annee[m].iso <= todayIso;
     if (k === 0) {
-      lignes.push({ m, interet: null, solde: e.capital, statut: "depot" });
+      lignes.push({ m, percu: e.capital, interet: null, statut: "depot" });
     } else {
-      const tenue = annee[m].iso <= todayIso;
       const dernier = m === 11;
       lignes.push({
         m,
+        percu: soldeEpargneAuMois(e.capital, taux, k),
         interet: im,
-        solde: soldeEpargneAuMois(e.capital, taux, k),
-        statut: dernier ? (annee[11].iso <= todayIso ? "recuperee" : "decembre") : tenue ? "acquis" : "avenir",
+        statut: dernier ? (annee[11].iso <= todayIso ? "recuperee" : "decembre") : tenue ? "ecoule" : "avenir",
       });
     }
   }
-  const statutEpargne: Record<string, { label: string; cls: string }> = {
+  const ST: Record<string, { label: string; cls: string }> = {
     depot: { label: "Dépôt", cls: CHIP_GOLD },
-    acquis: { label: "Acquis ✓", cls: CHIP_OK },
+    ecoule: { label: "Écoulé ✓", cls: CHIP_OK },
     avenir: { label: "À venir", cls: CHIP_NEUTRE },
-    decembre: { label: "Récupérée en décembre", cls: CHIP_TEAL },
+    decembre: { label: "Récupération", cls: CHIP_TEAL },
     recuperee: { label: "Récupérée ✓", cls: CHIP_OK },
   };
 
   return (
-    <FcCard className="p-4">
-      <div className="flex items-start justify-between gap-2">
+    <div className="overflow-hidden rounded-2xl border border-[#C89F62]/45 bg-[#FFFDF6] shadow-sm">
+      <div className="flex items-start justify-between gap-2 px-3.5 pt-3.5">
         <div className="min-w-0">
-          <h3 className="fc-serif text-[15.5px] font-bold capitalize text-[#1E4D2B]">Épargne de {t.mois}</h3>
-          <p className="text-[11px] text-[#8A9288]">Déposée à la réunion du {fmtDateCourte(t.iso)} — intérêts à partir du mois suivant</p>
+          <h4 className="fc-serif text-[15px] font-bold capitalize text-[#1E4D2B]">{t.mois}</h4>
+          <p className="text-[11px] text-[#8A9288]">Déposée à la réunion du {fmtDateCourte(t.iso)}</p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <Chip cls={CHIP_GOLD}>{fmtFcfa(e.capital)}</Chip>
@@ -1730,51 +1726,48 @@ function CarteEpargne({ e, annee, taux, onSupprimer }: { e: Epargne; annee: Tour
         </div>
       </div>
 
-      <div className="mt-3 grid gap-3 lg:grid-cols-[210px_1fr]">
-        <CalendrierMois
-          t={t}
-          accent="#8A6420"
-          titre={`Épargne — ${t.mois}`}
-          note={n > 0 ? `${n} mois d'intérêts comptés — valeur actuelle ${fmtN(valeur)} FCFA` : "Les intérêts commenceront le mois prochain"}
+      {/* Trois chiffres clés : ce que l'épargne a produit, sa valeur et la prévision de fin d'année */}
+      <div className="mt-2.5 grid grid-cols-3 gap-2 px-3.5">
+        <MiniKpi
+          label="Produit à ce jour"
+          value={n > 0 ? `+${fmtN(im * n)}` : "—"}
+          sub={n > 0 ? `${n} mois × ${fmtN(im)}` : "dès le mois prochain"}
+          tone="text-[#2F6B45]"
         />
+        <MiniKpi label="Valeur aujourd'hui" value={fmtN(valeur)} sub="épargne + intérêts" tone="text-[#1E4D2B]" />
+        <MiniKpi label="Prévu fin d'année" value={fmtN(decembre)} sub="récupérée en décembre" tone="text-[#8A6420]" />
+      </div>
 
-        <div className="min-w-0 space-y-3">
-          {/* Tableau 1 — l'épargne concernant le mois */}
-          <TableWrap label={`Épargne du mois de ${t.mois}`} className="mt-0 border-[#C89F62]/40">
-            <tbody>
-              <tr className="bg-[#FFFDF6]">
-                <td className={`${TD} font-bold text-[#2B3530]`}>Date de la réunion</td>
-                <td className={`${TD} text-[#5C6B60]`}>{fmtDateLong(t.iso)}</td>
-              </tr>
-              <tr className="bg-[#FBF7EA]">
-                <td className={`${TD} font-bold text-[#2B3530]`}>Somme épargnée</td>
-                <td className={`${TD} font-bold text-[#1E4D2B]`}>{fmtFcfa(e.capital)}</td>
-              </tr>
-              <tr className="bg-[#FFFDF6]">
-                <td className={`${TD} font-bold text-[#2B3530]`}>Taux appliqué</td>
-                <td className={`${TD} text-[#5C6B60]`}>{fmtTaux(taux)} par mois — non cumulatif (base = capital)</td>
-              </tr>
-            </tbody>
-          </TableWrap>
+      <button
+        type="button"
+        onClick={() => setOuvert((o) => !o)}
+        aria-expanded={ouvert}
+        className="mt-2.5 flex w-full items-center justify-between gap-2 border-t border-[#E5DCC0] px-3.5 py-2.5 text-left text-[12px] font-bold text-[#8A6420] transition-colors hover:bg-[#C89F62]/10"
+      >
+        Évolution mois par mois — ce que je perçois
+        <ChevronRight className={`h-4 w-4 shrink-0 transition-transform ${ouvert ? "rotate-90" : ""}`} aria-hidden="true" />
+      </button>
 
-          {/* Tableau 2 — le taux de l'épargne, mois par mois */}
-          <TableWrap label={`Évolution au taux de ${fmtTaux(taux)} — épargne de ${t.mois}`} className="mt-0 border-[#C89F62]/40">
+      {ouvert && (
+        <div className="border-t border-[#E5DCC0] bg-[#FBF7EA] p-3">
+          <TableWrap label={`Ce que je perçois — épargne de ${t.mois}`} className="mt-0 border-[#C89F62]/40">
             <thead>
               <tr className="bg-[#8A6420] text-white">
                 <th className={TH}>Mois</th>
+                <th className={TH}>Je perçois</th>
                 <th className={TH}>Intérêt du mois</th>
-                <th className={TH}>Solde</th>
                 <th className={TH}>Statut</th>
               </tr>
             </thead>
             <tbody>
               {lignes.map((l, i) => {
-                const st = statutEpargne[l.statut];
+                const st = ST[l.statut];
+                const dec = l.statut === "decembre" || l.statut === "recuperee";
                 return (
-                  <tr key={l.m} className={i % 2 === 0 ? "bg-[#FFFDF6]" : "bg-[#FBF7EA]"}>
+                  <tr key={l.m} className={dec ? "bg-[#C89F62]/14" : i % 2 === 0 ? "bg-[#FFFDF6]" : "bg-[#FBF7EA]"}>
                     <td className={`${TD} whitespace-nowrap font-bold capitalize text-[#2B3530]`}>{annee[l.m].mois}</td>
+                    <td className={`${TD} whitespace-nowrap font-bold text-[#1E4D2B]`}>{fmtN(l.percu)}</td>
                     <td className={`${TD} whitespace-nowrap ${l.interet ? "text-[#2F6B45]" : "text-[#8A9288]"}`}>{l.interet ? `+${fmtN(l.interet)}` : "—"}</td>
-                    <td className={`${TD} whitespace-nowrap font-bold text-[#1E4D2B]`}>{fmtN(l.solde)}</td>
                     <td className={TD}>
                       <Chip cls={st.cls}>{st.label}</Chip>
                     </td>
@@ -1783,31 +1776,82 @@ function CarteEpargne({ e, annee, taux, onSupprimer }: { e: Epargne; annee: Tour
               })}
             </tbody>
           </TableWrap>
-
-          {/* Tableau 3 — le total de cette épargne */}
-          <TableWrap label={`Total de l'épargne de ${t.mois}`} className="mt-0 border-[#C89F62]/40">
-            <tbody>
-              <tr className="bg-[#FFFDF6]">
-                <td className={`${TD} font-bold text-[#2B3530]`}>Total épargné</td>
-                <td className={`${TD} whitespace-nowrap font-bold text-[#1E4D2B]`}>{fmtFcfa(e.capital)}</td>
-              </tr>
-              <tr className="bg-[#FBF7EA]">
-                <td className={`${TD} font-bold text-[#2B3530]`}>Intérêts à ce jour</td>
-                <td className={`${TD} whitespace-nowrap font-semibold text-[#2F6B45]`}>{n > 0 ? `+${fmtN(im * n)} — ${n} mois × ${fmtN(im)}` : "—"}</td>
-              </tr>
-              <tr className="bg-[#FFFDF6]">
-                <td className={`${TD} font-bold text-[#2B3530]`}>Valeur aujourd&apos;hui</td>
-                <td className={`${TD} whitespace-nowrap font-bold text-[#1E4D2B]`}>{fmtFcfa(valeur)}</td>
-              </tr>
-              <tr className="bg-[#C89F62]/14">
-                <td className={`${TD} font-bold text-[#8A6420]`}>Récupérée en décembre</td>
-                <td className={`${TD} whitespace-nowrap font-bold text-[#8A6420]`}>{fmtFcfa(decembre)}</td>
-              </tr>
-            </tbody>
-          </TableWrap>
+          <p className="mt-2 px-1 text-[11px] leading-relaxed text-[#5C6B60]">
+            Intérêts simples — chaque mois écoulé ajoute {fmtTaux(taux)} du capital de départ ({fmtN(im)} FCFA), jamais recalculés sur les intérêts.
+          </p>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Calendrier global — TOUTES les épargnes réunies, mois par mois : la somme perçue
+ *  au total (dépôts + intérêts courus) au lieu du seul « + » du mois. Ex. 10 000 en
+ *  avril → 10 300 en mai → 10 600 en juin → 10 900 en juillet… jusqu'à décembre. */
+function CalendrierEpargnesGlobal({
+  epargnes, annee, taux, todayIso,
+}: { epargnes: Epargne[]; annee: TourMois[]; taux: number; todayIso: string }) {
+  const tri = [...epargnes].sort((a, b) => a.month0 - b.month0);
+  const premier = tri[0]?.month0 ?? 0;
+  const im = (c: number) => interetEpargneMois(c, taux);
+
+  const lignes: { m: number; depot: number; interet: number | null; percu: number; statut: "ecoule" | "avenir" | "decembre" | "recuperee" }[] = [];
+  for (let m = premier; m <= 11; m++) {
+    const depot = tri.filter((e) => e.month0 === m).reduce((s, e) => s + e.capital, 0);
+    const activesAvant = tri.filter((e) => e.month0 < m);
+    const interet = activesAvant.length > 0 ? activesAvant.reduce((s, e) => s + im(e.capital), 0) : null;
+    const percu = tri.filter((e) => e.month0 <= m).reduce((s, e) => s + soldeEpargneAuMois(e.capital, taux, m - e.month0), 0);
+    const tenue = annee[m].iso <= todayIso;
+    lignes.push({
+      m, depot, interet, percu,
+      statut: m === 11 ? (annee[11].iso <= todayIso ? "recuperee" : "decembre") : tenue ? "ecoule" : "avenir",
+    });
+  }
+  const ST: Record<string, { label: string; cls: string }> = {
+    ecoule: { label: "Écoulé ✓", cls: CHIP_OK },
+    avenir: { label: "À venir", cls: CHIP_NEUTRE },
+    decembre: { label: "Récupération", cls: CHIP_TEAL },
+    recuperee: { label: "Récupérée ✓", cls: CHIP_OK },
+  };
+  const totalCapital = tri.reduce((s, e) => s + e.capital, 0);
+  const decembre = lignes[lignes.length - 1]?.percu ?? 0;
+
+  return (
+    <div className="min-w-0">
+      <TableWrap label="Ce que je perçois chaque mois — toutes mes épargnes" className="mt-0 border-[#C89F62]/40">
+        <thead>
+          <tr className="bg-[#8A6420] text-white">
+            <th className={TH}>Mois</th>
+            <th className={TH}>Je perçois au total</th>
+            <th className={TH}>Intérêts du mois</th>
+            <th className={TH}>Statut</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lignes.map((l, i) => {
+            const st = ST[l.statut];
+            const dec = l.statut === "decembre" || l.statut === "recuperee";
+            return (
+              <tr key={l.m} className={dec ? "bg-[#C89F62]/14" : i % 2 === 0 ? "bg-[#FFFDF6]" : "bg-[#FBF7EA]"}>
+                <td className={`${TD} whitespace-nowrap capitalize text-[#2B3530]`}>
+                  <span className="block font-bold">{annee[l.m].mois}</span>
+                  {l.depot > 0 && <span className="block text-[10px] font-semibold text-[#8A6420]">+ {fmtN(l.depot)} déposés</span>}
+                </td>
+                <td className={`${TD} whitespace-nowrap text-[14px] font-bold text-[#1E4D2B]`}>{fmtN(l.percu)}</td>
+                <td className={`${TD} whitespace-nowrap ${l.interet ? "text-[#2F6B45]" : "text-[#8A9288]"}`}>{l.interet ? `+${fmtN(l.interet)}` : "—"}</td>
+                <td className={TD}>
+                  <Chip cls={st.cls}>{st.label}</Chip>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </TableWrap>
+      <div className="mt-2.5 rounded-xl bg-[#C89F62]/12 px-3.5 py-3 text-[12.5px] leading-relaxed text-[#5C6B60]">
+        En décembre, je récupère <strong className="text-[#8A6420]">{fmtFcfa(decembre)}</strong> — {fmtN(totalCapital)} FCFA d&apos;épargnes +{" "}
+        {fmtN(Math.max(decembre - totalCapital, 0))} FCFA d&apos;intérêts ({fmtTaux(taux)} du capital par mois écoulé, jamais recalculés sur les intérêts).
       </div>
-    </FcCard>
+    </div>
   );
 }
 
