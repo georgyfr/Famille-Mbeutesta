@@ -50,7 +50,7 @@ import {
   buildAnnee, buildRoster, caissesDuMoment, classementCotisants, collationMensuelle,
   detteParPersonne, dettePretAuMois, etatReunion, interetEpargneMois, isoDate,
   journalDeCaisse, joursAvant, loadEpargnes, loadPayes, loadPrets, loadTaux, moisDuTour,
-  moisEcoules, potMensuel, projectionAnnee, saveEpargnes, savePrets, saveTaux,
+  moisCourantAnnee, moisEcoules, potMensuel, projectionAnnee, saveEpargnes, savePrets, saveTaux,
   soldeEpargneAuMois, statutMembreDuMois, uid,
   type Epargne, type Member, type Payes, type Pret, type RoleKey, type TourMois,
 } from "./tontine-data";
@@ -1909,7 +1909,9 @@ function PretsPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) => v
   const rembourser = (id: string, moisR: number) => {
     const p = prets.find((x) => x.id === id);
     if (!p) return;
-    const due = dettePretAuMois(p.capital, taux, p.month0, moisR);
+    // Rembourser au mois M solde la dette avec les intérêts du mois M (fin de mois) :
+    // ex. prêt de janvier, remboursement en mars → 10 900 (10 000 + 3 × 300).
+    const due = dettePretAuMois(p.capital, taux, p.month0, moisR + 1);
     const next = prets.map((x) => (x.id === id ? { ...x, rembourseMois: moisR, rembourseMontant: due } : x));
     setPrets(next);
     savePrets(next);
@@ -1921,11 +1923,13 @@ function PretsPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) => v
     saveTaux(t);
   };
 
+  const mc = moisCourantAnnee(annee); // mois de l'année contenant aujourd'hui (0..12)
   const rows = prets.map((p) => {
-    const n = moisEcoules(p.month0, annee);
     const rembourse = p.rembourseMois !== null;
-    const dette = rembourse ? 0 : dettePretAuMois(p.capital, taux, p.month0, p.month0 + n);
-    return { p, n, rembourse, dette, enRetard: !rembourse && n >= 3 };
+    const dette = rembourse ? 0 : dettePretAuMois(p.capital, taux, p.month0, mc);
+    const avenir = !rembourse && mc < p.month0; // prêt futur (mois pas encore arrivé)
+    const enRetard = !rembourse && mc >= p.month0 + 3; // échéance du 3ᵉ mois dépassée
+    return { p, rembourse, dette, avenir, enRetard };
   });
   const totalEmprunte = rows.reduce((s, r) => s + r.p.capital, 0);
   const totalDette = rows.reduce((s, r) => s + r.dette, 0);
@@ -1938,12 +1942,12 @@ function PretsPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) => v
       <Block
         title="Mes prêts"
         icon={<HandCoins className="h-4.5 w-4.5" />}
-        note="L'argent emprunté à la réunion. La demande se fait à une réunion : la dette gagne le taux du mois pendant 3 mois ; passée l'échéance sans remboursement, elle est recalculée chaque mois sur la nouvelle base."
+        note="L'argent emprunté à la réunion. La dette gagne le taux chaque mois dès le mois du prêt — montant constant pendant chaque bloc de 3 mois ; à chaque échéance des 3 mois sans remboursement, la dette totale devient la nouvelle base pour 3 nouveaux mois."
       >
         <div className="mt-2 grid grid-cols-3 gap-2">
           <MiniKpi label="Somme empruntée" value={fmtFcfa(totalEmprunte)} sub={`${rows.length} prêt(s) sur l'année`} tone="text-[#1E4D2B]" />
           <MiniKpi label="Reste à rembourser" value={fmtFcfa(totalDette)} sub="dette à ce jour, intérêts compris" tone="text-[#A5473D]" />
-          <MiniKpi label="Dont en retard" value={fmtFcfa(totalRetard)} sub="non remboursé après 3 mois" tone="text-[#B85C33]" />
+          <MiniKpi label="Dont en retard" value={fmtFcfa(totalRetard)} sub="échéance des 3 mois dépassée" tone="text-[#B85C33]" />
         </div>
       </Block>
 
@@ -1985,10 +1989,11 @@ function PretsPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) => v
       {rows.length === 0 ? (
         <Block title="Aucun prêt pour le moment" icon={<Info className="h-4.5 w-4.5" />}>
           <p className="mt-2 rounded-xl bg-[#FFFDF6] px-3.5 py-3 text-[12.5px] leading-relaxed text-[#5C6B60]">
-            Exemple : un prêt de <strong className="text-[#1E4D2B]">10 000 FCFA en février</strong> à {fmtTaux(taux)} donne{" "}
-            <strong className="text-[#A5473D]">10 300 en mars</strong>, <strong className="text-[#A5473D]">10 600 en avril</strong> et{" "}
-            <strong className="text-[#A5473D]">10 900 en mai</strong> après 3 mois. Sans remboursement, la dette de 10 900 gagne ensuite {fmtTaux(taux)} chaque mois sur sa
-            nouvelle base, jusqu&apos;au remboursement.
+            Exemple : un prêt de <strong className="text-[#1E4D2B]">10 000 FCFA en janvier</strong> à {fmtTaux(taux)} donne{" "}
+            <strong className="text-[#A5473D]">10 300 en février</strong> puis <strong className="text-[#A5473D]">10 600 en mars</strong> — échéance de mars :{" "}
+            <strong className="text-[#A5473D]">10 900 FCFA</strong> à rembourser (10 000 + 3 × 300). Sans remboursement, 10 900 devient la nouvelle base :{" "}
+            <strong className="text-[#A5473D]">+327 FCFA par mois</strong> d&apos;avril à juin — échéance de juin : 11 881. Et ainsi de suite, recalcul tous les 3 mois
+            jusqu&apos;au remboursement.
           </p>
         </Block>
       ) : (
@@ -2017,8 +2022,8 @@ function PretsPage({ annee, onSub }: { annee: TourMois[]; onSub: (p: TPage) => v
                     <td className={`${TD} whitespace-nowrap font-semibold text-[#1E4D2B]`}>{fmtN(r.p.capital)}</td>
                     <td className={`${TD} whitespace-nowrap font-bold ${r.rembourse ? "text-[#8A9288]" : "text-[#A5473D]"}`}>{r.rembourse ? "—" : fmtN(r.dette)}</td>
                     <td className={TD}>
-                      <Chip cls={r.rembourse ? CHIP_OK : r.enRetard ? CHIP_ROUGE : CHIP_GOLD}>
-                        {r.rembourse ? `Remboursé ✓ ${fmtN(r.p.rembourseMontant)} versés` : r.enRetard ? "En retard — non remboursé" : "En cours"}
+                      <Chip cls={r.rembourse ? CHIP_OK : r.enRetard ? CHIP_ROUGE : r.avenir ? CHIP_NEUTRE : CHIP_GOLD}>
+                        {r.rembourse ? `Remboursé ✓ ${fmtN(r.p.rembourseMontant)} versés` : r.enRetard ? "En retard — non remboursé" : r.avenir ? "À venir" : "En cours"}
                       </Chip>
                     </td>
                   </tr>
@@ -2046,20 +2051,28 @@ function CartePret({ p, annee, taux, onSupprimer, onRembourser }: {
 }) {
   const todayIso = isoDate(new Date());
   const t = annee[p.month0];
-  const n = moisEcoules(p.month0, annee);
+  const mc = moisCourantAnnee(annee); // mois courant de l'année (0..12)
   const rembourse = p.rembourseMois !== null;
-  const detteJour = rembourse ? 0 : dettePretAuMois(p.capital, taux, p.month0, p.month0 + n);
-  const enRetard = !rembourse && n >= 3;
-  const nEcheance = Math.min(3, 11 - p.month0);
-  const detteEcheance = dettePretAuMois(p.capital, taux, p.month0, p.month0 + nEcheance);
+  const detteJour = rembourse ? 0 : dettePretAuMois(p.capital, taux, p.month0, mc);
+  const enRetard = !rembourse && mc >= p.month0 + 3; // échéance du 3ᵉ mois dépassée
+  // Première échéance = fin du 3ᵉ mois, mois du prêt compris (prêt de janvier → mars)
+  const moisEcheance = Math.min(p.month0 + 2, 11);
+  const detteEcheance = dettePretAuMois(p.capital, taux, p.month0, moisEcheance + 1);
+  const interetBase = Math.round(detteEcheance * (taux / 100));
+  const prochaineEcheance = moisEcheance + 3 <= 11 ? annee[moisEcheance + 3].mois : null;
 
-  // Mois disponibles pour enregistrer un remboursement : réunions tenues après le prêt
+  // Mois disponibles pour enregistrer un remboursement : du mois suivant le prêt au mois courant
   const moisRemboursement: number[] = [];
-  for (let m = p.month0 + 1; m <= Math.min(p.month0 + n, 11); m++) moisRemboursement.push(m);
+  for (let m = p.month0 + 1; m <= Math.min(mc, 11); m++) moisRemboursement.push(m);
   const [moisR, setMoisR] = useState<string>(moisRemboursement.length ? String(moisRemboursement[moisRemboursement.length - 1]) : "");
-  const dueChoisi = moisR === "" ? 0 : dettePretAuMois(p.capital, taux, p.month0, Number(moisR));
+  // Rembourser au mois M solde la dette avec les intérêts du mois M (fin de mois)
+  const dueChoisi = moisR === "" ? 0 : dettePretAuMois(p.capital, taux, p.month0, Number(moisR) + 1);
 
-  // Lignes d'évolution — du mois du prêt à décembre (ou jusqu'au remboursement)
+  // Lignes d'évolution — du mois du prêt à décembre (ou jusqu'au remboursement).
+  // Dette affichée = dette PENDANT le mois (10 000 en janvier, 10 300 en février…,
+  // 10 600 en mars) ; intérêt du mois = taux × base du bloc — la même constante
+  // pendant les 3 mois du bloc ; la somme à rembourser à l'échéance = dette du
+  // 3ᵉ mois + intérêt du 3ᵉ mois (= la nouvelle base du mois suivant).
   const lignes: LignePret[] = [];
   for (let m = p.month0; m <= 11; m++) {
     const k = m - p.month0;
@@ -2071,26 +2084,32 @@ function CartePret({ p, annee, taux, onSupprimer, onRembourser }: {
       lignes.push({ m, interet: null, dette: p.rembourseMontant, statut: "rembourse", detail: fmtN(p.rembourseMontant) });
       continue;
     }
+    const tenue = annee[m].iso <= todayIso;
+    const baseBloc = dettePretAuMois(p.capital, taux, p.month0, p.month0 + 3 * Math.floor(k / 3));
+    const interetMois = Math.round(baseBloc * (taux / 100));
+    const dette = dettePretAuMois(p.capital, taux, p.month0, m);
     if (k === 0) {
-      lignes.push({ m, interet: null, dette: p.capital, statut: "pret", detail: "" });
+      lignes.push({ m, interet: interetMois, dette, statut: tenue ? "pret" : "avenir", detail: "" });
       continue;
     }
-    const tenue = annee[m].iso <= todayIso;
-    const dette = dettePretAuMois(p.capital, taux, p.month0, m);
-    const precedente = dettePretAuMois(p.capital, taux, p.month0, m - 1);
-    lignes.push({
-      m,
-      interet: dette - precedente,
-      dette,
-      statut: !tenue ? "avenir" : k < 3 ? "encours" : k === 3 ? "echeance" : "capitalise",
-      detail: fmtN(precedente),
-    });
+    if (k % 3 === 2) {
+      // 3ᵉ mois du bloc : échéance — dette + intérêt de ce mois = somme à rembourser
+      lignes.push({ m, interet: interetMois, dette, statut: tenue ? "echeance" : "echeance_avenir", detail: fmtN(dette + interetMois) });
+      continue;
+    }
+    if (k % 3 === 0) {
+      // 1ᵉʳ mois d'un nouveau bloc : la dette affichée EST la nouvelle base
+      lignes.push({ m, interet: interetMois, dette, statut: tenue ? "base" : "avenir", detail: fmtN(dette) });
+      continue;
+    }
+    lignes.push({ m, interet: interetMois, dette, statut: tenue ? "encours" : "avenir", detail: fmtN(baseBloc) });
   }
   const statutPret: Record<string, { label: (l: LignePret) => string; cls: string }> = {
-    pret: { label: () => "Prêt contracté", cls: CHIP_GOLD },
-    encours: { label: () => `En cours — ${fmtTaux(taux)} du capital`, cls: CHIP_GOLD },
-    echeance: { label: () => "Échéance des 3 mois — non remboursé", cls: CHIP_ROUGE },
-    capitalise: { label: (l) => `Recalcul sur ${l.detail} FCFA`, cls: CHIP_ROUGE },
+    pret: { label: () => `Prêt contracté — gagne ${fmtTaux(taux)} dès ce mois`, cls: CHIP_GOLD },
+    encours: { label: (l) => `En cours — ${fmtTaux(taux)} de la base (${l.detail} FCFA)`, cls: CHIP_GOLD },
+    echeance: { label: (l) => `Échéance des 3 mois — à rembourser : ${l.detail} FCFA`, cls: CHIP_ROUGE },
+    echeance_avenir: { label: (l) => `Échéance prévue — à rembourser : ${l.detail} FCFA`, cls: CHIP_GOLD },
+    base: { label: (l) => `Nouvelle base : ${l.detail} FCFA — non remboursé`, cls: CHIP_ROUGE },
     avenir: { label: () => "À venir", cls: CHIP_NEUTRE },
     rembourse: { label: (l) => `Remboursé ✓ — ${l.detail} versés`, cls: CHIP_OK },
     solde: { label: () => "Soldé", cls: CHIP_OK },
@@ -2101,7 +2120,7 @@ function CartePret({ p, annee, taux, onSupprimer, onRembourser }: {
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h3 className="fc-serif text-[15.5px] font-bold capitalize text-[#1E4D2B]">Prêt de {t.mois}</h3>
-          <p className="text-[11px] text-[#8A9288]">Demandé à la réunion du {fmtDateCourte(t.iso)} — intérêts sur 3 mois, puis recalcul mensuel</p>
+          <p className="text-[11px] text-[#8A9288]">Demandé à la réunion du {fmtDateCourte(t.iso)} — {fmtTaux(taux)} par mois pendant 3 mois, puis nouvelle base tous les 3 mois</p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <Chip cls={rembourse ? CHIP_OK : enRetard ? CHIP_ROUGE : CHIP_GOLD}>{rembourse ? "Remboursé ✓" : `Dette : ${fmtN(detteJour)}`}</Chip>
@@ -2120,7 +2139,8 @@ function CartePret({ p, annee, taux, onSupprimer, onRembourser }: {
       {enRetard && (
         <p className="mt-2.5 flex items-start gap-1.5 rounded-xl bg-[#A5473D]/10 p-2.5 text-[11.5px] leading-relaxed text-[#A5473D]">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          Non remboursé depuis {annee[p.month0 + nEcheance].mois} — la dette de {fmtN(detteEcheance)} FCFA gagne désormais {fmtTaux(taux)} chaque mois sur cette nouvelle base.
+          Non remboursé à l&apos;échéance de {annee[moisEcheance].mois} — la dette de {fmtN(detteEcheance)} FCFA devient la nouvelle base : +{fmtN(interetBase)} FCFA ({fmtTaux(taux)}) par mois
+          pendant 3 mois{prochaineEcheance ? `, jusqu'à l'échéance de ${prochaineEcheance}` : ""}.
         </p>
       )}
 
@@ -2130,7 +2150,7 @@ function CartePret({ p, annee, taux, onSupprimer, onRembourser }: {
             t={t}
             accent="#A5473D"
             titre={`Prêt — ${t.mois}`}
-            note={rembourse ? `Remboursé en ${cap(annee[p.rembourseMois!].mois)}` : enRetard ? "Échéance dépassée — dette recalculée" : "Somme prêtée par la réunion"}
+            note={rembourse ? `Remboursé en ${cap(annee[p.rembourseMois!].mois)}` : enRetard ? "Échéance dépassée — nouvelle base appliquée" : "Somme prêtée par la réunion"}
           />
           {rembourse && (
             <CalendrierMois
@@ -2156,7 +2176,7 @@ function CartePret({ p, annee, taux, onSupprimer, onRembourser }: {
               </tr>
               <tr className="bg-[#FFFDF6]">
                 <td className={`${TD} font-bold text-[#2B3530]`}>Taux d&apos;intérêt</td>
-                <td className={`${TD} text-[#5C6B60]`}>{fmtTaux(taux)} par mois pendant 3 mois, puis recalcul mensuel sur la dette</td>
+                <td className={`${TD} text-[#5C6B60]`}>{fmtTaux(taux)} par mois — montant constant pendant chaque bloc de 3 mois ; à chaque échéance non remboursée, la dette devient la nouvelle base (recalcul tous les 3 mois)</td>
               </tr>
             </tbody>
           </TableWrap>
@@ -2216,7 +2236,7 @@ function CartePret({ p, annee, taux, onSupprimer, onRembourser }: {
                 >
                   {moisRemboursement.map((m) => (
                     <option key={m} value={m}>
-                      {cap(annee[m].mois)} — dette {fmtN(dettePretAuMois(p.capital, taux, p.month0, m))} FCFA
+                      {cap(annee[m].mois)} — rembourser {fmtN(dettePretAuMois(p.capital, taux, p.month0, m + 1))} FCFA
                     </option>
                   ))}
                 </select>
@@ -2230,9 +2250,11 @@ function CartePret({ p, annee, taux, onSupprimer, onRembourser }: {
             </div>
           ) : (
             <p className="rounded-xl bg-[#2F6B45]/8 px-3.5 py-2.5 text-[11.5px] font-semibold text-[#2F6B45]">
-              {p.month0 < 11
-                ? `Première échéance à la réunion du ${fmtDateLong(annee[p.month0 + 1].iso)}.`
-                : "Prêt de décembre — remboursable à l'assemblée générale."}
+              {p.month0 <= 9
+                ? `Première échéance : ${fmtN(dettePretAuMois(p.capital, taux, p.month0, p.month0 + 3))} FCFA à rembourser en ${annee[p.month0 + 2].mois}.`
+                : p.month0 === 10
+                  ? "Prêt de novembre — la dette court en novembre et décembre ; solde à l'assemblée générale."
+                  : "Prêt de décembre — la dette court dès ce mois ; solde à l'assemblée générale."}
             </p>
           )}
         </div>

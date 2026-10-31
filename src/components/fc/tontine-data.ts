@@ -460,10 +460,13 @@ export const MISSIONS: Record<Exclude<RoleKey, "membre">, Mission[]> = {
    10 000 épargnés en mars à 3 % : avril 10 300 · mai 10 600 · juin 10 900 …
    jusqu'en décembre de l'année du dépôt, où le tout est récupéré.
 
-   PRÊT — argent emprunté à la réunion : les intérêts courent au taux du mois
-   pendant 3 MOIS (10 000 empruntés en février → 10 900 après 3 mois). Passée
-   l'échéance sans remboursement, la dette est recalculée chaque mois à taux
-   composé SUR LA NOUVELLE BASE (3 % de 10 900 le mois suivant, etc.). */
+   PRÊT — argent emprunté à la réunion : la dette gagne le taux du mois DÈS LE
+   MOIS DU PRÊT, à montant CONSTANT pendant chaque bloc de 3 mois (taux × base
+   du bloc). 10 000 empruntés en janvier à 3 % : janvier 10 000 · février 10 300
+   · mars 10 600 — échéance de mars : 10 900 à rembourser (3 × 300). Tous les
+   3 MOIS sans remboursement, la dette totale devient la NOUVELLE BASE :
+   +327 par mois d'avril à juin (échéance juin : 11 881), puis +356, etc. — le
+   recalcul se fait TOUS LES 3 MOIS, jamais chaque mois. */
 
 export const TAUX_DEFAUT = 3; // % par mois — valeur par défaut, paramétrable par le bureau
 
@@ -498,21 +501,29 @@ export const interetEpargneMois = (capital: number, tauxPct: number) => Math.rou
 export const soldeEpargneAuMois = (capital: number, tauxPct: number, n: number) =>
   n <= 0 ? capital : capital + interetEpargneMois(capital, tauxPct) * n;
 
-/** Dette d'un prêt au mois `cible` (hors remboursement) : 3 mois d'intérêts
- *  simples sur le capital, puis capitalisation mensuelle sur la nouvelle base. */
+/** Dette d'un prêt au cours du mois `cible` (hors remboursement).
+ *  Règle du bureau : la dette gagne taux × BASE DU BLOC chaque mois, dès le
+ *  mois du prêt, à montant constant pendant 3 mois ; à chaque échéance des
+ *  3 mois non remboursée, la dette totale devient la nouvelle base — le
+ *  recalcul se fait TOUS LES 3 MOIS, jamais chaque mois.
+ *  10 000 en janvier à 3 % : janv. 10 000 · févr. 10 300 · mars 10 600
+ *  (échéance 10 900) · avril 10 900 · mai 11 227 · juin 11 554 (échéance
+ *  11 881)… `cible = 12` → solde final de fin décembre (14 113). */
 export function dettePretAuMois(capital: number, tauxPct: number, depart: number, cible: number): number {
-  if (cible <= depart) return capital;
+  const n = Math.min(Math.max(cible - depart, 0), 12 - depart); // mois d'intérêts écoulés (le mois du prêt compte, plafonné à fin décembre)
+  if (n <= 0) return capital;
   const r = tauxPct / 100;
-  const parMois = Math.round(capital * r);
+  let base = capital; // base du bloc courant — recalculée seulement tous les 3 mois
   let solde = capital;
-  for (let m = depart + 1; m <= Math.min(cible, 11); m++) {
-    solde += m - depart <= 3 ? parMois : Math.round(solde * r);
+  for (let i = 1; i <= n; i++) {
+    solde += Math.round(base * r); // intérêt du mois — constant pendant les 3 mois du bloc
+    if (i % 3 === 0) base = solde; // échéance des 3 mois : la dette devient la nouvelle base
   }
   return solde;
 }
 
-/** Nombre de réunions déjà tenues APRÈS le mois de départ (l'épargne ou le
- *  prêt commence à courir le mois suivant) — plafonné à décembre. */
+/** Nombre de réunions déjà tenues APRÈS le mois de départ (l'épargne commence
+ *  à courir le mois suivant) — plafonné à décembre. */
 export function moisEcoules(depart: number, annee: TourMois[], today = new Date()): number {
   const todayIso = isoDate(today);
   let n = 0;
@@ -520,6 +531,18 @@ export function moisEcoules(depart: number, annee: TourMois[], today = new Date(
     if (annee[m] && annee[m].iso <= todayIso) n++;
   }
   return n;
+}
+
+/** Mois de l'année de tontine qui contient aujourd'hui : 0 = janvier … 11 =
+ *  décembre, 12 = année achevée (après décembre), -1 = avant l'année ou
+ *  calendrier absent. Utilisé par les prêts (le mois du prêt compte). */
+export function moisCourantAnnee(annee: TourMois[], today = new Date()): number {
+  if (!annee || annee.length < 12) return -1;
+  const ym = isoDate(today).slice(0, 7); // "YYYY-MM"
+  for (let m = 0; m <= 11; m++) {
+    if (annee[m].iso.slice(0, 7) === ym) return m;
+  }
+  return isoDate(today) < annee[0].iso ? -1 : 12;
 }
 
 /* — stockage local des épargnes — */
