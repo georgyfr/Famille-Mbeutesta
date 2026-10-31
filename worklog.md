@@ -1010,3 +1010,23 @@ Stage Summary:
   - WIPE localStorage → reload → PAS d'écran de connexion, session « Jean Mbeutetsa » restaurée, épargne avril restaurée, onglet Mes finances conservé (#tontine/cotisations) ✓
   - Mobile 390 : nav collée en bas (bottom=844), rendu conforme (capture /tmp/prod-finances-mobile.png) ; 0 erreur page
 - Rappel : la refonte épargnes de la Task 31 (section « Mes mois d'épargne » + calendrier des sommes perçues 10 000 → 10 300 → 10 600 → 10 900) est déjà en production (b1d023f9) — la présente demande visait la reconnexion + le renommage/couleurs
+
+## Task 33 — Prêts : capitalisation tous les 3 mois (fix calcul dettes) [2026-10-31]
+
+- DEMANDE : au niveau de #tontine/dettes, « les pourcentages se modifient tous les trois mois et non par mois après le troisième mois ». Modèle attendu (ex. 10 000 prêtés en janvier à 3 %) : janv 10 000 · févr 10 300 · mars 10 600 → échéance mars : 10 900 à rembourser (3 × 300) ; si non remboursé, 10 900 devient la NOUVELLE BASE : avril/mai/juin +327 chaque mois (3 % de 10 900, constante) → échéance juin : 11 881 ; puis 11 881 base de juillet à septembre, etc. — recalcul TOUS LES 3 MOIS, jamais chaque mois (l'ancien code capitalisait chaque mois après le 3ᵉ : 11 227 → 11 564 → 11 911…).
+- MODÈLE IMPLÉMENTÉ (tontine-data.ts) :
+  - dettePretAuMois réécrite : le mois du PRÊT compte comme 1ᵉʳ mois d'intérêts ; intérêt du mois = taux × base du BLOC (constante pendant 3 mois) ; à chaque fin de bloc non remboursée, la dette devient la nouvelle base ; plafond fin décembre (cible 12 = solde final) ; n_max = 12 − mois du prêt.
+  - Nouveau helper moisCourantAnnee(annee, today) : mois de l'année de tontine contenant aujourd'hui (0..11, 12 = année achevée) — les prêts avancent au calendrier (le mois du prêt produit déjà des intérêts), l'épargne garde moisEcoules (réunions tenues après le dépôt, validée).
+  - Affichage « dette pendant le mois M » = après (M − month0) mois d'intérêts : janvier 10 000, février 10 300, mars 10 600 — exactement la série citée par l'utilisateur.
+- UI (tontine-page.tsx) :
+  - Remboursement au mois M = dette fin de mois M = dette(M+1) → le select affiche « Mars — rembourser 10 900 FCFA » (l'exemple exact de l'utilisateur) ; rembourser() enregistre ce montant.
+  - Tableau d'évolution : intérêt du mois = taux × base du bloc (constante visible +300/+300/+300 puis +327/+327/+327…) ; statuts refondus : « Prêt contracté — gagne 3 % dès ce mois », « En cours — 3 % de la base (10 900 FCFA) », « Échéance des 3 mois — à rembourser : 10 900 FCFA » (rouge) / « Échéance prévue » (or, mois futurs), « Nouvelle base : 10 900 FCFA — non remboursé », « À venir ».
+  - Bandeau de retard : « Non remboursé à l'échéance de mars — la dette de 10 900 FCFA devient la nouvelle base : +327 FCFA (3 %) par mois pendant 3 mois, jusqu'à l'échéance de juin. » (fix entité &apos; littérale dans la chaîne JS).
+  - Prêts futurs : puce « À venir » (PretsPage + tableau) ; échéance = month0+2 (3ᵉ mois, mois du prêt compris) ; notes texte refondues (bloc, exemple janvier 10 000 → 10 900 en mars, carte, ligne taux, select, prêt nov/déc).
+- TESTS LOCAUX (agent-browser) : prêt janvier 10 000 → tableau exact (10 000/10 300/10 600/10 900/11 227/11 554/11 881/12 237/12 593/12 949/13 337/13 725, échéance déc 14 113) ; remboursement mars → 10 900 enregistré en localStorage ✓ ; prêt mars 5 000 → blocs 3×150 puis 3×164 puis 3×178 ✓ ; totaux 2 prêts 19 069 ✓ ; mobile 390 + desktop 1280 OK ; nettoyage localStorage.
+- BUILD + DÉPLOIEMENT : build-cloudflare.sh OK ; wrangler pages deploy → **déploiement d9f1721f**.
+- VÉRIFICATIONS PRODUCTION (agent-browser, https://famille-mbeutetsa.pages.dev) :
+  - Inscription démo Cameroun +237/691234567 (Jean Mbeutetsa) → reload → PAS d'écran de connexion, session restaurée (persistance Task 32 confirmée en prod) ✓
+  - Prêt janvier 10 000 → tableau identique au local (échéance mars 10 900, +327 avril-juin, échéance juin 11 881) ✓ ; select remboursement « Mars — rembourser 10 900 FCFA » ✓ ; bandeau conforme ✓
+  - Onglets Réunions/Membres/Mes finances/Statistiques + sous-onglets épargnes (vert)/prêts (terracotta) ✓ ; section « Mes mois d'épargne » intacte ✓ ; 0 erreur console ; nettoyage prêt test ✓
+- tsc : 0 erreur sur tontine-data.ts / tontine-page.tsx (erreurs préexistantes ailleurs inchangées) ; lint : erreurs préexistantes hors fichiers modifiés
