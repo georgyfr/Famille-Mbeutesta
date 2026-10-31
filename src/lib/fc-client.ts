@@ -7,7 +7,7 @@ export type FcError = { ok: false; error: string; reason?: string; attemptsLeft?
 export async function api<T = Record<string, unknown>>(
   path: string,
   options?: { method?: string; body?: unknown }
-): Promise<T & { ok: boolean }> {
+): Promise<T & { ok: boolean; error?: string; reason?: string; attemptsLeft?: number }> {
   const res = await fetch(path, {
     method: options?.method || (options?.body ? "POST" : "GET"),
     headers: options?.body ? { "Content-Type": "application/json" } : undefined,

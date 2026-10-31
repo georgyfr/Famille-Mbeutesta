@@ -8,16 +8,14 @@ import {
   verifyPin,
 } from "@/lib/fc-auth";
 import { apiError, ensureSeed, logSecurity, notify, notifyAdmins } from "@/lib/fc-server";
+import { normalizePhoneIntl, phoneErrorHint } from "@/lib/fc-phone";
 
 export const runtime = "nodejs";
 
-// ─── Normalisation numéro camerounais (miroir de /api/auth/phone) ───
-function normalizePhone(raw: string): string | null {
-  let digits = String(raw ?? "").replace(/\D/g, "");
-  if (digits.startsWith("00237")) digits = digits.slice(5);
-  else if (digits.startsWith("237")) digits = digits.slice(3);
-  if (digits.length !== 9 || !/^[62]/.test(digits)) return null;
-  return "+237" + digits;
+// ─── Normalisation téléphone multi-pays (miroir de /api/auth/phone) ───
+// Frontend : { phone: "<indicatif><national>", country: "CM"|"FR"|… } → E.164
+function normalizePhone(raw: string, country?: unknown): string | null {
+  return normalizePhoneIntl(raw, country);
 }
 
 // Identifiant : 3 à 30 caractères — lettres, chiffres, point, tiret, underscore
@@ -63,7 +61,7 @@ export async function POST(req: NextRequest) {
     const identifier = normalizeIdentifier(String(body.identifier ?? ""));
     const password = String(body.password ?? "");
     const pseudo = String(body.pseudo ?? "").trim().slice(0, 60);
-    const phone = normalizePhone(String(body.phone ?? ""));
+    const phone = normalizePhone(String(body.phone ?? ""), body.country);
     const deviceName = cleanDeviceName(body.deviceName);
 
     if (!identifier) {
@@ -76,7 +74,7 @@ export async function POST(req: NextRequest) {
       return apiError("Indiquez votre pseudo (au moins 2 caractères).");
     }
     if (!phone) {
-      return apiError("Numéro camerounais invalide. Exemple : 6 91 23 45 67 (9 chiffres).");
+      return apiError(phoneErrorHint(body.country));
     }
 
     // 1. L'identifiant est-il déjà pris ?
@@ -139,14 +137,14 @@ export async function POST(req: NextRequest) {
       typeCode: "AUTH_WELCOME",
       priority: "NORMALE",
       title: "Bienvenue dans Famille.Mbeutetsa 🌳",
-      body: `Votre compte « ${pseudo} » est actif (branche ${branch.name}). Conservez votre identifiant « ${identifier} » et votre mot de passe — votre numéro ${phone} permet aussi de vous retrouver.`,
+      body: `Votre compte « ${pseudo} » est actif. Conservez votre identifiant « ${identifier} » et votre mot de passe — votre numéro ${phone} permet aussi de vous retrouver.`,
     });
     await notifyAdmins({
       univers: "U1",
       typeCode: "AUTH_REGISTERED_ADMIN",
       priority: "NORMALE",
       title: "Nouveau membre inscrit",
-      body: `${pseudo} (${branch.name}) vient de s'inscrire avec l'identifiant « ${identifier} » — numéro ${phone}.`,
+      body: `${pseudo} vient de s'inscrire avec l'identifiant « ${identifier} » — numéro ${phone}.`,
     });
     await logSecurity(user.id, "REGISTERED_IDENTIFIER", `${pseudo} — identifiant ${identifier} — ${phone}`);
     return openSession(user.id, deviceName, {
@@ -164,7 +162,7 @@ export async function POST(req: NextRequest) {
       return apiError("Indiquez votre identifiant et votre mot de passe.");
     }
 
-    // Identifiant texte, ou numéro de téléphone comme identifiant
+    // Identifiant texte, ou numéro de téléphone comme identifiant (tous pays : E.164 ou CM)
     const phone = normalizePhone(rawId);
     const identifier = phone ? null : normalizeIdentifier(rawId);
     const user = phone

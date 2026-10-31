@@ -20,6 +20,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api, deviceName } from "@/lib/fc-client";
 import { afterAuthPush, familyNotify } from "@/lib/fc-push";
+import { Country, countryByIso, groupPhone } from "@/lib/fc-countries";
+import { PhoneCountrySelect, usePhoneCountry } from "./phone-country-select";
 import { FcButton, FcCard, FcInput, FcSpinner, FcWatermark } from "./ui";
 import {
   ArrowLeft, AtSign, BellRing, Check, ChevronRight, Eye, EyeOff, KeyRound,
@@ -40,22 +42,36 @@ type Step =
   | { k: "welcome" }
   | { k: "login-choice" }
   | { k: "phone"; mode: "signup" | "login" }
-  | { k: "verify"; verifyToken: string; digits: string; demoCode: string }
-  | { k: "profile"; registerToken: string; digits: string }
+  | { k: "verify"; verifyToken: string; digits: string; demoCode: string; dial: string; iso: string }
+  | { k: "profile"; registerToken: string; digits: string; dial: string; iso: string }
   | { k: "creds" }
   | { k: "id-profile"; identifier: string; password: string }
   | { k: "login-creds" };
 
-/* ─── Formatage numéro camerounais : "691234567" → "6 91 23 45 67" ─── */
 function onlyDigits(s: string): string {
   return s.replace(/\D/g, "");
 }
-function groupPhone(d: string): string {
-  const parts = [d.slice(0, 1), d.slice(1, 3), d.slice(3, 5), d.slice(5, 7), d.slice(7, 9)].filter(Boolean);
-  return parts.join(" ");
+
+/* Affichage international : « +237 6 91 23 45 67 » / « +33 6 12 34 56 78 » */
+function prettyState(s: { dial: string; iso: string; digits: string }): string {
+  const c = countryByIso(s.iso);
+  const dial = c?.dial ?? s.dial;
+  return `+${dial} ${groupPhone(s.digits)}`.trim();
 }
-function prettyPhone(d: string): string {
-  return `+237 ${groupPhone(d)}`;
+
+/* Numéro national valide selon le pays choisi :
+   • Cameroun : 9 chiffres commençant par 6 (mobile) ou 2 (fixe)
+   • autres pays : 6 à 14 chiffres (largeur volontaire — le numéro sert à
+     identifier le membre, la longueur exacte varie selon l'opérateur) */
+function phoneDigitsOk(country: Country, d: string): boolean {
+  if (country.iso === "CM") return d.length === 9 && /^[62]/.test(d);
+  return d.length >= 6 && d.length <= 14;
+}
+function maxDigitsFor(country: Country): number {
+  return country.iso === "CM" ? 9 : 14;
+}
+function placeholderFor(country: Country): string {
+  return country.iso === "CM" ? "6 91 23 45 67" : "Numéro sans l'indicatif";
 }
 
 /* ─── Validation identifiant : 3-30, lettres/chiffres/._- ─── */
@@ -260,27 +276,33 @@ function PhoneScreen({
   goto: (s: Step) => void;
 }) {
   const [digits, setDigits] = useState("");
+  const { country, setCountry } = usePhoneCountry();
+  const maxD = maxDigitsFor(country);
 
   const send = async () => {
-    if (digits.length !== 9) {
-      toast.error("Entrez un numéro camerounais à 9 chiffres (ex : 6 91 23 45 67).");
+    if (!phoneDigitsOk(country, digits)) {
+      toast.error(
+        country.iso === "CM"
+          ? "Entrez un numéro camerounais à 9 chiffres (ex : 6 91 23 45 67)."
+          : `Entrez votre numéro ${country.fr} sans l'indicatif +${country.dial}${country.len ? ` (${country.len} chiffres)` : " (6 à 14 chiffres)"}.`
+      );
       return;
     }
     setBusy(true);
     try {
       const res = await api<{ verifyToken: string; demoCode: string; known: boolean }>("/api/auth/phone", {
-        body: { action: "request", phone: digits, deviceName: deviceName() },
+        body: { action: "request", phone: country.dial + digits, country: country.iso, deviceName: deviceName() },
       });
       if (!res.ok) throw new Error(res.error);
       try {
-        localStorage.setItem("fc_phone", "+237" + digits);
+        localStorage.setItem("fc_phone", "+" + country.dial + digits);
       } catch {
         /* rien */
       }
-      toast.success(`Notification de vérification envoyée au ${prettyPhone(digits)}`, {
+      toast.success(`Notification de vérification envoyée au +${country.dial} ${groupPhone(digits)}`, {
         description: "Consultez vos notifications — l'application vérifie ensuite votre appareil.",
       });
-      goto({ k: "verify", verifyToken: res.verifyToken, digits, demoCode: res.demoCode });
+      goto({ k: "verify", verifyToken: res.verifyToken, digits, demoCode: res.demoCode, dial: country.dial, iso: country.iso });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Envoi de la notification impossible.");
     } finally {
@@ -300,32 +322,35 @@ function PhoneScreen({
       </p>
 
       <div className="mb-4 flex items-stretch gap-2">
-        <div
-          className="flex h-[54px] shrink-0 items-center gap-2 rounded-xl border border-[#C9B98A] bg-[#FFFDF6] px-4 text-[16px] font-medium text-[#2B3530]"
-          aria-label="Indicatif pays Cameroun +237"
-        >
-          <span aria-hidden="true">🇨🇲</span> +237
-        </div>
+        <PhoneCountrySelect
+          value={country}
+          onChange={(c) => {
+            setCountry(c);
+            setDigits(""); // nouveau pays → nouveau numéro
+          }}
+        />
         <FcInput
           className="flex-1"
-          placeholder="6 91 23 45 67"
+          placeholder={placeholderFor(country)}
           value={groupPhone(digits)}
-          onChange={(e) => setDigits(onlyDigits(e.target.value).slice(0, 9))}
-          onKeyDown={(e) => e.key === "Enter" && digits.length === 9 && send()}
-          inputMode="numeric"
+          onChange={(e) => setDigits(onlyDigits(e.target.value).slice(0, maxD))}
+          onKeyDown={(e) => e.key === "Enter" && phoneDigitsOk(country, digits) && send()}
+          inputMode="tel"
           autoComplete="tel-national"
-          maxLength={13}
-          aria-label="Numéro de téléphone"
+          maxLength={20}
+          aria-label="Numéro de téléphone (sans indicatif)"
         />
       </div>
 
-      <FcButton onClick={send} disabled={busy || digits.length !== 9} className="h-[54px]">
+      <FcButton onClick={send} disabled={busy || !phoneDigitsOk(country, digits)} className="h-[54px]">
         {busy ? <FcSpinner /> : <BellRing className="h-5 w-5" />}
         Recevoir la notification
       </FcButton>
 
       <p className="mt-4 text-center text-[12px] text-[#8A9288]">
-        Format camerounais — 9 chiffres commençant par 6 (mobile) ou 2 (fixe).
+        {country.iso === "CM"
+          ? "Format camerounais — 9 chiffres commençant par 6 (mobile) ou 2 (fixe)."
+          : `L'indicatif +${country.dial} est ajouté automatiquement — saisissez le numéro sans l'indicatif.`}
       </p>
     </FcCard>
   );
@@ -375,7 +400,7 @@ function VerifyScreen({
           onReady(res.user.fullName);
         } else if (res.registerToken) {
           toast.info("Numéro vérifié — complétez votre profil pour créer votre compte.");
-          goto({ k: "profile", registerToken: res.registerToken, digits: state.digits });
+          goto({ k: "profile", registerToken: res.registerToken, digits: state.digits, dial: state.dial, iso: state.iso });
         } else {
           throw new Error("Réponse inattendue du serveur.");
         }
@@ -421,7 +446,7 @@ function VerifyScreen({
       <StepBadge current={2} total={3} label="Inscription" />
       <h2 className="fc-serif mb-1 text-center text-2xl font-bold text-[#1E4D2B]">Vérification du numéro</h2>
       <p className="mb-5 text-center text-[14px] text-[#5C6B60]">
-        Notification envoyée au <strong>{prettyPhone(state.digits)}</strong>
+        Notification envoyée au <strong>{prettyState(state)}</strong>
       </p>
 
       <div className="mb-4 rounded-2xl border border-[#E5DCC0] bg-white p-4 shadow-sm">
@@ -572,7 +597,7 @@ function ProfileScreen({
         Comment souhaitez-vous être appelé ?
       </h2>
       <p className="mb-6 text-center text-[14px] leading-relaxed text-[#5C6B60]">
-        Votre numéro <strong>{prettyPhone(state.digits)}</strong> est vérifié ✓. Indiquez votre nom et votre
+        Votre numéro <strong>{prettyState(state)}</strong> est vérifié ✓. Indiquez votre nom et votre
         prénom — ou au moins un pseudo.
       </p>
 
@@ -722,12 +747,14 @@ function IdProfileScreen({
 }) {
   const [pseudo, setPseudo] = useState("");
   const [digits, setDigits] = useState("");
+  const { country, setCountry } = usePhoneCountry();
+  const maxD = maxDigitsFor(country);
 
-  const valid = pseudo.trim().length >= 2 && digits.length === 9;
+  const valid = pseudo.trim().length >= 2 && phoneDigitsOk(country, digits);
 
   const submit = async () => {
     if (!valid) {
-      toast.error("Indiquez votre pseudo et votre numéro de téléphone (9 chiffres).");
+      toast.error("Indiquez votre pseudo et votre numéro de téléphone.");
       return;
     }
     setBusy(true);
@@ -740,7 +767,8 @@ function IdProfileScreen({
             identifier: state.identifier,
             password: state.password,
             pseudo: pseudo.trim(),
-            phone: digits,
+            phone: country.dial + digits,
+            country: country.iso,
             deviceName: deviceName(),
           },
         }
@@ -749,7 +777,7 @@ function IdProfileScreen({
       try {
         localStorage.setItem("fc_uid", res.user.id);
         localStorage.setItem("fc_name", res.user.fullName);
-        localStorage.setItem("fc_phone", "+237" + digits);
+        localStorage.setItem("fc_phone", "+" + country.dial + digits);
       } catch {
         /* rien */
       }
@@ -782,8 +810,8 @@ function IdProfileScreen({
       <StepBadge current={2} total={2} label="Inscription" />
       <h2 className="fc-serif mb-1 text-center text-2xl font-bold text-[#1E4D2B]">Votre pseudo & votre numéro</h2>
       <p className="mb-6 text-center text-[14px] leading-relaxed text-[#5C6B60]">
-        Votre numéro <strong className="whitespace-nowrap">+237 …</strong> permet de vous détecter : si un
-        compte existe déjà avec ce numéro, il sera automatiquement relié à votre identifiant.
+        Votre numéro <strong className="whitespace-nowrap">+{country.dial} …</strong> permet de vous détecter : si
+        un compte existe déjà avec ce numéro, il sera automatiquement relié à votre identifiant.
       </p>
 
       <div className="mb-3 space-y-2">
@@ -796,24 +824,30 @@ function IdProfileScreen({
           aria-label="Pseudo"
         />
         <div className="flex items-stretch gap-2">
-          <div
-            className="flex h-[54px] shrink-0 items-center gap-2 rounded-xl border border-[#C9B98A] bg-[#FFFDF6] px-4 text-[16px] font-medium text-[#2B3530]"
-            aria-label="Indicatif pays Cameroun +237"
-          >
-            <span aria-hidden="true">🇨🇲</span> +237
-          </div>
+          <PhoneCountrySelect
+            value={country}
+            onChange={(c) => {
+              setCountry(c);
+              setDigits(""); // nouveau pays → nouveau numéro
+            }}
+          />
           <FcInput
             className="flex-1"
-            placeholder="6 91 23 45 67"
+            placeholder={placeholderFor(country)}
             value={groupPhone(digits)}
-            onChange={(e) => setDigits(onlyDigits(e.target.value).slice(0, 9))}
+            onChange={(e) => setDigits(onlyDigits(e.target.value).slice(0, maxD))}
             onKeyDown={(e) => e.key === "Enter" && valid && submit()}
-            inputMode="numeric"
+            inputMode="tel"
             autoComplete="tel-national"
-            maxLength={13}
-            aria-label="Numéro de téléphone"
+            maxLength={20}
+            aria-label="Numéro de téléphone (sans indicatif)"
           />
         </div>
+        <p className="px-1 text-[12px] text-[#8A9288]">
+          {country.iso === "CM"
+            ? "9 chiffres commençant par 6 (mobile) ou 2 (fixe)."
+            : `Numéro national ${country.fr} — l'indicatif +${country.dial} est ajouté automatiquement.`}
+        </p>
       </div>
 
       <div className="mb-4 flex items-start gap-2 rounded-xl border border-[#C89F62]/40 bg-[#C89F62]/10 p-3">

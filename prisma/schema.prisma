@@ -26,23 +26,38 @@ model Branch {
   createdAt DateTime @default(now())
 }
 
-// Profil pré-enregistré par le secrétaire / chef de famille
+// Profil pré-enregistré par le secrétaire / chef de famille — ou créé à l'inscription
 model Member {
-  id          String       @id @default(cuid())
-  familyId    String
-  family      Family       @relation(fields: [familyId], references: [id])
-  branchId    String
-  branch      Branch       @relation(fields: [branchId], references: [id])
-  fullName    String
-  phone       String?
-  email       String?
+  id                String       @id @default(cuid())
+  familyId          String
+  family            Family       @relation(fields: [familyId], references: [id])
+  branchId          String
+  branch            Branch       @relation(fields: [branchId], references: [id])
+  fullName          String
+  phone             String?
+  email             String?
   // PATRIARCHE | CONSEIL | CHEF_BRANCHE | SECRETAIRE | ADULTE | JUNIOR
-  role        String       @default("ADULTE")
+  role              String       @default("ADULTE")
   // PREINSCRIT | ACTIF | ARCHIVE (jamais de suppression physique)
-  status      String       @default("PREINSCRIT")
-  user        User?
-  accessCodes AccessCode[]
-  createdAt   DateTime     @default(now())
+  status            String       @default("PREINSCRIT")
+  user              User?
+  accessCodes       AccessCode[]
+  // ─── Localisation réelle (rencontres familiales & GPS) ───
+  country           String?
+  region            String? // Région (ex : Littoral)
+  department        String? // Département (ex : Wouri)
+  city              String? // Ville / Commune (ex : Douala)
+  arrondissement    String? // Arrondissement (ex : Douala 2e)
+  quartier          String? // Quartier / quartier de résidence
+  latitude          Float?
+  longitude         Float?
+  accuracy          Float? // précision GPS en mètres
+  locationSource    String? // gps | ip | manual
+  locationConfirmed Boolean      @default(false)
+  locationUpdatedAt DateTime?
+  createdAt         DateTime     @default(now())
+
+  @@index([locationConfirmed])
 }
 
 // Compte utilisateur (créé à la revendication du profil par code d'accès)
@@ -163,4 +178,184 @@ model SecurityLog {
   action    String
   detail    String?
   createdAt DateTime @default(now())
+}
+
+// ─── U4 — Tontine familiale tournante (Phase 1 : ni prêt, ni intérêt, ni enchère) ───
+// L'application ne garde pas l'argent : elle note ce qui est payé et le prouve.
+
+model Tontine {
+  id            String   @id @default(cuid())
+  familyId      String
+  name          String
+  // weekly | biweekly | monthly
+  frequency     String
+  // 0=dim..6=sam (weekly/biweekly) ; 1..28 (monthly, jour fixe du mois)
+  meetingDay    Int
+  amount        Int
+  // Le receveur cotise-t-il aussi à son propre tour ? (défaut non : pot = (N-1)×montant)
+  recipientPays Boolean  @default(false)
+  // random (tirage au sort visible par tous) | seniority (ordre d'inscription)
+  orderMode     String   @default("random")
+  // Statuts de paiement visibles : group (réunion en cours) | bureau
+  visibility    String   @default("group")
+  // none | host (pris en charge par l'hôte) | fixed (participation fixe)
+  meals         String   @default("none")
+  mealsAmount   Int?
+  // host (chez celui qui reçoit) | fixed
+  locationMode  String   @default("host")
+  fixedLocation String?
+  // Formule 2 : caisse de solidarité interne (solde simple — les vraies aides restent en U3)
+  solidarityEnabled Boolean @default(false)
+  // Amendes OPTIONNELLES — désactivées par défaut (co-conception 2026-10-30)
+  finesEnabled      Boolean @default(false)
+  finesLateAmount   Int?
+  finesAbsenceAmount Int?
+  // Tirage vérifiable : graine + empreinte du tirage du cycle courant
+  drawSeed      String?
+  drawHash      String?
+  // formation | active | cycle_completed | closed
+  status        String   @default("formation")
+  cycleNumber   Int      @default(1)
+  createdBy     String
+  createdAt     DateTime @default(now())
+  startedAt     DateTime?
+  members       TontineMember[]
+  rounds        TontineRound[]
+
+  @@map("tontines")
+}
+
+model TontineMember {
+  id          String   @id @default(cuid())
+  tontineId   String
+  tontine     Tontine  @relation(fields: [tontineId], references: [id])
+  userId      String
+  displayName String
+  // president (cumule trésorier/secrétaire dans un petit groupe) | member
+  role        String   @default("member")
+  position    Int?
+  garantUserId String? // garanticité déclarative (Phase 2) — engagement public
+  joinedAt    DateTime @default(now())
+
+  @@unique([tontineId, userId])
+  @@map("tontine_members")
+}
+
+model TontineRound {
+  id              String   @id @default(cuid())
+  tontineId       String
+  tontine         Tontine  @relation(fields: [tontineId], references: [id])
+  cycleNumber     Int      @default(1)
+  roundNumber     Int
+  scheduledDate   String // YYYY-MM-DD
+  recipientUserId String
+  expectedPot     Int
+  // upcoming | current | completed
+  status          String   @default("upcoming")
+  potHandedAmount Int?
+  potHandedBy     String?
+  potHandedAt     String?
+  potConfirmedBy  String?
+  potConfirmedAt  String?
+  // Compte rendu de réunion (secrétaire/président) — visible du groupe
+  reportText      String?
+  reportBy        String?
+  reportAt        DateTime?
+  payments        TontinePayment[]
+
+  @@unique([tontineId, cycleNumber, roundNumber])
+  @@map("tontine_rounds")
+}
+
+// Un versement par membre et par réunion (parts multiples : Phase 2).
+// status : due → declared (le membre déclare avoir payé) → paid (trésorier confirme → reçu émis)
+//          | exempt (dispense discrète accordée par le président — apparaît « à jour »)
+model TontinePayment {
+  id            String       @id @default(cuid())
+  tontineId     String
+  roundId       String
+  round         TontineRound @relation(fields: [roundId], references: [id])
+  userId        String
+  amount        Int
+  status        String       @default("due")
+  method        String? // cash | momo | transfer
+  reference     String?
+  receiptNumber String?
+  declaredAt    DateTime?
+  confirmedBy   String?
+  confirmedAt   DateTime?
+
+  @@unique([roundId, userId])
+  @@map("tontine_payments")
+}
+
+// ── Phase 2 ────────────────────────────────────────────────────────────────
+
+// Amende (OPTIONNELLE, désactivée par défaut). Statuts : due → paid | waived.
+// Destination décidée par le serveur : caisse de solidarité si Formule 2, sinon rendue au groupe.
+model TontineFine {
+  id          String    @id @default(cuid())
+  tontineId   String
+  roundId     String?
+  userId      String
+  // late | absence | partial | other
+  type        String
+  amount      Int
+  note        String?
+  status      String    @default("due")
+  // solidarity | group (fixé à l'encaissement)
+  destination String?
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  paidAt      DateTime?
+
+  @@map("tontine_fines")
+}
+
+// Présence à une réunion — historique PRIVÉ (bureau + intéressé, mod 3 validée).
+// status : present | absent | excused
+model TontineAttendance {
+  id         String   @id @default(cuid())
+  tontineId  String
+  roundId    String
+  userId     String
+  status     String
+  note       String?
+  recordedBy String
+  createdAt  DateTime @default(now())
+
+  @@unique([roundId, userId])
+  @@map("tontine_attendance")
+}
+
+// Caisse de solidarité tontine — simple solde interne (l'app note et prouve, ne garde rien).
+// direction : in | out ; source : fine | contribution | gift | aid | adjust
+model TontineSolidarityMove {
+  id        String   @id @default(cuid())
+  tontineId String
+  roundId   String?
+  direction String
+  source    String
+  // bénéficiaire (out) ou contributeur (in)
+  userId    String?
+  amount    Int
+  note      String?
+  createdBy String
+  createdAt DateTime @default(now())
+
+  @@map("tontine_solidarity")
+}
+
+// Journal de la tontine, visible de tous ses membres — « l'app note et prouve ».
+// Ne contient JAMAIS de données privées (les amendes y sont anonymisées).
+model TontineAudit {
+  id          String   @id @default(cuid())
+  tontineId   String
+  roundId     String?
+  action      String
+  detail      String
+  actorUserId String?
+  createdAt   DateTime @default(now())
+
+  @@map("tontine_audit")
 }

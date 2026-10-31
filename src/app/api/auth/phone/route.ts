@@ -10,19 +10,16 @@ import {
   randomDigits,
 } from "@/lib/fc-auth";
 import { apiError, apiOk, ensureSeed, logSecurity, notify, notifyAdmins } from "@/lib/fc-server";
+import { normalizePhoneIntl, phoneErrorHint } from "@/lib/fc-phone";
 
 export const runtime = "nodejs";
 
-// ─── Normalisation numéro camerounais ───
-// Accepte : "691234567", "6 91 23 45 67", "+237 691234567", "00237 691234567" → "+237691234567"
-function normalizePhone(raw: string): string | null {
-  let digits = String(raw ?? "").replace(/\D/g, "");
-  if (digits.startsWith("00237")) digits = digits.slice(5);
-  else if (digits.startsWith("237")) digits = digits.slice(3);
-  if (digits.length !== 9) return null;
-  // Mobiles (6…) et fixes (2…) au Cameroun
-  if (!/^[62]/.test(digits)) return null;
-  return "+237" + digits;
+// ─── Normalisation téléphone multi-pays (diaspora) ───
+// Frontend : { phone: "<indicatif><national>", country: "CM"|"FR"|… }
+// Accepte aussi les formats anciens : "691234567", "+237 691234567", "00237 …"
+// → E.164 : "+237691234567", "+33612345678", "+14155550123", …
+function normalizePhone(raw: string, country?: unknown): string | null {
+  return normalizePhoneIntl(raw, country);
 }
 
 function cleanDeviceName(raw: unknown): string {
@@ -43,9 +40,9 @@ export async function POST(req: NextRequest) {
   /* ──────── Étape 1 : demande de vérification ──────── */
   if (body.action === "request") {
     await ensureSeed();
-    const phone = normalizePhone(body.phone);
+    const phone = normalizePhone(body.phone, body.country);
     if (!phone) {
-      return apiError("Numéro camerounais invalide. Exemple : 6 91 23 45 67 (9 chiffres).");
+      return apiError(phoneErrorHint(body.country));
     }
     const code = randomDigits(6);
     const token = signToken({ phone, codeHash: hashValue(code) }, "phone-verify", 600); // 10 min
@@ -155,14 +152,14 @@ export async function POST(req: NextRequest) {
       typeCode: "AUTH_WELCOME",
       priority: "NORMALE",
       title: "Bienvenue dans Famille.Mbeutetsa 🌳",
-      body: `Votre compte est actif (branche ${branch.name}). Votre numéro de téléphone est votre identifiant : la prochaine fois, l'application s'ouvrira directement sur cet appareil.`,
+      body: `Votre compte est actif. Votre numéro de téléphone est votre identifiant : la prochaine fois, l'application s'ouvrira directement sur cet appareil.`,
     });
     await notifyAdmins({
       univers: "U1",
       typeCode: "AUTH_REGISTERED_ADMIN",
       priority: "NORMALE",
       title: "Nouveau membre inscrit",
-      body: `${fullName} (${branch.name}) vient de s'inscrire avec le numéro ${phone}.`,
+      body: `${fullName} vient de s'inscrire avec le numéro ${phone}.`,
     });
     await logSecurity(user.id, "REGISTERED", `${fullName} — ${phone} — appareil « ${deviceName} »`);
     return res;

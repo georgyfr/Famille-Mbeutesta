@@ -1,26 +1,33 @@
 import { db } from "@/lib/db";
-import { apiOk } from "@/lib/fc-server";
+import { apiOk, requireSession } from "@/lib/fc-server";
+import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-// GET /api/stats — chiffres du tableau de bord (accueil)
+/**
+ * GET /api/stats — chiffres 100 % RÉELS du tableau de bord.
+ * Aucun chiffre fictif : tout est compté dans la base de données.
+ */
 export async function GET() {
-  const [members, actives, branches, latestAnnouncement] = await Promise.all([
+  const auth = await requireSession();
+
+  const [members, localized, branches, unread, latestAnnouncement] = await Promise.all([
     db.member.count(),
-    db.member.count({ where: { status: "ACTIF" } }),
+    db.member.count({ where: { locationConfirmed: true } }),
     db.branch.count(),
+    auth ? db.notification.count({ where: { userId: auth.user.id, readAt: null } }) : Promise.resolve(0),
     db.notification.findFirst({
-      where: { typeCode: { in: ["ANNOUNCEMENT", "FAM_NEWS", "AUTH_WELCOME"] } },
+      where: { typeCode: { in: ["ANNOUNCEMENT", "FAM_NEWS"] } },
       orderBy: { createdAt: "desc" },
     }),
   ]);
 
   return apiOk({
     stats: {
-      members: members || actives,
-      treasury: 0, // U4 (caisse Mobile Money) — univers à venir
-      events: 0, // U2 (moteur d'événements) — univers à venir
-      branches,
+      members, // membres réellement enregistrés
+      localized, // membres ayant validé leur localisation
+      branches, // branches réellement créées
+      unread, // alertes non lues de l'utilisateur
       announcement: latestAnnouncement
         ? { title: latestAnnouncement.title, body: latestAnnouncement.body }
         : null,
