@@ -3,24 +3,62 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api, deviceName, timeAgo, urlBase64ToUint8Array } from "@/lib/fc-client";
+import { groupPhone, onlyDigits as stripDigits } from "@/lib/fc-countries";
+import { PhoneCountrySelect, usePhoneCountry } from "./phone-country-select";
 import { FcButton, FcCard, PriorityBadge } from "./ui";
 import { roleLabel } from "./auth-flow";
 import {
   Bell, BellOff, CalendarDays, Check, CheckCheck, Copy, Fingerprint, HeartHandshake, Home, KeyRound, LifeBuoy,
-  LogOut, Megaphone, PiggyBank, RefreshCw, ScrollText, Send, ShieldCheck, Smartphone, Trash2, UserPlus, Users, Vote,
+  LocateFixed, LogOut, MapPinned, Megaphone, Navigation, PiggyBank, RefreshCw, ScrollText, Send, ShieldCheck,
+  Smartphone, Trash2, UserPlus, Users, Vote,
 } from "lucide-react";
+import { FamilyTab } from "./family-tab";
+import { LocationWizard } from "./location-wizard";
+import { TontinePage } from "./tontine-page";
+import { formatPlace, type LocationDraft } from "@/lib/fc-geo";
 import {
   enablePush, hasDeferredInstallPrompt, promptInstall, pushState as getPushState, startInAppNotificationPolling, testPush,
   type PushState, familyNotify,
 } from "@/lib/fc-push";
 
+export type SessionLocation = {
+  country: string | null;
+  region: string | null;
+  department: string | null;
+  city: string | null;
+  arrondissement: string | null;
+  quartier: string | null;
+  latitude: number | null;
+  longitude: number | null;
+};
+
 export type SessionData = {
-  user: { id: string; fullName: string; phone?: string | null; email?: string | null; role: string; hasPin: boolean };
+  user: {
+    id: string; fullName: string; phone?: string | null; email?: string | null;
+    role: string; hasPin: boolean; hasLocation: boolean;
+  };
   member: { id: string; branch: string; role: string; status: string } | null;
+  location: SessionLocation | null;
   device: { id: string; name: string; type: string } | null;
   unreadCount: number;
   hasPasskey: boolean;
 };
+
+function locationToDraft(loc: SessionLocation | null): LocationDraft | null {
+  if (!loc) return null;
+  return {
+    country: loc.country ?? "",
+    region: loc.region ?? "",
+    department: loc.department ?? "",
+    city: loc.city ?? "",
+    arrondissement: loc.arrondissement ?? "",
+    quartier: loc.quartier ?? "",
+    latitude: loc.latitude,
+    longitude: loc.longitude,
+    accuracy: null,
+    source: "manual",
+  };
+}
 
 type NotificationItem = {
   id: string; univers: string; typeCode: string; priority: string;
@@ -42,8 +80,12 @@ type AdminMember = {
 
 const isAdminRole = (r: string) => ["SECRETAIRE", "PATRIARCHE", "CHEF_BRANCHE", "CONSEIL"].includes(r);
 
-export function Dashboard({ session, onLoggedOut }: { session: SessionData; onLoggedOut: () => void }) {
-  const [tab, setTab] = useState<"home" | "notif" | "security" | "admin">("home");
+export function Dashboard({
+  session, onLoggedOut, onRefresh,
+}: { session: SessionData; onLoggedOut: () => void; onRefresh: () => Promise<void> }) {
+  const [tab, setTab] = useState<"home" | "famille" | "notif" | "security" | "admin">("home");
+  const [editLocation, setEditLocation] = useState(false);
+  const [showTontine, setShowTontine] = useState(false);
   const isAdmin = isAdminRole(session.user.role);
 
   // Repli in-app : événements familiaux récents (60 s) — affichés même app ouverte,
@@ -54,6 +96,43 @@ export function Dashboard({ session, onLoggedOut }: { session: SessionData; onLo
     });
     return stop;
   }, []);
+
+  // Page TONTINE & COTISATIONS — URL directe /#tontine (ou /#cotisation),
+  // partageable dans la famille ; la tuile « Tontine » pointe vers cette adresse.
+  useEffect(() => {
+    const sync = () => {
+      const h = (window.location.hash || "").toLowerCase();
+      setShowTontine(h === "#tontine" || h === "#cotisation" || h.startsWith("#tontine-") || h.startsWith("#tontine/"));
+    };
+    const t = setTimeout(sync, 0);
+    window.addEventListener("hashchange", sync);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("hashchange", sync);
+    };
+  }, []);
+
+  if (editLocation) {
+    return (
+      <div className="relative z-10 mx-auto w-full max-w-md px-4 pb-16 pt-4">
+        <LocationWizard
+          initial={locationToDraft(session.location)}
+          onSaved={async () => {
+            setEditLocation(false);
+            await onRefresh();
+          }}
+        />
+        <div className="mx-auto max-w-md px-1">
+          <button
+            onClick={() => setEditLocation(false)}
+            className="w-full text-center text-[13px] text-[#8A9288] hover:underline"
+          >
+            Retour à l&apos;application sans modifier
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative z-10 mx-auto w-full max-w-md px-4 pb-28 pt-4">
@@ -80,10 +159,27 @@ export function Dashboard({ session, onLoggedOut }: { session: SessionData; onLo
         </button>
       </header>
 
-      {tab === "home" && <HomeTab session={session} goTab={setTab} />}
-      {tab === "notif" && <NotifTab session={session} />}
-      {tab === "security" && <SecurityTab session={session} onLoggedOut={onLoggedOut} />}
-      {tab === "admin" && isAdmin && <AdminTab session={session} />}
+      {showTontine ? (
+        <TontinePage
+          vousName={session.user.fullName}
+          onBack={() => {
+            try {
+              history.replaceState(null, "", window.location.pathname);
+            } catch {
+              /* rien */
+            }
+            setShowTontine(false);
+          }}
+        />
+      ) : (
+        <>
+          {tab === "home" && <HomeTab session={session} goFamille={() => setTab("famille")} openLocation={() => setEditLocation(true)} />}
+          {tab === "famille" && <FamilyTab onEditLocation={() => setEditLocation(true)} />}
+          {tab === "notif" && <NotifTab session={session} />}
+          {tab === "security" && <SecurityTab session={session} onLoggedOut={onLoggedOut} />}
+          {tab === "admin" && isAdmin && <AdminTab session={session} />}
+        </>
+      )}
 
       {/* Navigation basse — mobile native */}
       <nav
@@ -91,8 +187,9 @@ export function Dashboard({ session, onLoggedOut }: { session: SessionData; onLo
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         aria-label="Navigation principale"
       >
-        <div className="grid grid-cols-4">
+        <div className={isAdmin ? "grid grid-cols-5" : "grid grid-cols-4"}>
           <NavBtn active={tab === "home"} onClick={() => setTab("home")} icon={<Home className="h-5 w-5" />} label="Accueil" />
+          <NavBtn active={tab === "famille"} onClick={() => setTab("famille")} icon={<MapPinned className="h-5 w-5" />} label="Famille" />
           <NavBtn
             active={tab === "notif"}
             onClick={() => setTab("notif")}
@@ -101,7 +198,7 @@ export function Dashboard({ session, onLoggedOut }: { session: SessionData; onLo
             badge={session.unreadCount}
           />
           <NavBtn active={tab === "security"} onClick={() => setTab("security")} icon={<ShieldCheck className="h-5 w-5" />} label="Sécurité" />
-          {isAdmin && <NavBtn active={tab === "admin"} onClick={() => setTab("admin")} icon={<UserPlus className="h-5 w-5" />} label="Secrétariat" />}
+          {isAdmin && <NavBtn active={tab === "admin"} onClick={() => setTab("admin")} icon={<UserPlus className="h-5 w-5" />} label="Secrét." />}
         </div>
       </nav>
     </div>
@@ -134,10 +231,10 @@ function NavBtn({
 }
 
 type FamilyStats = {
-  members: number;
-  treasury: number;
-  events: number;
-  branches: number;
+  members: number; // membres réels
+  localized: number; // membres réellement localisés
+  branches: number; // branches réellement créées
+  unread: number; // alertes non lues (réel)
   announcement: { title: string; body: string } | null;
 };
 
@@ -153,61 +250,83 @@ function StatCard({ value, label }: { value: string; label: string }) {
   );
 }
 
-function HomeTab({ session, goTab }: { session: SessionData; goTab: (t: "notif" | "security") => void }) {
+function HomeTab({
+  session, goFamille, openLocation,
+}: { session: SessionData; goFamille: () => void; openLocation: () => void }) {
   const [stats, setStats] = useState<FamilyStats | null>(null);
-  const [recent, setRecent] = useState<NotificationItem[]>([]);
 
   useEffect(() => {
     const t = setTimeout(async () => {
       const s = await api<{ stats: FamilyStats }>("/api/stats");
       if (s.ok) setStats(s.stats);
-      const n = await api<{ notifications: NotificationItem[] }>("/api/notifications");
-      if (n.ok) setRecent(n.notifications.filter((x) => !x.read).slice(0, 3));
     }, 0);
     return () => clearTimeout(t);
   }, []);
 
+  const loc = session.location;
+
   return (
     <div className="space-y-4">
-      {/* Bienvenue */}
+      {/* Bienvenue — infos 100 % réelles du compte */}
       <FcCard className="overflow-hidden">
         <div className="bg-[#1E4D2B] px-5 py-4 text-white">
-          <p className="text-[13px] opacity-80">Karibu,</p>
+          <p className="text-[13px] opacity-80">Bienvenue,</p>
           <p className="fc-serif text-xl font-bold">{session.user.fullName}</p>
-          {session.member && (
-            <p className="text-[12px] opacity-70">
-              {session.member.branch} · {roleLabel(session.member.role)}
+          {loc ? (
+            <p className="mt-0.5 text-[12.5px] opacity-85">
+              📍 {formatPlace({ city: loc.city, region: loc.region, country: loc.country })}
             </p>
+          ) : (
+            <button
+              onClick={openLocation}
+              className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-[#C89F62] px-3 py-1 text-[12px] font-bold text-[#2B2416] hover:bg-[#b98f50]"
+            >
+              <LocateFixed className="h-3.5 w-3.5" /> Indiquer ma localisation
+            </button>
           )}
         </div>
       </FcCard>
 
-      {/* Chiffres de la famille */}
-      <div className="grid grid-cols-3 gap-3">
-        <StatCard value={stats ? String(stats.members) : "…"} label="Membres" />
-        <StatCard
-          value={stats ? `${stats.treasury.toLocaleString("fr-FR")} F` : "…"}
-          label="Caisse familiale"
-        />
-        <StatCard value={stats ? String(stats.events) : "…"} label="Événements" />
-      </div>
-
-      {/* Raccourcis — les univers au service de la famille */}
+      {/* Tableau de bord — présente les pages de l'application.
+          À la demande de l'administrateur (2026-10-31) : la page d'accueil par
+          défaut est ce tableau de bord ; SEULE la page Finances (la cantine de
+          la famille : tontine, épargnes, prêts) y apparaît pour le moment.
+          Les autres univers restent masqués (`visible: false`) tant qu'ils ne
+          sont pas travaillés — ils réapparaîtront d'un simple `visible: true`. */}
       <div>
         <p className="mb-2 px-1 text-[11px] font-bold uppercase tracking-wide text-[#8A9288]">
-          La famille
+          Tableau de bord — pages de l&apos;application
         </p>
         <div className="grid grid-cols-2 gap-3">
-          <ShortcutCard icon={<Users className="h-5 w-5" />} label="Membres" onClick={() => toast.info(UNIVERS_COMING("Membres"))} />
-          <ShortcutCard icon={<PiggyBank className="h-5 w-5" />} label="Trésor" onClick={() => toast.info(UNIVERS_COMING("Trésor"))} />
-          <ShortcutCard icon={<CalendarDays className="h-5 w-5" />} label="Événements" onClick={() => toast.info(UNIVERS_COMING("Événements"))} />
-          <ShortcutCard icon={<HeartHandshake className="h-5 w-5" />} label="Solidarité" onClick={() => toast.info(UNIVERS_COMING("Solidarité"))} />
-          <ShortcutCard icon={<Vote className="h-5 w-5" />} label="Votes" onClick={() => toast.info(UNIVERS_COMING("Votes"))} />
-          <ShortcutCard icon={<ScrollText className="h-5 w-5" />} label="Mémoire" onClick={() => toast.info(UNIVERS_COMING("Mémoire"))} />
+          {[
+            {
+              label: "Finances",
+              description: "Tontine familiale — réunions du 2ᵉ dimanche, cotisations, épargnes et prêts.",
+              icon: <PiggyBank className="h-5 w-5" />,
+              tone: TONE_OR,
+              visible: true,
+              wide: true,
+              onClick: () => { window.location.hash = "tontine"; },
+            },
+            { label: "Localisation", description: "Carte & rencontres", icon: <MapPinned className="h-5 w-5" />, tone: TONE_VERT, visible: false, onClick: goFamille },
+            { label: "Trésor", description: "Caisse Mobile Money", icon: <PiggyBank className="h-5 w-5" />, tone: TONE_OR, visible: false, onClick: () => toast.info(UNIVERS_COMING("Trésor")) },
+            { label: "Événements", description: "Réunions & fêtes", icon: <CalendarDays className="h-5 w-5" />, tone: TONE_TERRACOTTA, visible: false, onClick: () => toast.info(UNIVERS_COMING("Événements")) },
+            { label: "Solidarité", description: "Entraide & coups durs", icon: <HeartHandshake className="h-5 w-5" />, tone: TONE_GRENAT, visible: false, onClick: () => toast.info(UNIVERS_COMING("Solidarité")) },
+            { label: "Votes", description: "Décisions du bureau", icon: <Vote className="h-5 w-5" />, tone: TONE_PRUNE, visible: false, onClick: () => toast.info(UNIVERS_COMING("Votes")) },
+            { label: "Mémoire", description: "Histoire de la famille", icon: <ScrollText className="h-5 w-5" />, tone: TONE_PETROLE, visible: false, onClick: () => toast.info(UNIVERS_COMING("Mémoire")) },
+          ]
+            .filter((t) => t.visible)
+            .map((t) => (
+              <PageCard key={t.label} icon={t.icon} label={t.label} description={t.description} onClick={t.onClick} tone={t.tone} wide={t.wide} />
+            ))}
         </div>
+        <p className="mt-3 px-1 text-[11.5px] leading-relaxed text-[#8A9288]">
+          Les autres pages de la famille (registre, carte, solidarité, gouvernance, mémoire…) seront ajoutées
+          ici au fur et à mesure.
+        </p>
       </div>
 
-      {/* Annonce du conseil */}
+      {/* Annonce du conseil — uniquement si une vraie annonce existe */}
       {stats?.announcement && (
         <FcCard className="p-4">
           <div className="mb-1.5 flex items-center gap-2">
@@ -221,51 +340,46 @@ function HomeTab({ session, goTab }: { session: SessionData; goTab: (t: "notif" 
         </FcCard>
       )}
 
-      {/* Alertes non lues */}
-      <FcCard className="p-4">
-        <div className="mb-2 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Bell className="h-4 w-4 text-[#C89F62]" />
-            <p className="text-[11px] font-bold uppercase tracking-wide text-[#8A9288]">
-              Alertes récentes
-            </p>
-          </div>
-          <button
-            onClick={() => goTab("notif")}
-            className="text-[12px] font-medium text-[#2A4A3A] hover:underline"
-          >
-            Tout voir
-          </button>
-        </div>
-        {recent.length === 0 ? (
-          <p className="py-2 text-[13px] text-[#8A9288]">
-            Rien de nouveau — la famille va bien. 🌿
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {recent.map((n) => (
-              <li key={n.id} className="rounded-xl border border-[#C89F62]/50 bg-[#C89F62]/10 p-3">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-[13px] font-bold text-[#1E4D2B]">{n.title}</p>
-                  <PriorityBadge priority={n.priority} />
-                </div>
-                <p className="mt-0.5 line-clamp-2 text-[12px] text-[#5C6B60]">{n.body}</p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </FcCard>
     </div>
   );
 }
-function ShortcutCard({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
+/* ─── Palette des tuiles « La famille » — couleurs différentes mais harmonieuses,
+       tirées de la même gamme terreuse que la marque (vert/or/crème) ─── */
+type TileTone = { chipBg: string; icon: string; border: string; bar: string };
+const TONE_VERT: TileTone = { chipBg: "bg-[#2F6B45]/12", icon: "text-[#2F6B45]", border: "border-[#2F6B45]/30", bar: "bg-[#2F6B45]" };
+const TONE_OR: TileTone = { chipBg: "bg-[#C89F62]/18", icon: "text-[#8A6420]", border: "border-[#C89F62]/45", bar: "bg-[#C89F62]" };
+const TONE_TERRACOTTA: TileTone = { chipBg: "bg-[#B85C33]/12", icon: "text-[#B85C33]", border: "border-[#B85C33]/30", bar: "bg-[#B85C33]" };
+const TONE_GRENAT: TileTone = { chipBg: "bg-[#A5473D]/12", icon: "text-[#A5473D]", border: "border-[#A5473D]/30", bar: "bg-[#A5473D]" };
+const TONE_PRUNE: TileTone = { chipBg: "bg-[#6D5480]/12", icon: "text-[#6D5480]", border: "border-[#6D5480]/30", bar: "bg-[#6D5480]" };
+const TONE_PETROLE: TileTone = { chipBg: "bg-[#3D6B72]/12", icon: "text-[#3D6B72]", border: "border-[#3D6B72]/30", bar: "bg-[#3D6B72]" };
+
+/* Carte « page » du tableau de bord : icône + nom + description —
+   la page à ouvrir est cliquable en entier. */
+function PageCard({ icon, label, description, onClick, tone, wide }: { icon: React.ReactNode; label: string; description: string; onClick: () => void; tone: TileTone; wide?: boolean }) {
   return (
     <button
       onClick={onClick}
-      className="flex min-h-[72px] flex-col items-center justify-center gap-1.5 rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3 text-[13px] font-semibold text-[#1E4D2B] shadow-sm transition-all hover:shadow-md active:scale-[0.98]"
+      className={`group flex min-h-[104px] items-center gap-3.5 rounded-2xl border bg-[#FFFDF6] p-4 text-left shadow-sm transition-all hover:shadow-md active:scale-[0.98] ${tone.border} ${wide ? "col-span-2" : ""}`}
     >
-      <span className="text-[#C89F62]">{icon}</span>
+      <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${tone.chipBg} ${tone.icon}`} aria-hidden="true">{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="fc-serif block text-[16.5px] font-bold text-[#1E4D2B]">{label}</span>
+        <span className="mt-0.5 block text-[12px] leading-snug text-[#5C6B60]">{description}</span>
+        <span className={`mt-2 block h-1 w-9 rounded-full ${tone.bar} opacity-80`} aria-hidden="true" />
+      </span>
+    </button>
+  );
+}
+
+function ShortcutCard({ icon, label, onClick, tone, wide }: { icon: React.ReactNode; label: string; onClick: () => void; tone: TileTone; wide?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex min-h-[86px] flex-col items-center justify-center gap-2 rounded-2xl border bg-[#FFFDF6] p-3 text-[13px] font-semibold text-[#2B3530] shadow-sm transition-all hover:shadow-md active:scale-[0.98] ${tone.border} ${wide ? "col-span-2" : ""}`}
+    >
+      <span className={`flex h-10 w-10 items-center justify-center rounded-full ${tone.chipBg} ${tone.icon}`} aria-hidden="true">{icon}</span>
       {label}
+      <span className={`h-1 w-9 rounded-full ${tone.bar} opacity-80`} aria-hidden="true" />
     </button>
   );
 }
@@ -699,7 +813,8 @@ function AdminTab({ session }: { session: SessionData }) {
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [fullName, setFullName] = useState("");
-  const [phone, setPhone] = useState("");
+  const [phoneDigits, setPhoneDigits] = useState("");
+  const { country, setCountry } = usePhoneCountry();
   const [email, setEmail] = useState("");
   const [branchId, setBranchId] = useState("");
   const [role, setRole] = useState("ADULTE");
@@ -727,7 +842,12 @@ function AdminTab({ session }: { session: SessionData }) {
     setBusy(true);
     try {
       const res = await api<{ member: { fullName: string }; accessCode: { code: string } }>("/api/admin/members", {
-        body: { fullName, phone, email, branchId, role },
+        body: {
+          fullName,
+          // Numéro stocké au format international E.164 (+237…, +33…) — diaspora
+          phone: phoneDigits ? "+" + country.dial + phoneDigits : "",
+          email, branchId, role,
+        },
       });
       if (!res.ok) throw new Error(res.error);
       toast.success(`${res.member.fullName} pré-enregistré ✓ Code remis à usage unique.`);
@@ -739,7 +859,7 @@ function AdminTab({ session }: { session: SessionData }) {
         tag: "fc-preregister",
       });
       setFullName("");
-      setPhone("");
+      setPhoneDigits("");
       setEmail("");
       load();
     } catch (e) {
@@ -788,15 +908,24 @@ function AdminTab({ session }: { session: SessionData }) {
             className="h-[48px] w-full rounded-xl border border-[#C9B98A] bg-[#FFFDF6] px-4 text-[15px] focus:border-[#2A4A3A] focus:outline-none"
             aria-label="Nom complet"
           />
-          <div className="grid grid-cols-2 gap-2">
-            <input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+237 6…"
-              inputMode="tel"
-              className="h-[48px] w-full rounded-xl border border-[#C9B98A] bg-[#FFFDF6] px-4 text-[15px] focus:border-[#2A4A3A] focus:outline-none"
-              aria-label="Téléphone"
-            />
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="flex items-stretch gap-2">
+              <PhoneCountrySelect
+                value={country}
+                onChange={(c) => {
+                  setCountry(c);
+                  setPhoneDigits("");
+                }}
+              />
+              <input
+                value={groupPhone(phoneDigits)}
+                onChange={(e) => setPhoneDigits(stripDigits(e.target.value).slice(0, country.iso === "CM" ? 9 : 14))}
+                placeholder={country.iso === "CM" ? "6 91 23 45 67" : "Numéro sans l'indicatif"}
+                inputMode="tel"
+                className="h-[48px] w-full min-w-0 rounded-xl border border-[#C9B98A] bg-[#FFFDF6] px-4 text-[15px] focus:border-[#2A4A3A] focus:outline-none"
+                aria-label="Téléphone (sans indicatif)"
+              />
+            </div>
             <input
               value={email}
               onChange={(e) => setEmail(e.target.value)}

@@ -284,14 +284,14 @@ export function DevFooterLink() {
 
 function OverviewTab() {
   const [session, setSession] = useState<DevSession | null>(null);
-  const [stats, setStats] = useState<{ members?: number; treasury?: number; events?: number; branches?: number } | null>(null);
+  const [stats, setStats] = useState<{ members?: number; localized?: number; branches?: number; unread?: number } | null>(null);
   const [state, setState] = useState<PushState>("default");
 
   useEffect(() => {
     const run = async () => {
       const s = await fetchDev<DevSession>("/api/auth/session");
       if (s.ok && s.session) setSession(s.session as unknown as DevSession);
-      const st = await fetchDev<{ stats: { members?: number; treasury?: number; events?: number; branches?: number } }>("/api/stats");
+      const st = await fetchDev<{ stats: { members?: number; localized?: number; branches?: number; unread?: number } }>("/api/stats");
       if (st.ok) setStats(st.stats);
       setState(await pushState());
     };
@@ -313,9 +313,9 @@ function OverviewTab() {
       <div className="rounded-2xl border border-[#E5DCC0] bg-[#FFFDF6] p-4">
         <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-[#8A9288]">Chiffres affichés (API /api/stats)</p>
         <ul className="space-y-1.5 text-[13px] text-[#2B3530]">
-          <li>Membres : <strong>{stats?.members ?? "…"}</strong></li>
-          <li>Caisse familiale : <strong>{stats?.treasury != null ? `${stats.treasury.toLocaleString("fr-FR")} FCFA` : "…"}</strong></li>
-          <li>Événements : <strong>{stats?.events ?? "…"}</strong> · Branches : <strong>{stats?.branches ?? "…"}</strong></li>
+          <li>Membres inscrits : <strong>{stats?.members ?? "…"}</strong></li>
+          <li>Membres localisés : <strong>{stats?.localized ?? "…"}</strong></li>
+          <li>Alertes non lues : <strong>{stats?.unread ?? "…"}</strong> · Branches : <strong>{stats?.branches ?? "…"}</strong></li>
         </ul>
       </div>
       <div className="rounded-2xl border border-[#E5DCC0] bg-[#FFFDF6] p-4 md:col-span-2">

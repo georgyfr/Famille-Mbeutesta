@@ -16,6 +16,19 @@ export async function GET() {
   const hasPasskey = await db.device.count({
     where: { userId: user.id, credentialId: { not: null }, revokedAt: null, simulated: false },
   });
+  const location =
+    member && member.locationConfirmed
+      ? {
+          country: member.country,
+          region: member.region,
+          department: member.department,
+          city: member.city,
+          arrondissement: member.arrondissement,
+          quartier: member.quartier,
+          latitude: member.latitude,
+          longitude: member.longitude,
+        }
+      : null;
   return NextResponse.json({
     ok: true,
     session: {
@@ -26,10 +39,12 @@ export async function GET() {
         email: user.email,
         role: user.role,
         hasPin: !!user.pinHash,
+        hasLocation: !!location,
       },
       member: member
         ? { id: member.id, branch: member.branch.name, role: member.role, status: member.status }
         : null,
+      location,
       device: device && !device.revokedAt ? { id: device.id, name: device.name, type: device.type } : null,
       unreadCount: unread,
       hasPasskey: hasPasskey > 0,

@@ -1,0 +1,919 @@
+     1→"use client";
+     2→
+     3→import { useCallback, useEffect, useState } from "react";
+     4→import { toast } from "sonner";
+     5→import { api, deviceName, timeAgo, urlBase64ToUint8Array } from "@/lib/fc-client";
+     6→import { FcButton, FcCard, PriorityBadge } from "./ui";
+     7→import { roleLabel } from "./auth-flow";
+     8→import {
+     9→  Bell, BellOff, CalendarDays, Check, CheckCheck, Copy, Fingerprint, HeartHandshake, Home, KeyRound, LifeBuoy,
+    10→  LogOut, Megaphone, PiggyBank, RefreshCw, ScrollText, Send, ShieldCheck, Smartphone, Trash2, UserPlus, Users, Vote,
+    11→} from "lucide-react";
+    12→import {
+    13→  enablePush, hasDeferredInstallPrompt, promptInstall, pushState as getPushState, startInAppNotificationPolling, testPush,
+    14→  type PushState, familyNotify,
+    15→} from "@/lib/fc-push";
+    16→
+    17→export type SessionData = {
+    18→  user: { id: string; fullName: string; phone?: string | null; email?: string | null; role: string; hasPin: boolean };
+    19→  member: { id: string; branch: string; role: string; status: string } | null;
+    20→  device: { id: string; name: string; type: string } | null;
+    21→  unreadCount: number;
+    22→  hasPasskey: boolean;
+    23→};
+    24→
+    25→type NotificationItem = {
+    26→  id: string; univers: string; typeCode: string; priority: string;
+    27→  title: string; body: string; read: boolean; createdAt: string;
+    28→};
+    29→
+    30→type DeviceItem = {
+    31→  id: string; name: string; type: string; simulated: boolean; hasPasskey: boolean;
+    32→  hasPush: boolean; lastSeen: string; revoked: boolean; current: boolean; createdAt: string;
+    33→};
+    34→
+    35→type LogItem = { id: string; action: string; detail: string | null; createdAt: string };
+    36→
+    37→type AdminMember = {
+    38→  id: string; fullName: string; phone?: string | null; email?: string | null; role: string;
+    39→  status: string; branch: string; branchId: string; activated: boolean;
+    40→  activeCode: string | null; codeExpiresAt: string | null;
+    41→};
+    42→
+    43→const isAdminRole = (r: string) => ["SECRETAIRE", "PATRIARCHE", "CHEF_BRANCHE", "CONSEIL"].includes(r);
+    44→
+    45→export function Dashboard({ session, onLoggedOut }: { session: SessionData; onLoggedOut: () => void }) {
+    46→  const [tab, setTab] = useState<"home" | "notif" | "security" | "admin">("home");
+    47→  const isAdmin = isAdminRole(session.user.role);
+    48→
+    49→  // Repli in-app : événements familiaux récents (60 s) — affichés même app ouverte,
+    50→  // et pour les navigateurs sans Web Push (iOS < 16.4, vieux WebView).
+    51→  useEffect(() => {
+    52→    const stop = startInAppNotificationPolling((n) => {
+    53→      toast.info(n.title, { description: n.body });
+    54→    });
+    55→    return stop;
+    56→  }, []);
+    57→
+    58→  return (
+    59→    <div className="relative z-10 mx-auto w-full max-w-md px-4 pb-28 pt-4">
+    60→      {/* En-tête */}
+    61→      <header className="mb-4 flex items-center justify-between">
+    62→        <div className="flex items-center gap-2">
+    63→          <img src="/logo-famille.png" alt="" className="h-9 w-9" />
+    64→          <div>
+    65→            <p className="fc-serif text-[17px] font-bold leading-tight text-[#1E4D2B]">Famille.Mbeutetsa</p>
+    66→            <p className="text-[11px] leading-tight text-[#8A9288]">Le registre vivant</p>
+    67→          </div>
+    68→        </div>
+    69→        <button
+    70→          onClick={() => setTab("notif")}
+    71→          className="relative rounded-full p-2 text-[#2A4A3A] hover:bg-[#2A4A3A]/5"
+    72→          aria-label="Notifications"
+    73→        >
+    74→          <Bell className="h-5 w-5" />
+    75→          {session.unreadCount > 0 && (
+    76→            <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#B91C1C] px-1 text-[10px] font-bold text-white">
+    77→              {session.unreadCount > 9 ? "9+" : session.unreadCount}
+    78→            </span>
+    79→          )}
+    80→        </button>
+    81→      </header>
+    82→
+    83→      {tab === "home" && <HomeTab session={session} goTab={setTab} />}
+    84→      {tab === "notif" && <NotifTab session={session} />}
+    85→      {tab === "security" && <SecurityTab session={session} onLoggedOut={onLoggedOut} />}
+    86→      {tab === "admin" && isAdmin && <AdminTab session={session} />}
+    87→
+    88→      {/* Navigation basse — mobile native */}
+    89→      <nav
+    90→        className="fixed inset-x-0 bottom-0 z-20 mx-auto max-w-md border-t border-[#E5DCC0] bg-[#FBF7EA]/95 backdrop-blur"
+    91→        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    92→        aria-label="Navigation principale"
+    93→      >
+    94→        <div className="grid grid-cols-4">
+    95→          <NavBtn active={tab === "home"} onClick={() => setTab("home")} icon={<Home className="h-5 w-5" />} label="Accueil" />
+    96→          <NavBtn
+    97→            active={tab === "notif"}
+    98→            onClick={() => setTab("notif")}
+    99→            icon={<Bell className="h-5 w-5" />}
+   100→            label="Alertes"
+   101→            badge={session.unreadCount}
+   102→          />
+   103→          <NavBtn active={tab === "security"} onClick={() => setTab("security")} icon={<ShieldCheck className="h-5 w-5" />} label="Sécurité" />
+   104→          {isAdmin && <NavBtn active={tab === "admin"} onClick={() => setTab("admin")} icon={<UserPlus className="h-5 w-5" />} label="Secrétariat" />}
+   105→        </div>
+   106→      </nav>
+   107→    </div>
+   108→  );
+   109→}
+   110→
+   111→function NavBtn({
+   112→  active, onClick, icon, label, badge,
+   113→}: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; badge?: number }) {
+   114→  return (
+   115→    <button
+   116→      onClick={onClick}
+   117→      className={`relative flex min-h-[56px] flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium transition-colors ${
+   118→        active ? "text-[#1E4D2B]" : "text-[#8A9288] hover:text-[#2A4A3A]"
+   119→      }`}
+   120→      aria-current={active ? "page" : undefined}
+   121→    >
+   122→      <span className="relative">
+   123→        {icon}
+   124→        {badge != null && badge > 0 && (
+   125→          <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#B91C1C] px-1 text-[9px] font-bold text-white">
+   126→            {badge > 9 ? "9+" : badge}
+   127→          </span>
+   128→        )}
+   129→      </span>
+   130→      {label}
+   131→      {active && <span className="absolute top-0 h-0.5 w-10 rounded-full bg-[#C89F62]" />}
+   132→    </button>
+   133→  );
+   134→}
+   135→
+   136→type FamilyStats = {
+   137→  members: number;
+   138→  treasury: number;
+   139→  events: number;
+   140→  branches: number;
+   141→  announcement: { title: string; body: string } | null;
+   142→};
+   143→
+   144→const UNIVERS_COMING = (label: string) =>
+   145→  `L'univers « ${label} » arrive très bientôt — registre complet, trésor Mobile Money, événements et votes. Vous serez alerté par notification 🔔`;
+   146→
+   147→function StatCard({ value, label }: { value: string; label: string }) {
+   148→  return (
+   149→    <div className="flex flex-col items-center justify-center rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] px-2 py-3 shadow-sm">
+   150→      <p className="fc-serif text-xl font-bold leading-tight text-[#1E4D2B]">{value}</p>
+   151→      <p className="text-center text-[11px] leading-tight text-[#8A9288]">{label}</p>
+   152→    </div>
+   153→  );
+   154→}
+   155→
+   156→function HomeTab({ session, goTab }: { session: SessionData; goTab: (t: "notif" | "security") => void }) {
+   157→  const [stats, setStats] = useState<FamilyStats | null>(null);
+   158→  const [recent, setRecent] = useState<NotificationItem[]>([]);
+   159→
+   160→  useEffect(() => {
+   161→    const t = setTimeout(async () => {
+   162→      const s = await api<{ stats: FamilyStats }>("/api/stats");
+   163→      if (s.ok) setStats(s.stats);
+   164→      const n = await api<{ notifications: NotificationItem[] }>("/api/notifications");
+   165→      if (n.ok) setRecent(n.notifications.filter((x) => !x.read).slice(0, 3));
+   166→    }, 0);
+   167→    return () => clearTimeout(t);
+   168→  }, []);
+   169→
+   170→  return (
+   171→    <div className="space-y-4">
+   172→      {/* Bienvenue */}
+   173→      <FcCard className="overflow-hidden">
+   174→        <div className="bg-[#1E4D2B] px-5 py-4 text-white">
+   175→          <p className="text-[13px] opacity-80">Karibu,</p>
+   176→          <p className="fc-serif text-xl font-bold">{session.user.fullName}</p>
+   177→          {session.member && (
+   178→            <p className="text-[12px] opacity-70">
+   179→              {session.member.branch} · {roleLabel(session.member.role)}
+   180→            </p>
+   181→          )}
+   182→        </div>
+   183→      </FcCard>
+   184→
+   185→      {/* Chiffres de la famille */}
+   186→      <div className="grid grid-cols-3 gap-3">
+   187→        <StatCard value={stats ? String(stats.members) : "…"} label="Membres" />
+   188→        <StatCard
+   189→          value={stats ? `${stats.treasury.toLocaleString("fr-FR")} F` : "…"}
+   190→          label="Caisse familiale"
+   191→        />
+   192→        <StatCard value={stats ? String(stats.events) : "…"} label="Événements" />
+   193→      </div>
+   194→
+   195→      {/* Raccourcis — les univers au service de la famille */}
+   196→      <div>
+   197→        <p className="mb-2 px-1 text-[11px] font-bold uppercase tracking-wide text-[#8A9288]">
+   198→          La famille
+   199→        </p>
+   200→        <div className="grid grid-cols-2 gap-3">
+   201→          <ShortcutCard icon={<Users className="h-5 w-5" />} label="Membres" onClick={() => toast.info(UNIVERS_COMING("Membres"))} />
+   202→          <ShortcutCard icon={<PiggyBank className="h-5 w-5" />} label="Trésor" onClick={() => toast.info(UNIVERS_COMING("Trésor"))} />
+   203→          <ShortcutCard icon={<CalendarDays className="h-5 w-5" />} label="Événements" onClick={() => toast.info(UNIVERS_COMING("Événements"))} />
+   204→          <ShortcutCard icon={<HeartHandshake className="h-5 w-5" />} label="Solidarité" onClick={() => toast.info(UNIVERS_COMING("Solidarité"))} />
+   205→          <ShortcutCard icon={<Vote className="h-5 w-5" />} label="Votes" onClick={() => toast.info(UNIVERS_COMING("Votes"))} />
+   206→          <ShortcutCard icon={<ScrollText className="h-5 w-5" />} label="Mémoire" onClick={() => toast.info(UNIVERS_COMING("Mémoire"))} />
+   207→        </div>
+   208→      </div>
+   209→
+   210→      {/* Annonce du conseil */}
+   211→      {stats?.announcement && (
+   212→        <FcCard className="p-4">
+   213→          <div className="mb-1.5 flex items-center gap-2">
+   214→            <Megaphone className="h-4 w-4 text-[#C89F62]" />
+   215→            <p className="text-[11px] font-bold uppercase tracking-wide text-[#8A9288]">
+   216→              Annonce du conseil
+   217→            </p>
+   218→          </div>
+   219→          <p className="text-[14px] font-semibold text-[#1E4D2B]">{stats.announcement.title}</p>
+   220→          <p className="mt-0.5 text-[13px] leading-relaxed text-[#5C6B60]">{stats.announcement.body}</p>
+   221→        </FcCard>
+   222→      )}
+   223→
+   224→      {/* Alertes non lues */}
+   225→      <FcCard className="p-4">
+   226→        <div className="mb-2 flex items-center justify-between">
+   227→          <div className="flex items-center gap-2">
+   228→            <Bell className="h-4 w-4 text-[#C89F62]" />
+   229→            <p className="text-[11px] font-bold uppercase tracking-wide text-[#8A9288]">
+   230→              Alertes récentes
+   231→            </p>
+   232→          </div>
+   233→          <button
+   234→            onClick={() => goTab("notif")}
+   235→            className="text-[12px] font-medium text-[#2A4A3A] hover:underline"
+   236→          >
+   237→            Tout voir
+   238→          </button>
+   239→        </div>
+   240→        {recent.length === 0 ? (
+   241→          <p className="py-2 text-[13px] text-[#8A9288]">
+   242→            Rien de nouveau — la famille va bien. 🌿
+   243→          </p>
+   244→        ) : (
+   245→          <ul className="space-y-2">
+   246→            {recent.map((n) => (
+   247→              <li key={n.id} className="rounded-xl border border-[#C89F62]/50 bg-[#C89F62]/10 p-3">
+   248→                <div className="flex items-start justify-between gap-2">
+   249→                  <p className="text-[13px] font-bold text-[#1E4D2B]">{n.title}</p>
+   250→                  <PriorityBadge priority={n.priority} />
+   251→                </div>
+   252→                <p className="mt-0.5 line-clamp-2 text-[12px] text-[#5C6B60]">{n.body}</p>
+   253→              </li>
+   254→            ))}
+   255→          </ul>
+   256→        )}
+   257→      </FcCard>
+   258→    </div>
+   259→  );
+   260→}
+   261→function ShortcutCard({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
+   262→  return (
+   263→    <button
+   264→      onClick={onClick}
+   265→      className="flex min-h-[72px] flex-col items-center justify-center gap-1.5 rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3 text-[13px] font-semibold text-[#1E4D2B] shadow-sm transition-all hover:shadow-md active:scale-[0.98]"
+   266→    >
+   267→      <span className="text-[#C89F62]">{icon}</span>
+   268→      {label}
+   269→    </button>
+   270→  );
+   271→}
+   272→
+   273→/* ─────────────────────────── Notifications ─────────────────────────── */
+   274→
+   275→function NotifTab({ session }: { session: SessionData }) {
+   276→  const [items, setItems] = useState<NotificationItem[]>([]);
+   277→  const [loading, setLoading] = useState(true);
+   278→  const [prefs, setPrefs] = useState<{ digestEnabled: boolean; quietStart: number; quietEnd: number; pushEnabled: boolean } | null>(null);
+   279→
+   280→  const load = useCallback(async () => {
+   281→    setLoading(true);
+   282→    const res = await api<{ notifications: NotificationItem[]; prefs: typeof prefs }>("/api/notifications");
+   283→    if (res.ok) {
+   284→      setItems(res.notifications);
+   285→      setPrefs(res.prefs);
+   286→    }
+   287→    setLoading(false);
+   288→  }, []);
+   289→
+   290→  useEffect(() => {
+   291→    const t = setTimeout(load, 0);
+   292→    return () => clearTimeout(t);
+   293→  }, [load]);
+   294→
+   295→  const markRead = async (id: string) => {
+   296→    await api("/api/notifications", { body: { action: "read", id } });
+   297→    setItems((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+   298→  };
+   299→
+   300→  const markAll = async () => {
+   301→    const res = await api<{ readAll: number }>("/api/notifications", { body: { action: "read-all" } });
+   302→    if (res.ok) {
+   303→      setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+   304→      toast.success(`${res.readAll} notification(s) marquée(s) comme lue(s)`);
+   305→    }
+   306→  };
+   307→
+   308→  const toggleDigest = async () => {
+   309→    if (!prefs) return;
+   310→    const res = await api<{ prefs: typeof prefs }>("/api/notifications", {
+   311→      body: { action: "prefs", digestEnabled: !prefs.digestEnabled },
+   312→    });
+   313→    if (res.ok) {
+   314→      setPrefs(res.prefs);
+   315→      toast.success(res.prefs.digestEnabled ? "Résumé quotidien 19h activé" : "Résumé quotidien désactivé");
+   316→    }
+   317→  };
+   318→
+   319→  return (
+   320→    <div className="space-y-4">
+   321→      <FcCard className="p-5">
+   322→        <div className="mb-3 flex items-center justify-between">
+   323→          <div className="flex items-center gap-2">
+   324→            <Bell className="h-5 w-5 text-[#C89F62]" />
+   325→            <h3 className="fc-serif text-lg font-bold text-[#1E4D2B]">Centre d&apos;alertes</h3>
+   326→          </div>
+   327→          <button
+   328→            onClick={markAll}
+   329→            className="flex items-center gap-1 text-[12px] font-medium text-[#2A4A3A] hover:underline"
+   330→          >
+   331→            <CheckCheck className="h-4 w-4" /> Tout lire
+   332→          </button>
+   333→        </div>
+   334→
+   335→        {loading ? (
+   336→          <p className="py-6 text-center text-sm text-[#8A9288]">Chargement…</p>
+   337→        ) : items.length === 0 ? (
+   338→          <p className="py-6 text-center text-sm text-[#8A9288]">
+   339→            Aucune notification pour le moment. Les événements de la famille apparaîtront ici.
+   340→          </p>
+   341→        ) : (
+   342→          <ul className="fc-scroll max-h-96 space-y-2 overflow-y-auto pr-1">
+   343→            {items.map((n) => (
+   344→              <li
+   345→                key={n.id}
+   346→                className={`rounded-2xl border p-3 transition-colors ${
+   347→                  n.read ? "border-[#E5DCC0] bg-[#FFFDF6]" : "border-[#C89F62]/50 bg-[#C89F62]/10"
+   348→                }`}
+   349→              >
+   350→                <div className="mb-1 flex items-start justify-between gap-2">
+   351→                  <p className="text-[14px] font-bold text-[#1E4D2B]">{n.title}</p>
+   352→                  <PriorityBadge priority={n.priority} />
+   353→                </div>
+   354→                <p className="text-[13px] leading-snug text-[#5C6B60]">{n.body}</p>
+   355→                <div className="mt-2 flex items-center justify-between">
+   356→                  <span className="text-[11px] text-[#8A9288]">
+   357→                    {n.univers} · {timeAgo(n.createdAt)}
+   358→                  </span>
+   359→                  {!n.read && (
+   360→                    <button
+   361→                      onClick={() => markRead(n.id)}
+   362→                      className="flex items-center gap-1 text-[11px] font-medium text-[#2A4A3A] hover:underline"
+   363→                    >
+   364→                      <Check className="h-3 w-3" /> Marquer lue
+   365→                    </button>
+   366→                  )}
+   367→                </div>
+   368→              </li>
+   369→            ))}
+   370→          </ul>
+   371→        )}
+   372→      </FcCard>
+   373→
+   374→      {prefs && (
+   375→        <FcCard className="p-5">
+   376→          <h3 className="fc-serif mb-3 text-lg font-bold text-[#1E4D2B]">Préférences</h3>
+   377→          <label className="flex items-center justify-between gap-3 text-[14px] text-[#2B3530]">
+   378→            <span>
+   379→              Résumé quotidien à 19 h
+   380→              <span className="block text-[12px] text-[#8A9288]">Anti-saturation : 1 récapitulatif au lieu de multiples alertes</span>
+   381→            </span>
+   382→            <input
+   383→              type="checkbox"
+   384→              checked={prefs.digestEnabled}
+   385→              onChange={toggleDigest}
+   386→              className="h-5 w-5 accent-[#1F5B3F]"
+   387→            />
+   388→          </label>
+   389→          <p className="mt-3 rounded-xl bg-[#3D6B52]/5 p-3 text-[12px] leading-relaxed text-[#5C6B60]">
+   390→            🔴 Les alertes <strong>critiques</strong> (décès, caisse en déficit) contournent toujours le silence
+   391→            nocturne et le résumé — conformément au règlement de la famille.
+   392→          </p>
+   393→        </FcCard>
+   394→      )}
+   395→    </div>
+   396→  );
+   397→}
+   398→
+   399→/* ─────────────────────────── Sécurité ─────────────────────────── */
+   400→
+   401→/* Carte notifications système — dans Ma sécurité */
+   402→
+   403→function PushCard() {
+   404→  const [state, setState] = useState<PushState>("default");
+   405→  const [busy, setBusy] = useState(false);
+   406→  const [isIOS] = useState(() =>
+   407→    typeof navigator !== "undefined" &&
+   408→    (/iPhone|iPad|iPod/.test(navigator.userAgent) ||
+   409→      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1))
+   410→  );
+   411→
+   412→  useEffect(() => {
+   413→    const t = setTimeout(async () => setState(await getPushState()), 0);
+   414→    return () => clearTimeout(t);
+   415→  }, []);
+   416→
+   417→  const enable = async () => {
+   418→    setBusy(true);
+   419→    const ok = await enablePush();
+   420→    if (ok) setState(await getPushState());
+   421→    setBusy(false);
+   422→  };
+   423→
+   424→  const verify = async () => {
+   425→    setBusy(true);
+   426→    const res = await testPush();
+   427→    if (res.ok) {
+   428→      toast.success("Notification envoyée — regardez votre écran, même vérrouillé 🔔");
+   429→    } else {
+   430→      toast.error(res.error || "Envoi impossible.");
+   431→    }
+   432→    setBusy(false);
+   433→  };
+   434→
+   435→  return (
+   436→    <FcCard className="p-5">
+   437→      <div className="mb-2 flex items-center gap-2">
+   438→        <Bell className="h-5 w-5 text-[#C89F62]" />
+   439→        <h3 className="fc-serif text-lg font-bold text-[#1E4D2B]">Notifications du téléphone</h3>
+   440→      </div>
+   441→      {state === "unsupported" && (
+   442→        <p className="text-[13px] leading-relaxed text-[#8A9288]">
+   443→          {isIOS
+   444→            ? "Sur iPhone : ajoutez d'abord l'app à l'écran d'accueil (Partager → Sur l'écran d'accueil), puis ouvrez-la depuis l'icône."
+   445→            : "Ce navigateur ne prend pas en charge les notifications push."}
+   446→        </p>
+   447→      )}
+   448→      {state === "denied" && (
+   449→        <p className="flex items-center gap-2 text-[13px] text-[#B91C1C]">
+   450→          <BellOff className="h-4 w-4" /> Notifications bloquées — réautorisez-les dans les réglages du site
+   451→          (icône cadenas dans la barre d'adresse).
+   452→        </p>
+   453→      )}
+   454→      {(state === "default" || state === "granted") && (
+   455→        <>
+   456→          <p className="mb-3 text-[13px] leading-relaxed text-[#5C6B60]">
+   457→            Recevez les événements de la famille même application fermée — avec le son et la vibration,
+   458→            comme WhatsApp. Gratuit et illimité.
+   459→          </p>
+   460→          <FcButton onClick={enable} disabled={busy}>
+   461→            {busy ? "Activation…" : "Activer les notifications"}
+   462→          </FcButton>
+   463→        </>
+   464→      )}
+   465→      {state === "subscribed" && (
+   466→        <>
+   467→          <p className="mb-3 flex items-center gap-1.5 text-[13px] font-medium text-[#16A34A]">
+   468→            <ShieldCheck className="h-4 w-4" /> Actives sur cet appareil — même app fermée.
+   469→          </p>
+   470→          <FcButton variant="outline" onClick={verify} disabled={busy}>
+   471→            {busy ? "Envoi…" : "Vérifier que ça sonne sur mon téléphone"}
+   472→          </FcButton>
+   473→        </>
+   474→      )}
+   475→    </FcCard>
+   476→  );
+   477→}
+   478→
+   479→/* Carte installation PWA — dans Ma sécurité */
+   480→
+   481→function InstallCard({ isIOS }: { isIOS: boolean }) {
+   482→  const [available, setAvailable] = useState(false);
+   483→
+   484→  useEffect(() => {
+   485→    const t = setTimeout(() => setAvailable(hasDeferredInstallPrompt()), 0);
+   486→    return () => clearTimeout(t);
+   487→  }, []);
+   488→
+   489→  if (isIOS) {
+   490→    return (
+   491→      <FcCard className="p-5">
+   492→        <h3 className="fc-serif mb-2 text-lg font-bold text-[#1E4D2B]">Installer l'application</h3>
+   493→        <p className="text-[13px] leading-relaxed text-[#5C6B60]">
+   494→          Sur iPhone : touchez <strong>Partager</strong> ⎋ en bas de Safari, puis
+   495→          <strong> « Sur l'écran d'accueil »</strong>. L'icône verte de la famille apparaîtra comme une vraie app.
+   496→        </p>
+   497→      </FcCard>
+   498→    );
+   499→  }
+   500→  return (
+   501→    <FcCard className="p-5">
+   502→      <h3 className="fc-serif mb-2 text-lg font-bold text-[#1E4D2B]">Installer l'application</h3>
+   503→      {available ? (
+   504→        <>
+   505→          <p className="mb-3 text-[13px] text-[#5C6B60]">
+   506→            Ajoutez l'icône verte à votre écran d'accueil — ouverture immédiate, comme WhatsApp.
+   507→          </p>
+   508→          <FcButton
+   509→            onClick={async () => {
+   510→              const res = await promptInstall();
+   511→              if (res === "accepted") toast.success("Famille.Mbeutetsa ajoutée à votre téléphone 📱");
+   512→            }}
+   513→          >
+   514→            Installer sur mon téléphone
+   515→          </FcButton>
+   516→        </>
+   517→      ) : (
+   518→        <p className="text-[13px] leading-relaxed text-[#8A9288]">
+   519→          Ou téléchargez l'application Android :{' '}
+   520→          <a
+   521→            href="/famille-mbeutetsa.apk"
+   522→            className="font-semibold text-[#2A4A3A] underline"
+   523→            target="_blank"
+   524→            rel="noreferrer"
+   525→          >
+   526→            famille-mbeutetsa.apk
+   527→          </a>
+   528→        </p>
+   529→      )}
+   530→    </FcCard>
+   531→  );
+   532→}
+   533→
+   534→function SecurityTab({ session, onLoggedOut }: { session: SessionData; onLoggedOut: () => void }) {
+   535→  const [devices, setDevices] = useState<DeviceItem[]>([]);
+   536→  const [logs, setLogs] = useState<LogItem[]>([]);
+   537→  const [loading, setLoading] = useState(true);
+   538→
+   539→  const load = useCallback(async () => {
+   540→    setLoading(true);
+   541→    const [d, l] = await Promise.all([
+   542→      api<{ devices: DeviceItem[] }>("/api/devices"),
+   543→      api<{ logs: LogItem[] }>("/api/security-log"),
+   544→    ]);
+   545→    if (d.ok) setDevices(d.devices);
+   546→    if (l.ok) setLogs(l.logs);
+   547→    setLoading(false);
+   548→  }, []);
+   549→
+   550→  useEffect(() => {
+   551→    const t = setTimeout(load, 0);
+   552→    return () => clearTimeout(t);
+   553→  }, [load]);
+   554→
+   555→  const revoke = async (dev: DeviceItem) => {
+   556→    const res = await api("/api/devices", { body: { action: "revoke", id: dev.id } });
+   557→    if (res.ok) {
+   558→      toast.success(`« ${dev.name} » n'a plus accès à votre compte.`);
+   559→      load();
+   560→    } else {
+   561→      toast.error(res.error);
+   562→    }
+   563→  };
+   564→
+   565→  const logoutWeb = async () => {
+   566→    const res = await api("/api/auth/logout", { method: "POST" });
+   567→    if (res.ok) {
+   568→      toast.success("Session fermée sur cet appareil.");
+   569→      onLoggedOut();
+   570→    }
+   571→  };
+   572→
+   573→  const [isIOS] = useState(() =>
+   574→    typeof navigator !== "undefined" &&
+   575→    (/iPhone|iPad|iPod/.test(navigator.userAgent) ||
+   576→      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1))
+   577→  );
+   578→
+   579→  return (
+   580→    <div className="space-y-4">
+   581→      <PushCard />
+   582→      <InstallCard isIOS={isIOS} />
+   583→      <FcCard className="p-5">
+   584→        <div className="mb-3 flex items-center gap-2">
+   585→          <Smartphone className="h-5 w-5 text-[#C89F62]" />
+   586→          <h3 className="fc-serif text-lg font-bold text-[#1E4D2B]">Mes appareils</h3>
+   587→        </div>
+   588→        {loading ? (
+   589→          <p className="py-4 text-center text-sm text-[#8A9288]">Chargement…</p>
+   590→        ) : (
+   591→          <ul className="fc-scroll max-h-80 space-y-2 overflow-y-auto pr-1">
+   592→            {devices.map((d) => (
+   593→              <li
+   594→                key={d.id}
+   595→                className={`flex items-center justify-between gap-3 rounded-2xl border p-3 ${
+   596→                  d.revoked ? "border-[#E5DCC0] bg-[#FFFDF6] opacity-60" : "border-[#E5DCC0] bg-[#FFFDF6]"
+   597→                }`}
+   598→              >
+   599→                <div className="min-w-0">
+   600→                  <p className="truncate text-[14px] font-semibold text-[#2B3530]">
+   601→                    {d.name}
+   602→                    {d.current && <span className="ml-2 rounded-full bg-[#3D6B52]/10 px-2 py-0.5 text-[10px] font-bold text-[#2A4A3A]">CET APPAREIL</span>}
+   603→                  </p>
+   604→                  <p className="text-[12px] text-[#8A9288]">
+   605→                    {d.hasPasskey && "🔐 biométrie · "}
+   606→                    {d.hasPush && "🔔 push · "}
+   607→                    vu {timeAgo(d.lastSeen)}
+   608→                    {d.revoked && " · révoqué"}
+   609→                  </p>
+   610→                </div>
+   611→                {!d.revoked && !d.current && (
+   612→                  <button
+   613→                    onClick={() => revoke(d)}
+   614→                    className="shrink-0 rounded-lg p-2 text-[#B91C1C] hover:bg-[#B91C1C]/10"
+   615→                    aria-label={`Révoquer ${d.name}`}
+   616→                  >
+   617→                    <Trash2 className="h-4 w-4" />
+   618→                  </button>
+   619→                )}
+   620→              </li>
+   621→            ))}
+   622→          </ul>
+   623→        )}
+   624→        <p className="mt-3 text-[12px] leading-relaxed text-[#8A9288]">
+   625→          Téléphone perdu ? Utilisez votre code de récupération ou demandez un nouveau code d&apos;accès au
+   626→          secrétaire : tous les appareils seront déconnectés automatiquement.
+   627→        </p>
+   628→      </FcCard>
+   629→
+   630→      <FcCard className="p-5">
+   631→        <div className="mb-3 flex items-center gap-2">
+   632→          <ScrollText className="h-5 w-5 text-[#C89F62]" />
+   633→          <h3 className="fc-serif text-lg font-bold text-[#1E4D2B]">Journal de sécurité</h3>
+   634→        </div>
+   635→        {loading ? (
+   636→          <p className="py-4 text-center text-sm text-[#8A9288]">Chargement…</p>
+   637→        ) : logs.length === 0 ? (
+   638→          <p className="py-4 text-center text-sm text-[#8A9288]">Aucune activité enregistrée.</p>
+   639→        ) : (
+   640→          <ul className="fc-scroll max-h-80 space-y-2 overflow-y-auto pr-1">
+   641→            {logs.map((l) => (
+   642→              <li key={l.id} className="rounded-xl border border-[#E5DCC0] bg-[#FFFDF6] p-3">
+   643→                <div className="flex items-center justify-between gap-2">
+   644→                  <p className="text-[13px] font-semibold text-[#2B3530]">{logLabel(l.action)}</p>
+   645→                  <span className="shrink-0 text-[11px] text-[#8A9288]">{timeAgo(l.createdAt)}</span>
+   646→                </div>
+   647→                {l.detail && <p className="mt-0.5 text-[12px] text-[#5C6B60]">{l.detail}</p>}
+   648→              </li>
+   649→            ))}
+   650→          </ul>
+   651→        )}
+   652→      </FcCard>
+   653→
+   654→      <FcCard className="p-5">
+   655→        <h3 className="fc-serif mb-2 text-lg font-bold text-[#1E4D2B]">Session sur cet appareil</h3>
+   656→        <p className="mb-3 text-[13px] text-[#5C6B60]">
+   657→          Sur mobile, votre session reste active comme WhatsApp — pas besoin de vous déconnecter.
+   658→          « Quitter » sert uniquement aux ordinateurs partagés.
+   659→        </p>
+   660→        <FcButton variant="outline" onClick={logoutWeb}>
+   661→          <LogOut className="h-4 w-4" /> Quitter la session (web)
+   662→        </FcButton>
+   663→      </FcCard>
+   664→    </div>
+   665→  );
+   666→}
+   667→
+   668→export function logLabel(action: string): string {
+   669→  const map: Record<string, string> = {
+   670→    ACTIVATED: "Compte activé",
+   671→    REENROLLED: "Ré-enrôlement (nouvel appareil)",
+   672→    DEVICES_REVOKED: "Anciens appareils révoqués",
+   673→    PASSKEY_REGISTERED: "Biométrie enregistrée",
+   674→    PASSKEY_LOGIN: "Connexion biométrique",
+   675→    PASSKEY_SIMULATED_LOGIN: "Connexion biométrie simulée",
+   676→    PIN_SET: "PIN défini",
+   677→    PIN_FAIL: "Tentative PIN échouée",
+   678→    PIN_LOCKED: "PIN verrouillé (30 min)",
+   679→    PIN_LOGIN: "Connexion par PIN",
+   680→    DEVICE_REVOKED: "Appareil révoqué",
+   681→    RECOVERY_USED: "Code de récupération utilisé",
+   682→    RECOVERY_FAILED: "Code de récupération invalide",
+   683→    MEMBER_PREREGISTERED: "Membre pré-enregistré",
+   684→    CODE_REGENERATED: "Code d'accès régénéré",
+   685→    PUSH_TEST_SENT: "Push de test envoyé",
+   686→    LOGOUT: "Session fermée",
+   687→    CODE_VERIFIED: "Code d'accès vérifié",
+   688→    OTP_REQUESTED: "Code de vérification demandé",
+   689→    OTP_VERIFIED: "Code de vérification validé",
+   690→    OTP_FAILED: "Code de vérification invalide",
+   691→  };
+   692→  return map[action] ?? action;
+   693→}
+   694→
+   695→/* ─────────────────────────── Secrétariat (admin) ─────────────────────────── */
+   696→
+   697→function AdminTab({ session }: { session: SessionData }) {
+   698→  const [members, setMembers] = useState<AdminMember[]>([]);
+   699→  const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
+   700→  const [loading, setLoading] = useState(true);
+   701→  const [fullName, setFullName] = useState("");
+   702→  const [phone, setPhone] = useState("");
+   703→  const [email, setEmail] = useState("");
+   704→  const [branchId, setBranchId] = useState("");
+   705→  const [role, setRole] = useState("ADULTE");
+   706→  const [busy, setBusy] = useState(false);
+   707→  const [lastCode, setLastCode] = useState<{ code: string; name: string } | null>(null);
+   708→  const [copied, setCopied] = useState(false);
+   709→
+   710→  const load = useCallback(async () => {
+   711→    setLoading(true);
+   712→    const res = await api<{ members: AdminMember[]; branches: { id: string; name: string }[] }>("/api/admin/members");
+   713→    if (res.ok) {
+   714→      setMembers(res.members);
+   715→      setBranches(res.branches);
+   716→      setBranchId((prev) => prev || res.branches[0]?.id || "");
+   717→    }
+   718→    setLoading(false);
+   719→  }, []);
+   720→
+   721→  useEffect(() => {
+   722→    const t = setTimeout(load, 0);
+   723→    return () => clearTimeout(t);
+   724→  }, [load]);
+   725→
+   726→  const preRegister = async () => {
+   727→    setBusy(true);
+   728→    try {
+   729→      const res = await api<{ member: { fullName: string }; accessCode: { code: string } }>("/api/admin/members", {
+   730→        body: { fullName, phone, email, branchId, role },
+   731→      });
+   732→      if (!res.ok) throw new Error(res.error);
+   733→      toast.success(`${res.member.fullName} pré-enregistré ✓ Code remis à usage unique.`);
+   734→      setLastCode({ code: res.accessCode.code, name: res.member.fullName });
+   735→      // Événement familial → notification système sur tous les appareils abonnés
+   736→      void familyNotify({
+   737→        title: "Nouveau membre pré-enregistré",
+   738→        body: `${res.member.fullName} — un code d'accès unique lui a été remis par le secrétariat.`,
+   739→        tag: "fc-preregister",
+   740→      });
+   741→      setFullName("");
+   742→      setPhone("");
+   743→      setEmail("");
+   744→      load();
+   745→    } catch (e) {
+   746→      toast.error(e instanceof Error ? e.message : "Pré-enregistrement impossible.");
+   747→    } finally {
+   748→      setBusy(false);
+   749→    }
+   750→  };
+   751→
+   752→  const regenerate = async (m: AdminMember) => {
+   753→    const res = await api<{ accessCode: { code: string } }>("/api/admin/members", {
+   754→      method: "PUT",
+   755→      body: { memberId: m.id },
+   756→    });
+   757→    if (res.ok) {
+   758→      toast.success(`Nouveau code généré pour ${m.fullName}`);
+   759→      setLastCode({ code: res.accessCode.code, name: m.fullName });
+   760→      load();
+   761→    } else {
+   762→      toast.error(res.error);
+   763→    }
+   764→  };
+   765→
+   766→  const copyCode = async (code: string) => {
+   767→    await navigator.clipboard.writeText(code).catch(() => {});
+   768→    setCopied(true);
+   769→    toast.success("Code copié — transmettez-le à usage unique au membre.");
+   770→    setTimeout(() => setCopied(false), 2000);
+   771→  };
+   772→
+   773→  return (
+   774→    <div className="space-y-4">
+   775→      <FcCard className="p-5">
+   776→        <div className="mb-1 flex items-center gap-2">
+   777→          <UserPlus className="h-5 w-5 text-[#C89F62]" />
+   778→          <h3 className="fc-serif text-lg font-bold text-[#1E4D2B]">Pré-enregistrer un membre</h3>
+   779→        </div>
+   780→        <p className="mb-4 text-[13px] text-[#5C6B60]">
+   781→          Remplissez ses informations : le membre n&apos;aura qu&apos;à coller son code pour un accès définitif.
+   782→        </p>
+   783→        <div className="space-y-2">
+   784→          <input
+   785→            value={fullName}
+   786→            onChange={(e) => setFullName(e.target.value)}
+   787→            placeholder="Nom complet *"
+   788→            className="h-[48px] w-full rounded-xl border border-[#C9B98A] bg-[#FFFDF6] px-4 text-[15px] focus:border-[#2A4A3A] focus:outline-none"
+   789→            aria-label="Nom complet"
+   790→          />
+   791→          <div className="grid grid-cols-2 gap-2">
+   792→            <input
+   793→              value={phone}
+   794→              onChange={(e) => setPhone(e.target.value)}
+   795→              placeholder="+237 6…"
+   796→              inputMode="tel"
+   797→              className="h-[48px] w-full rounded-xl border border-[#C9B98A] bg-[#FFFDF6] px-4 text-[15px] focus:border-[#2A4A3A] focus:outline-none"
+   798→              aria-label="Téléphone"
+   799→            />
+   800→            <input
+   801→              value={email}
+   802→              onChange={(e) => setEmail(e.target.value)}
+   803→              placeholder="Email (diaspora)"
+   804→              inputMode="email"
+   805→              className="h-[48px] w-full rounded-xl border border-[#C9B98A] bg-[#FFFDF6] px-4 text-[15px] focus:border-[#2A4A3A] focus:outline-none"
+   806→              aria-label="Email"
+   807→            />
+   808→          </div>
+   809→          <div className="grid grid-cols-2 gap-2">
+   810→            <select
+   811→              value={branchId}
+   812→              onChange={(e) => setBranchId(e.target.value)}
+   813→              className="h-[48px] w-full rounded-xl border border-[#C9B98A] bg-[#FFFDF6] px-3 text-[14px] focus:border-[#2A4A3A] focus:outline-none"
+   814→              aria-label="Branche"
+   815→            >
+   816→              {branches.map((b) => (
+   817→                <option key={b.id} value={b.id}>{b.name}</option>
+   818→              ))}
+   819→            </select>
+   820→            <select
+   821→              value={role}
+   822→              onChange={(e) => setRole(e.target.value)}
+   823→              className="h-[48px] w-full rounded-xl border border-[#C9B98A] bg-[#FFFDF6] px-3 text-[14px] focus:border-[#2A4A3A] focus:outline-none"
+   824→              aria-label="Rôle"
+   825→            >
+   826→              <option value="ADULTE">Adulte (18+)</option>
+   827→              <option value="JUNIOR">Junior (&lt;18)</option>
+   828→              <option value="CHEF_BRANCHE">Chef de branche</option>
+   829→              <option value="SECRETAIRE">Secrétaire</option>
+   830→              <option value="CONSEIL">Conseil</option>
+   831→              <option value="PATRIARCHE">Patriarche</option>
+   832→            </select>
+   833→          </div>
+   834→          <FcButton onClick={preRegister} disabled={busy || fullName.trim().length < 3}>
+   835→            {busy ? "Enregistrement…" : <><KeyRound className="h-5 w-5" /> Pré-enregistrer + générer le code</>}
+   836→          </FcButton>
+   837→        </div>
+   838→
+   839→        {lastCode && (
+   840→          <div className="mt-4 rounded-2xl border-2 border-dashed border-[#1F5B3F] bg-[#1F5B3F]/5 p-4 text-center">
+   841→            <p className="text-xs font-semibold uppercase tracking-wide text-[#5C6B60]">
+   842→              Code d&apos;accès de {lastCode.name} (valable 7 jours)
+   843→            </p>
+   844→            <div className="mt-1 flex items-center justify-center gap-3">
+   845→              <span className="fc-serif text-2xl font-bold tracking-wider text-[#1E4D2B]">{lastCode.code}</span>
+   846→              <button onClick={() => copyCode(lastCode.code)} className="rounded-lg p-2 text-[#2A4A3A] hover:bg-[#2A4A3A]/10" aria-label="Copier le code">
+   847→                {copied ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
+   848→              </button>
+   849→            </div>
+   850→          </div>
+   851→        )}
+   852→      </FcCard>
+   853→
+   854→      <FcCard className="p-5">
+   855→        <div className="mb-3 flex items-center gap-2">
+   856→          <Users className="h-5 w-5 text-[#C89F62]" />
+   857→          <h3 className="fc-serif text-lg font-bold text-[#1E4D2B]">Membres ({members.length})</h3>
+   858→          <button onClick={load} className="ml-auto rounded-lg p-1.5 text-[#2A4A3A] hover:bg-[#2A4A3A]/5" aria-label="Rafraîchir">
+   859→            <RefreshCw className="h-4 w-4" />
+   860→          </button>
+   861→        </div>
+   862→        {loading ? (
+   863→          <p className="py-4 text-center text-sm text-[#8A9288]">Chargement…</p>
+   864→        ) : (
+   865→          <ul className="fc-scroll max-h-96 space-y-2 overflow-y-auto pr-1">
+   866→            {members.map((m) => (
+   867→              <li key={m.id} className="rounded-2xl border border-[#E5DCC0] bg-[#FFFDF6] p-3">
+   868→                <div className="flex items-start justify-between gap-2">
+   869→                  <div className="min-w-0">
+   870→                    <p className="truncate text-[14px] font-bold text-[#1E4D2B]">{m.fullName}</p>
+   871→                    <p className="text-[12px] text-[#8A9288]">
+   872→                      {m.branch} · {roleLabel(m.role)} ·{" "}
+   873→                      {m.activated ? (
+   874→                        <span className="font-semibold text-[#16A34A]">actif</span>
+   875→                      ) : (
+   876→                        <span className="font-semibold text-[#D97706]">pré-enregistré</span>
+   877→                      )}
+   878→                    </p>
+   879→                    {m.activeCode && !m.activated && (
+   880→                      <p className="mt-1 inline-block rounded-lg bg-[#C89F62]/15 px-2 py-0.5 text-[12px] font-bold tracking-wider text-[#7A5B2E]">
+   881→                        {m.activeCode}
+   882→                      </p>
+   883→                    )}
+   884→                  </div>
+   885→                  {!m.activated && (
+   886→                    <button
+   887→                      onClick={() => regenerate(m)}
+   888→                      className="shrink-0 rounded-lg p-2 text-[#2A4A3A] hover:bg-[#2A4A3A]/10"
+   889→                      aria-label={`Régénérer le code de ${m.fullName}`}
+   890→                      title="Régénérer un code (téléphone perdu, code expiré)"
+   891→                    >
+   892→                      <RefreshCw className="h-4 w-4" />
+   893→                    </button>
+   894→                  )}
+   895→                </div>
+   896→              </li>
+   897→            ))}
+   898→          </ul>
+   899→        )}
+   900→      </FcCard>
+   901→
+   902→      <FcCard className="p-5">
+   903→        <div className="flex items-start gap-3">
+   904→          <LifeBuoy className="mt-0.5 h-5 w-5 shrink-0 text-[#D97706]" />
+   905→          <p className="text-[13px] leading-relaxed text-[#5C6B60]">
+   906→            <strong className="text-[#1E4D2B]">Téléphone perdu d&apos;un membre ?</strong> Régénérez simplement son
+   907→            code (bouton ↻) : dès qu&apos;il l&apos;utilisera sur son nouvel appareil, tous les anciens appareils
+   908→            seront déconnectés automatiquement.
+   909→          </p>
+   910→        </div>
+   911→      </FcCard>
+   912→
+   913→      <p className="pb-2 text-center text-[11px] text-[#8A9288]">
+   914→        Connecté en tant que {roleLabel(session.user.role)} · {deviceName()}
+   915→      </p>
+   916→    </div>
+   917→  );
+   918→}
+   919→

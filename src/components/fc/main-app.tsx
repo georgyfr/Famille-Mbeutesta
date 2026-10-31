@@ -8,6 +8,7 @@ import {
 } from "@/lib/fc-push";
 import { AuthFlow } from "./auth-flow";
 import { Dashboard, type SessionData } from "./dashboard";
+import { LocationWizard } from "./location-wizard";
 import { FcSpinner } from "./ui";
 
 /** Décision durable du browser gate (layout.tsx) — survit à l'hydratation React,
@@ -59,6 +60,7 @@ export function MainApp() {
   const [loading, setLoading] = useState(true);
   const [splashMin, setSplashMin] = useState(true);
   const [session, setSession] = useState<SessionData | null>(null);
+  const [locSkipped, setLocSkipped] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   const loadSession = useCallback(async () => {
@@ -78,6 +80,14 @@ export function MainApp() {
     removeLegacyApp();
     // Mode démo (build statique Cloudflare) : simule les API côté navigateur
     if (process.env.NEXT_PUBLIC_DEMO_MODE === "1") installDemoApi();
+    // L'utilisateur a-t-il déjà repoussé l'assistant de localisation ?
+    const t0 = setTimeout(() => {
+      try {
+        setLocSkipped(localStorage.getItem("fc_loc_skipped") === "1");
+      } catch {
+        /* rien */
+      }
+    }, 0);
 
     // Service Worker (push app fermée) + invite d'installation PWA différée (Ma sécurité)
     void initServiceWorker();
@@ -89,6 +99,7 @@ export function MainApp() {
     return () => {
       clearTimeout(t);
       clearTimeout(min);
+      clearTimeout(t0);
       window.removeEventListener("beforeinstallprompt", setDeferredInstallPrompt);
     };
   }, [loadSession]);
@@ -101,14 +112,40 @@ export function MainApp() {
     setSession(null);
   }, []);
 
+  /** Localisation enregistrée → on nettoie le marqueur « plus tard » et on recharge la session. */
+  const handleLocationSaved = useCallback(async () => {
+    try {
+      localStorage.removeItem("fc_loc_skipped");
+    } catch {
+      /* rien */
+    }
+    setLocSkipped(false);
+    await loadSession();
+  }, [loadSession]);
+
+  const skipLocation = useCallback(async () => {
+    try {
+      localStorage.setItem("fc_loc_skipped", "1");
+    } catch {
+      /* rien */
+    }
+    setLocSkipped(true);
+    await loadSession();
+  }, [loadSession]);
+
   const ready = !loading && !splashMin;
+  // Après l'inscription (ou une session sans localisation validée) : l'application DEMANDE
+  // où se trouve la personne — détection automatique modifiable puis enregistrement.
+  const needsLocation = !!session && !session.user.hasLocation && !locSkipped;
 
   return (
     <div ref={rootRef} className="flex flex-1 flex-col">
       {!ready ? (
         <Splash />
+      ) : needsLocation && session ? (
+        <LocationWizard firstRun onSaved={handleLocationSaved} onSkip={skipLocation} />
       ) : session ? (
-        <Dashboard session={session} onLoggedOut={handleLoggedOut} />
+        <Dashboard session={session} onLoggedOut={handleLoggedOut} onRefresh={loadSession} />
       ) : (
         <AuthFlow onReady={handleReady} />
       )}

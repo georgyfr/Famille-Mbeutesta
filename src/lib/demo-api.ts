@@ -1,5 +1,7 @@
 "use client";
 
+import { normalizePhoneIntl, phoneErrorHint } from "./fc-phone";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Mode démo pour le déploiement statique (Cloudflare Pages)
 // Intercepte les appels fetch vers /api/* et les simule avec un « serveur »
@@ -28,6 +30,19 @@ type DemoMember = {
   branchId: string;
   activeCode: string | null;
   codeExpiresAt: string | null;
+  // Localisation réelle (rencontres familiales & GPS)
+  country?: string | null;
+  region?: string | null;
+  department?: string | null;
+  city?: string | null;
+  arrondissement?: string | null;
+  quartier?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  accuracy?: number | null;
+  locationSource?: string | null;
+  locationConfirmed?: boolean;
+  locationUpdatedAt?: string | null;
   createdAt: string;
 };
 
@@ -71,7 +86,7 @@ type DemoDB = {
   pendingRegister: { phone: string; registerToken: string } | null;
 };
 
-const DB_KEY = "fc_demo_db_v1";
+const DB_KEY = "fc_demo_db_v2"; // v2 : purge des anciennes données fictives
 const BRANCHES = [
   { id: "br-douala", name: "Branche Douala" },
   { id: "br-yaounde", name: "Branche Yaoundé" },
@@ -101,13 +116,9 @@ function fakeVapid(): string {
   return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-// Normalisation numéro camerounais (miroir du serveur)
-function normalizePhone(raw: string): string | null {
-  let digits = String(raw ?? "").replace(/\D/g, "");
-  if (digits.startsWith("00237")) digits = digits.slice(5);
-  else if (digits.startsWith("237")) digits = digits.slice(3);
-  if (digits.length !== 9 || !/^[62]/.test(digits)) return null;
-  return "+237" + digits;
+// Normalisation téléphone multi-pays (miroir du serveur, E.164 + rétro-compat CM)
+function normalizePhone(raw: string, country?: unknown): string | null {
+  return normalizePhoneIntl(raw, country);
 }
 
 // Identifiant : 3 à 30 caractères — lettres, chiffres, point, tiret, underscore
@@ -165,40 +176,16 @@ async function checkPassword(password: string, stored: string | undefined): Prom
 
 function seedDB(): DemoDB {
   const now = nowISO();
-  const seedMembers: DemoMember[] = [
-    {
-      id: "m-patriarche", fullName: "Papa Mbeutetsa", phone: "+237699000001", role: "PATRIARCHE",
-      status: "ACTIF", branch: "Branche Douala", branchId: "br-douala", activeCode: null,
-      codeExpiresAt: null, createdAt: now,
-    },
-    {
-      id: "m-secretaire", fullName: "Marie Mbeutetsa", phone: "+237699000002", role: "SECRETAIRE",
-      status: "ACTIF", branch: "Branche Douala", branchId: "br-douala", activeCode: null,
-      codeExpiresAt: null, createdAt: now,
-    },
-    {
-      id: "m-oncle", fullName: "Paul Ekwalla", phone: "+237677000003", role: "CHEF_BRANCHE",
-      status: "PREINSCRIT", branch: "Branche Yaoundé", branchId: "br-yaounde",
-      activeCode: "FC-DEMO-2026", codeExpiresAt: new Date(Date.now() + 7 * 86400e3).toISOString(), createdAt: now,
-    },
-  ];
+  // ── AUCUNE donnée fictive ──
+  // La base démarre VIDE : chaque membre, notification et chiffre affiché
+  // provient uniquement d'actions réelles (inscriptions, événements…).
   return {
-    users: [
-      { id: "u-patriarche", memberId: "m-patriarche", fullName: "Papa Mbeutetsa", phone: "+237699000001", role: "PATRIARCHE" },
-      { id: "u-secretaire", memberId: "m-secretaire", fullName: "Marie Mbeutetsa", phone: "+237699000002", role: "SECRETAIRE" },
-    ],
-    members: seedMembers,
+    users: [],
+    members: [],
     devices: [],
-    notifications: [
-      {
-        id: rid("n"), userId: "u-secretaire", univers: "U1", typeCode: "FAM_NEWS", priority: "NORMALE",
-        title: "Réunion de famille dimanche",
-        body: "La réunion mensuelle se tiendra dimanche à 15 h chez le patriarche, quartier Bonamoussadi.",
-        read: false, createdAt: now,
-      },
-    ],
+    notifications: [],
     logs: [
-      { id: rid("l"), userId: null, action: "SEED_DEMO", detail: "Base de démonstration initialisée (mode démo Cloudflare)", createdAt: now },
+      { id: rid("l"), userId: null, action: "SEED_EMPTY", detail: "Base initialisée vide — aucune donnée fictive", createdAt: now },
     ],
     prefs: { digestEnabled: true, quietStart: 19, quietEnd: 7, pushEnabled: true },
     session: null,
@@ -245,18 +232,41 @@ async function handleApi(url: string, method: string, body: Record<string, unkno
   const d = db();
 
   // ── Auth : session ──
+  // ── Géolocalisation d'indicatif : en démo, pas d'IP Cloudflare →
+  //    le client utilise ses replis (fuseau horaire, langue, Cameroun).
+  if (path === "/api/geo" && method === "GET") {
+    return { ok: true, country: null };
+  }
+
   if (path === "/api/auth/session" && method === "GET") {
     const user = currentUser(d);
     if (!user) return { ok: true, session: null };
     const device = d.devices.find((x) => x.id === d.session!.did && !x.revoked) ?? null;
     const member = d.members.find((m) => m.id === user.memberId) ?? null;
+    const location =
+      member && member.locationConfirmed
+        ? {
+            country: member.country ?? null,
+            region: member.region ?? null,
+            department: member.department ?? null,
+            city: member.city ?? null,
+            arrondissement: member.arrondissement ?? null,
+            quartier: member.quartier ?? null,
+            latitude: member.latitude ?? null,
+            longitude: member.longitude ?? null,
+          }
+        : null;
     return {
       ok: true,
       session: {
-        user: { id: user.id, fullName: user.fullName, phone: user.phone, email: null, role: user.role, hasPin: !!user.pinHash },
+        user: {
+          id: user.id, fullName: user.fullName, phone: user.phone, email: null,
+          role: user.role, hasPin: !!user.pinHash, hasLocation: !!location,
+        },
         member: member
           ? { id: member.id, branch: member.branch, role: member.role, status: member.status }
           : null,
+        location,
         device: device ? { id: device.id, name: device.name, type: device.type } : null,
         unreadCount: d.notifications.filter((n) => n.userId === user.id && !n.read).length,
         hasPasskey: false,
@@ -267,8 +277,8 @@ async function handleApi(url: string, method: string, body: Record<string, unkno
   // ── Auth : flux numéro façon WhatsApp ──
   if (path === "/api/auth/phone" && method === "POST") {
     if (body.action === "request") {
-      const phone = normalizePhone(String(body.phone ?? ""));
-      if (!phone) return { ok: false, error: "Numéro camerounais invalide. Exemple : 6 91 23 45 67 (9 chiffres)." };
+      const phone = normalizePhone(String(body.phone ?? ""), body.country);
+      if (!phone) return { ok: false, error: phoneErrorHint(body.country) };
       const code = String(Math.floor(100000 + Math.random() * 900000));
       const verifyToken = rid("vt");
       d.pendingVerify = { phone, code, verifyToken };
@@ -378,13 +388,13 @@ async function handleApi(url: string, method: string, body: Record<string, unkno
       const identifier = normalizeIdentifier(String(body.identifier ?? ""));
       const password = String(body.password ?? "");
       const pseudo = String(body.pseudo ?? "").trim().slice(0, 60);
-      const phone = normalizePhone(String(body.phone ?? ""));
+      const phone = normalizePhone(String(body.phone ?? ""), body.country);
       const deviceName = String(body.deviceName ?? "Appareil").slice(0, 60);
 
       if (!identifier) return { ok: false, error: "Identifiant invalide : 3 à 30 caractères (lettres, chiffres, point, tiret ou underscore)." };
       if (password.length < 6) return { ok: false, error: "Mot de passe trop court : au moins 6 caractères." };
       if (pseudo.length < 2) return { ok: false, error: "Indiquez votre pseudo (au moins 2 caractères)." };
-      if (!phone) return { ok: false, error: "Numéro camerounais invalide. Exemple : 6 91 23 45 67 (9 chiffres)." };
+      if (!phone) return { ok: false, error: phoneErrorHint(body.country) };
 
       // 1. Identifiant déjà pris ?
       if (d.users.some((u) => u.identifier === identifier)) {
@@ -499,21 +509,95 @@ async function handleApi(url: string, method: string, body: Record<string, unkno
     return { ok: true };
   }
 
-  // ── Statistiques du tableau de bord ──
+  // ── Statistiques du tableau de bord — 100 % réelles, comptées depuis la base ──
   if (path === "/api/stats" && method === "GET") {
+    const user = currentUser(d);
     return {
       ok: true,
       stats: {
-        members: 52,
-        treasury: 245000,
-        events: 3,
-        branches: 4,
-        announcement: {
-          title: "Réunion familiale dimanche à 15 h",
-          body: "Chez le Patriarche, quartier Bonamoussadi — présence des chefs de branche requise. Ordre du jour : caisse de solidarité et préparatifs de la fête annuelle.",
-        },
+        members: d.members.length,
+        localized: d.members.filter((m) => m.locationConfirmed).length,
+        branches: BRANCHES.length,
+        unread: user ? d.notifications.filter((n) => n.userId === user.id && !n.read).length : 0,
+        announcement: null,
       },
     };
+  }
+
+  // ── Ma localisation (rencontres familiales & GPS) ──
+  if (path === "/api/me/location" && method === "GET") {
+    const user = currentUser(d);
+    if (!user) return { ok: false, error: "Session expirée." };
+    const member = d.members.find((m) => m.id === user.memberId) ?? null;
+    if (!member || !member.locationConfirmed) return { ok: true, location: null };
+    return {
+      ok: true,
+      location: {
+        country: member.country ?? null, region: member.region ?? null,
+        department: member.department ?? null, city: member.city ?? null,
+        arrondissement: member.arrondissement ?? null, quartier: member.quartier ?? null,
+        latitude: member.latitude ?? null, longitude: member.longitude ?? null,
+        accuracy: member.accuracy ?? null, source: member.locationSource ?? null,
+        updatedAt: member.locationUpdatedAt ?? null,
+      },
+    };
+  }
+  if (path === "/api/me/location" && method === "POST") {
+    const user = currentUser(d);
+    if (!user) return { ok: false, error: "Session expirée." };
+    const member = d.members.find((m) => m.id === user.memberId);
+    if (!member) return { ok: false, error: "Aucun profil membre relié à ce compte." };
+    const s = (v: unknown, max = 80): string | null => {
+      const t = String(v ?? "").trim().slice(0, max);
+      return t.length ? t : null;
+    };
+    const lat = typeof body.latitude === "number" && isFinite(body.latitude) ? Math.max(-90, Math.min(90, body.latitude)) : null;
+    const lon = typeof body.longitude === "number" && isFinite(body.longitude) ? Math.max(-180, Math.min(180, body.longitude)) : null;
+    const country = s(body.country);
+    const city = s(body.city);
+    if (!country && !city && (lat === null || lon === null)) {
+      return { ok: false, error: "Indiquez au moins votre pays ou votre ville (ou activez le GPS)." };
+    }
+    member.country = country;
+    member.region = s(body.region);
+    member.department = s(body.department);
+    member.city = city;
+    member.arrondissement = s(body.arrondissement);
+    member.quartier = s(body.quartier);
+    member.latitude = lat;
+    member.longitude = lon;
+    member.accuracy = typeof body.accuracy === "number" && isFinite(body.accuracy) ? body.accuracy : null;
+    member.locationSource = s(body.source, 12);
+    member.locationConfirmed = true;
+    member.locationUpdatedAt = nowISO();
+    logOne(d, user.id, "LOCATION_SAVED", [member.city, member.region, member.country].filter(Boolean).join(", "));
+    save(d);
+    return { ok: true, location: { /* reflété par /api/auth/session */ } };
+  }
+
+  // ── Annuaire localisé de la famille ──
+  if (path === "/api/family/locations" && method === "GET") {
+    const user = currentUser(d);
+    if (!user) return { ok: false, error: "Session expirée." };
+    const out = d.members
+      .filter((m) => m.locationConfirmed && typeof m.latitude === "number" && typeof m.longitude === "number")
+      .map((m) => ({
+        id: m.id,
+        fullName: m.fullName,
+        phone: m.phone,
+        isMe: m.id === user.memberId,
+        role: m.role,
+        city: m.city ?? null,
+        region: m.region ?? null,
+        department: m.department ?? null,
+        arrondissement: m.arrondissement ?? null,
+        quartier: m.quartier ?? null,
+        country: m.country ?? null,
+        latitude: m.latitude as number,
+        longitude: m.longitude as number,
+        updatedAt: m.locationUpdatedAt ?? null,
+      }));
+    return { ok: true, members: out };
   }
 
   // ── Push ── (le Worker Cloudflare fc-push envoie les vraies notifications système)
