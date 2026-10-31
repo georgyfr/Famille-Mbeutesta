@@ -945,3 +945,20 @@ Stage Summary:
 - Toute la version de production du 30/10 est de retour dans les sources locales (tontine + localisation + carte + épargnes + prêts) — plus aucun risque de régression au prochain déploiement
 - Testé de bout en bout en local (backend réel) : tableau de bord, tontine, épargnes, prêts, membres, stats, carte famille, inscription multi-pays
 - EN ATTENTE : le fichier .env.cloudflare (CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID) pour redéployer https://famille-mbeutetsa.pages.dev — build .next-demo prêt
+
+## Task 29 — Identifiants renouvelés + DÉPLOIEMENT RÉUSSI + sauvegarde GitHub [2026-10-31]
+
+- L'administrateur a fourni de nouveaux identifiants : token Cloudflare (vérifié actif via /user/tokens/verify, expire 2027-10-27) + token GitHub (compte georgyfr)
+- .env.cloudflare recréé : CLOUDFLARE_API_TOKEN=cfut_…605de ; le compte ID qui héberge réellement famille-mbeutetsa.pages.dev est ead74f172a86c9debb937c356976260f (« Famille mbeutetsa », confirmé via /accounts) — l'ID 5ab8107e… fourni par l'admin renvoie « Authentication error » (identifiant utilisateur, pas compte)
+- .env.github créé (GITHUB_TOKEN) — les deux fichiers sont couverts par le pattern .gitignore « .env* » → jamais commités
+- BUILD refait : bash scripts/build-cloudflare.sh OK (stash API routes → build statique DEMO_BUILD=1 → restauration → _worker.js 5,8 Ko) ; textes clés vérifiés dans les chunks (« Tableau de bord », « Finances », « Mes épargnes », « Mes prêts », « …reau de l'association », « Tableau des membres simples »)
+- DÉPLOIEMENT CLOUDFLARE RÉUSSI : bunx wrangler@4 pages deploy .next-demo --project-name famille-mbeutetsa --branch main --commit-dirty=true → 18 fichiers uploadés, déploiement 063f5557
+- VÉRIFICATIONS PRODUCTION (agent-browser, https://famille-mbeutetsa.pages.dev) :
+  - Connexion démo : téléphone 691234567 (Cameroun +237 sélectionné car le navigateur neuf affiche États-Unis +1) → code auto-détecté → création profil « Jean Mbeutetsa » → « Passer pour l'instant » (localisation)
+  - ACCUEIL = TABLEAU DE BORD avec SEULE la carte « Finances — Tontine familiale — réunions du 2ᵉ dimanche, cotisations, épargnes et prêts » ✓ (desktop 1280 + mobile 390) ; note « les autres pages seront ajoutées au fur et à mesure » ✓
+  - Clic carte Finances → page Tontine complète (onglets Réunions / Membres / Mes épargnes / Statistiques + rôles du bureau + calendrier octobre « Réunion tenue ✓ SOMME DU MOIS 100 000 ») ✓
+  - Onglet Mes épargnes → sous-onglets « Mes épargnes » / « Mes prêts » (TOTAL ÉPARGNÉ 0 FCFA, INTÉRÊTS ACQUIS 0 FCFA à 3 %/mois) ; sous-onglet Mes prêts → « L'argent emprunté à la réunion… 3 mois… recalculée chaque mois sur la nouvelle base » ✓
+  - #tontine/membres : « LE BUREAU DE L'ASSOCIATION » (5 membres, en-tête VERT, bordure #C89F62) vs « LES MEMBRES SIMPLES » (6 membres, en-tête SARCELLE, bordure #3D6B72) — couleurs distinctes confirmées par eval ✓
+  - 0 erreur page (agent-browser errors) ; HTTP 200 ; « Tableau de bord » présent dans le HTML SSR (index.txt)
+- SAUVEGARDE GITHUB : dépôt existant georgyfr/Famille-Mbeutesta (public, contient les specs sur main — non touché) ; scan secrets OK (worklog ne cite que des noms de variables, aucun token) ; code poussé sur NOUVELLE branche app-nextjs (git push https://georgyfr:<token>@github.com/... app-nextjs:app-nextjs, token non persisté dans .git/config) ; la perte de workspace ne coûtera plus rien
+- Fin des demandes en attente : tableau de bord par défaut ✓, carte cantine/finance seule ✓, couleurs bureau/simples ✓, Mes épargnes ✓, Prêts ✓ — reste : toute nouvelle fonctionnalité demandée par le bureau
