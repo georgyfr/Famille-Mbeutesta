@@ -53,6 +53,16 @@ export function saveVousRole(r: RoleKey): void {
   }
 }
 
+/** Nouvelle inscription sur l'appareil → le rôle repart à zéro : il sera
+ *  demandé juste après la géolocalisation (assistant RoleWizard). */
+export function clearVousRole(): void {
+  try {
+    localStorage.removeItem(ROLE_KEY);
+  } catch {
+    /* rien */
+  }
+}
+
 /* ══════════════════════════ permissions du bureau ══════════════════════════ */
 
 /** Le taux mensuel : PRÉSIDENT et SECRÉTAIRE uniquement. */

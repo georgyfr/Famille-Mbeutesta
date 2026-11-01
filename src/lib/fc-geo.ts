@@ -327,3 +327,33 @@ export function formatPlace(p: {
 }): string {
   return [p.city, p.region, p.country].filter(Boolean).join(", ");
 }
+
+/* ─── Département du Mfoundi (Yaoundé, région du Centre — Cameroun) ───
+   Le Mfoundi est le département qui abrite Yaoundé : c'est là que vit la
+   majorité de la famille. La carte des membres est donc CENTRÉE sur cette
+   zone (cadre vert) ; les membres situés hors du rectangle restent visibles
+   dans la liste « Hors du Mfoundi » et peuvent être localisés par un clic
+   (« Voir »), avec un retour intuitif à la vue du Mfoundi.
+   Le zoom libre (tuiles OSM jusqu'au niveau 19) permet de descendre jusqu'au
+   quartier et à l'emplacement de la maison. — 100 % gratuit, sans clé API. */
+export const MFOUNDI = {
+  label: "Département du Mfoundi",
+  sousTitre: "Yaoundé · Région du Centre, Cameroun",
+  /** Rectangle englobant généreux du Mfoundi (Yaoundé & périphérie immédiate). */
+  south: 3.72,
+  west: 11.33,
+  north: 4.0,
+  east: 11.69,
+} as const;
+
+export type PointGeo = { latitude: number; longitude: number };
+
+/** Le membre se trouve-t-il dans le département du Mfoundi ? */
+export function estDansMfoundi(p: PointGeo): boolean {
+  return (
+    p.latitude >= MFOUNDI.south &&
+    p.latitude <= MFOUNDI.north &&
+    p.longitude >= MFOUNDI.west &&
+    p.longitude <= MFOUNDI.east
+  );
+}
