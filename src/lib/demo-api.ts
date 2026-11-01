@@ -829,6 +829,12 @@ export function installDemoApi(): void {
     if (url === "/api/push" || url.startsWith("/api/push/") || url.startsWith("/api/notify")) {
       return originalFetch(input as RequestInfo, init);
     }
+    // ── Assistant de route (guidage IA) : fetch RÉEL (même origine) ──
+    // En production, le _worker.js répond (GLM si clé configurée, sinon
+    // conseil local) ; en local, le route Next /api/ai/guide répond.
+    if (url.startsWith("/api/ai/")) {
+      return originalFetch(input as RequestInfo, init);
+    }
 
     const method = (init?.method || (init?.body ? "POST" : "GET")).toUpperCase();
     let body: Record<string, unknown> = {};

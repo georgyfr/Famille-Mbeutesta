@@ -397,3 +397,261 @@ export function estDansMfoundi(p: PointGeo): boolean {
     p.longitude <= MFOUNDI.east
   );
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   GUIDAGE ASSISTÉ PAR IA — bouton « S'y rendre »
+   ─────────────────────────────────────────────────────────────────────────
+   L'utilisateur est guidé SANS JAMAIS quitter l'application :
+   • itinéraire turn-by-turn (OSRM, serveur public gratuit — l'IA « s'inspire
+     » des meilleures cartes routières mondiales, sans que l'utilisateur ait
+     besoin de le savoir) ;
+   • suivi régulier de la position (watchPosition) + recalcul automatique en
+     cas de détour ;
+   • suggestions & réponses de l'assistant (GLM via /api/ai/guide — clé
+     gratuite ajoutée côté serveur ; repli local intelligent sans clé).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/** Une étape de l'itinéraire (manœuvre OSRM simplifiée). */
+export type RouteStep = {
+  /** Nom de la rue/route (peut être vide). */
+  name: string;
+  /** Type de manœuvre OSRM : depart, turn, new name, continue, merge, roundabout, arrive… */
+  type: string;
+  /** Direction : left, right, sharp left, uturn, straight… */
+  modifier?: string;
+  /** Longueur de l'étape en mètres. */
+  distanceM: number;
+  /** Position [lat, lng] du point de manœuvre. */
+  location: [number, number];
+};
+
+/** Itinéraire complet avec étapes — pour le guidage pas à pas. */
+export type GuideRoute = RouteInfo & { steps: RouteStep[] };
+
+/** Itinéraire routier DÉTAILLÉ (étapes turn-by-turn) — OSRM gratuit, sans clé. */
+export async function fetchRouteGuide(from: PointGeo, to: PointGeo): Promise<GuideRoute | null> {
+  const url =
+    `https://router.project-osrm.org/route/v1/driving/` +
+    `${from.longitude},${from.latitude};${to.longitude},${to.latitude}` +
+    `?overview=full&geometries=geojson&steps=true`;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 9000);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) return null;
+    const j = (await res.json()) as {
+      routes?: {
+        distance?: number;
+        duration?: number;
+        geometry?: { coordinates?: [number, number][] };
+        legs?: { steps?: { maneuver?: { type?: string; modifier?: string; location?: [number, number] }; name?: string; distance?: number }[] }[];
+      }[];
+    };
+    const r = j.routes?.[0];
+    const coords = r?.geometry?.coordinates;
+    if (!r || !coords || coords.length < 2) return null;
+    const rawSteps = r.legs?.[0]?.steps ?? [];
+    const steps: RouteStep[] = rawSteps
+      .filter((s) => s.maneuver?.location)
+      .map((s) => ({
+        name: (s.name || "").trim(),
+        type: s.maneuver?.type || "continue",
+        modifier: s.maneuver?.modifier,
+        distanceM: Math.round(s.distance ?? 0),
+        location: [s.maneuver!.location![1], s.maneuver!.location![0]] as [number, number],
+      }));
+    return {
+      points: coords.map(([lon, lat]) => [lat, lon] as [number, number]),
+      distanceKm: (r.distance ?? 0) / 1000,
+      minutes: Math.max(1, Math.round((r.duration ?? 0) / 60)),
+      steps,
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/** Traduction française d'une manœuvre OSRM. */
+export function instructionFr(step: RouteStep): string {
+  const rue = step.name ? ` sur ${step.name}` : "";
+  const dist = step.distanceM > 0 ? ` — ${step.distanceM >= 950 ? `${(step.distanceM / 1000).toFixed(1).replace(".", ",")} km` : `${step.distanceM} m`}` : "";
+  switch (step.type) {
+    case "depart":
+      return `Départ${rue}${dist}`;
+    case "arrive":
+      return "Vous êtes arrivé à destination 🎉";
+    case "turn":
+    case "end of road":
+      switch (step.modifier) {
+        case "left": return `Tournez à gauche${rue}${dist}`;
+        case "right": return `Tournez à droite${rue}${dist}`;
+        case "sharp left": return `Tournez franchement à gauche${rue}${dist}`;
+        case "sharp right": return `Tournez franchement à droite${rue}${dist}`;
+        case "slight left": return `Restez légèrement à gauche${rue}${dist}`;
+        case "slight right": return `Restez légèrement à droite${rue}${dist}`;
+        case "uturn": return `Faites demi-tour${rue}${dist}`;
+        default: return `Continuez${rue}${dist}`;
+      }
+    case "new name":
+    case "continue":
+      return `Continuez${rue}${dist}`;
+    case "merge":
+      return `Rejoignez${rue}${dist}`;
+    case "roundabout":
+    case "rotary":
+      return `Prenez le rond-point${rue}${dist}`;
+    case "roundabout turn":
+      return `Au rond-point, ${step.modifier === "left" ? "prenez à gauche" : step.modifier === "right" ? "prenez à droite" : "continuez"}${rue}${dist}`;
+    case "fork":
+      if (step.modifier === "left") return `Restez sur la fourche de gauche${rue}${dist}`;
+      if (step.modifier === "right") return `Restez sur la fourche de droite${rue}${dist}`;
+      return `Restez sur la fourche${rue}${dist}`;
+    case "on ramp":
+      return `Prenez la bretelle${rue}${dist}`;
+    case "off ramp":
+      return `Sortez${rue}${dist}`;
+    default:
+      return `Continuez${rue}${dist}`;
+  }
+}
+
+/** Cap (0-360°, nord = 0) d'un point A vers un point B. */
+export function bearingDeg(a: PointGeo, b: PointGeo): number {
+  const φ1 = (a.latitude * Math.PI) / 180;
+  const φ2 = (b.latitude * Math.PI) / 180;
+  const Δλ = ((b.longitude - a.longitude) * Math.PI) / 180;
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+
+/** Point cardinal en français. */
+export function cardinalFr(deg: number): string {
+  const dirs = ["nord", "nord-est", "est", "sud-est", "sud", "sud-ouest", "ouest", "nord-ouest"];
+  return dirs[Math.round(deg / 45) % 8];
+}
+
+/* ─── Projection d'une position sur le trajet — guidage en temps réel ───
+   Trouve le point le plus proche du polygone routier, la distance restante
+   jusqu'à l'arrivée, et l'index de l'étape en cours. Approximation plate
+   (équirectangulaire) largement suffisante à l'échelle d'une ville. */
+
+export type RouteProgress = {
+  /** Point projeté sur le trajet [lat, lng]. */
+  projete: [number, number];
+  /** Distance du point réel au trajet, en km (hors trajet si > seuil). */
+  ecartKm: number;
+  /** Distance restante à parcourir le long du trajet, en km. */
+  restantKm: number;
+  /** Index de la prochaine étape (manœuvre) dans steps. */
+  etapeIdx: number;
+};
+
+export function progressOnRoute(route: GuideRoute, pos: PointGeo): RouteProgress {
+  const pts = route.points;
+  const R = 6371;
+  const rad = Math.PI / 180;
+  const x = (lng: number) => lng * rad * Math.cos(((pts[0][0] + pos.latitude) / 2) * rad);
+  const y = (lat: number) => lat * rad;
+
+  let best = { i: 0, dist: Number.POSITIVE_INFINITY, t: 0 };
+  for (let i = 0; i < pts.length - 1; i++) {
+    const ax = x(pts[i][1]), ay = y(pts[i][0]);
+    const bx = x(pts[i + 1][1]), by = y(pts[i + 1][0]);
+    const px = x(pos.longitude), py = y(pos.latitude);
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    let t = len2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    const qx = ax + t * dx, qy = ay + t * dy;
+    const d = Math.sqrt((px - qx) ** 2 + (py - qy) ** 2) * R;
+    if (d < best.dist) best = { i, dist: d, t };
+  }
+
+  // Distance restante : projection → fin du segment courant, puis tous les
+  // segments suivants (via Haversine, précis aux petites distances).
+  const hav = haversineKm;
+  let restant = hav(
+    { latitude: pts[best.i][0] + (pts[best.i + 1][0] - pts[best.i][0]) * best.t, longitude: pts[best.i][1] + (pts[best.i + 1][1] - pts[best.i][1]) * best.t },
+    { latitude: pts[best.i + 1][0], longitude: pts[best.i + 1][1] }
+  );
+  for (let i = best.i + 1; i < pts.length - 1; i++) {
+    restant += hav({ latitude: pts[i][0], longitude: pts[i][1] }, { latitude: pts[i + 1][0], longitude: pts[i + 1][1] });
+  }
+
+  // Prochaine étape : la première manœuvre dont le point cumulé dépasse la
+  // position projetée (approximation : distance le long du trajet).
+  let cumul = 0;
+  const avantProj = hav({ latitude: pts[0][0], longitude: pts[0][1] }, { latitude: pts[best.i][0] + (pts[best.i + 1][0] - pts[best.i][0]) * best.t, longitude: pts[best.i][1] + (pts[best.i + 1][1] - pts[best.i][1]) * best.t });
+  let etapeIdx = route.steps.length - 1;
+  for (let s = 0; s < route.steps.length; s++) {
+    cumul += (route.steps[s].distanceM || 0) / 1000;
+    if (cumul >= avantProj) {
+      etapeIdx = Math.min(s, route.steps.length - 1);
+      break;
+    }
+  }
+
+  return {
+    projete: [
+      pts[best.i][0] + (pts[best.i + 1][0] - pts[best.i][0]) * best.t,
+      pts[best.i][1] + (pts[best.i + 1][1] - pts[best.i][1]) * best.t,
+    ],
+    ecartKm: best.dist,
+    restantKm: Math.max(0, restant),
+    etapeIdx,
+  };
+}
+
+/* ─── Étiquettes des quartiers & arrondissements de Yaoundé (Mfoundi) ───
+   Les tuiles OSM standard n'affichent pas toujours les petits quartiers :
+   nous POSONS NOS PROPREs étiquettes (données intégrées, gratuites) sur la
+   carte — toujours lisibles, à partir du zoom adapté. Coordonnées
+   approximatives, suffisantes pour l'orientation. */
+export type QuartierLabel = { nom: string; lat: number; lng: number; arr?: boolean };
+
+export const QUARTIERS_YAOUNDE: QuartierLabel[] = [
+  // Arrondissements (étiquettes plus visibles, zoom ≥ 12)
+  { nom: "Yaoundé I — Nlongkak", lat: 3.874, lng: 11.514, arr: true },
+  { nom: "Yaoundé II — Tsinga", lat: 3.888, lng: 11.522, arr: true },
+  { nom: "Yaoundé III — Efoulan", lat: 3.833, lng: 11.509, arr: true },
+  { nom: "Yaoundé IV — Kondengui", lat: 3.854, lng: 11.526, arr: true },
+  { nom: "Yaoundé V — Essos", lat: 3.875, lng: 11.545, arr: true },
+  { nom: "Yaoundé VI — Biyem-Assi", lat: 3.833, lng: 11.482, arr: true },
+  { nom: "Yaoundé VII — Nkolbisson", lat: 3.872, lng: 11.449, arr: true },
+  // Quartiers (zoom ≥ 13)
+  { nom: "Bastos", lat: 3.887, lng: 11.512 },
+  { nom: "Etoudi", lat: 3.906, lng: 11.533 },
+  { nom: "Emana", lat: 3.929, lng: 11.525 },
+  { nom: "Nsam", lat: 3.895, lng: 11.518 },
+  { nom: "Mokolo", lat: 3.877, lng: 11.504 },
+  { nom: "Cité Verte", lat: 3.872, lng: 11.487 },
+  { nom: "Mimboman", lat: 3.873, lng: 11.536 },
+  { nom: "Essos", lat: 3.874, lng: 11.547 },
+  { nom: "Tsinga", lat: 3.883, lng: 11.518 },
+  { nom: "Nlongkak", lat: 3.874, lng: 11.514 },
+  { nom: "Mvog-Mbi", lat: 3.861, lng: 11.514 },
+  { nom: "Nkoldongo", lat: 3.856, lng: 11.524 },
+  { nom: "Kondengui", lat: 3.855, lng: 11.524 },
+  { nom: "Mvog-Ada", lat: 3.854, lng: 11.533 },
+  { nom: "Ngoa-Ekellé", lat: 3.859, lng: 11.494 },
+  { nom: "Melen", lat: 3.85, lng: 11.498 },
+  { nom: "Mvolyé", lat: 3.849, lng: 11.494 },
+  { nom: "Obili", lat: 3.846, lng: 11.475 },
+  { nom: "Nkolbisson", lat: 3.874, lng: 11.453 },
+  { nom: "Mbankomo", lat: 3.845, lng: 11.43 },
+  { nom: "Efoulan", lat: 3.835, lng: 11.51 },
+  { nom: "Emombo", lat: 3.84, lng: 11.506 },
+  { nom: "Mendong", lat: 3.835, lng: 11.473 },
+  { nom: "Biyem-Assi", lat: 3.839, lng: 11.483 },
+  { nom: "Etoug-Ebé", lat: 3.828, lng: 11.489 },
+  { nom: "Nkolnda", lat: 3.818, lng: 11.493 },
+  { nom: "Odza", lat: 3.799, lng: 11.528 },
+  { nom: "Ahala", lat: 3.815, lng: 11.544 },
+  { nom: "Mvan", lat: 3.81, lng: 11.52 },
+  { nom: "Simbock", lat: 3.834, lng: 11.54 },
+  { nom: "Ekounou", lat: 3.845, lng: 11.55 },
+  { nom: "Nkolfoulou", lat: 3.86, lng: 11.562 },
+];

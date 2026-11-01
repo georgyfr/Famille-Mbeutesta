@@ -43,6 +43,11 @@ interface Env {
   PUSH_ENGINE_URL?: string;
   // SHA-256 hex du code développeur (contrôle d'accès aux routes sensibles)
   DEV_TOKEN_SHA?: string;
+  // Assistant de route GLM (clé GRATUITE — z.ai ou open.bigmodel.cn).
+  // Sans clé : conseil local intelligent calculé par le worker lui-même.
+  GLM_API_KEY?: string;
+  ZAI_API_KEY?: string;
+  GLM_MODEL?: string;
 }
 
 type PushSub = { endpoint: string; keys: { p256dh: string; auth: string } };
@@ -69,6 +74,113 @@ function subKey(endpoint: string): Promise<string> {
 
 const json = (data: Record<string, unknown>, status = 200): Response =>
   new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
+
+/* ── Assistant de route « S'y rendre » (guidage IA) ── */
+
+type GuideBody = {
+  mode?: "question" | "conseil";
+  question?: string | null;
+  destination?: { nom?: string; quartier?: string | null; arrondissement?: string | null; latitude?: number; longitude?: number };
+  position?: { latitude?: number; longitude?: number } | null;
+  trajet?: { km?: number; minutes?: number; etapes?: string[] } | null;
+  restant?: { km?: number; minutes?: number } | null;
+  horsTrajet?: boolean;
+  suivi?: boolean;
+};
+
+/** Conseil local (SANS clé IA) — calculé à partir des données du trajet.
+ *  Garantit que le guidage reste utile même sans GLM configuré. */
+function conseilLocal(b: GuideBody): string {
+  const dest = b.destination?.nom ? `chez ${b.destination.nom}` : "au rendez-vous";
+  const quartier = b.destination?.quartier ? ` (quartier ${b.destination.quartier})` : "";
+  const restant = b.restant ? `Il reste environ ${String(b.restant.km).replace(".", ",")} km (~${b.restant.minutes} min). ` : "";
+  const etape = b.trajet?.etapes?.[0] ? `Prochaine manœuvre : ${b.trajet.etapes[0]}. ` : "";
+  const suivantes = b.trajet?.etapes?.slice(1, 3) ?? [];
+  const apres = suivantes.length ? `Ensuite : ${suivantes.join(", puis ")}. ` : "";
+
+  if (b.mode === "question" && b.question) {
+    const q = b.question.toLowerCase();
+    if (q.includes("perdu") || q.includes("égare") || (b.horsTrajet ?? false)) {
+      return `Pas de panique — le trajet vient d'être recalculé depuis votre position réelle. ${restant}${etape}Avancez calmement : la carte se met à jour automatiquement.`;
+    }
+    if (q.includes("raccourci")) {
+      return `Le trajet affiché est déjà le plus court trouvé sur le réseau routier${quartier}. ${restant}${etape}Évitez les pistes non tracées : restez sur le trajet vert, c'est la voie la plus fiable.`;
+    }
+    if (q.includes("direction") || q.includes("prochaine")) {
+      return `${etape}${restant}Continuez sur le trajet vert affiché.`;
+    }
+    if (q.includes("où") || q.includes("endroit") || q.includes("décris")) {
+      return `Le rendez-vous est ${dest}${quartier}${b.destination?.arrondissement ? `, arrondissement ${b.destination.arrondissement}` : ""}. ${restant}Le pin vert sur la carte marque la maison exacte — zoomez jusqu'à voir les bâtiments, puis utilisez le fond « Satellite » pour reconnaître l'entrée.`;
+    }
+    return `${etape}${apres}${restant}Suivez le trajet vert sur la carte interne.`;
+  }
+
+  if (b.horsTrajet) {
+    return `Vous vous êtes écarté du trajet — je l'ai recalculé depuis votre position. ${restant}${etape}`;
+  }
+  if ((b.restant?.km ?? 1) < 0.2) {
+    return `Vous y êtes presque ! ${etape}Regardez autour du pin vert : le bénéficiaire peut aussi vous guider par téléphone depuis sa fiche.`;
+  }
+  return `${etape}${apres}${restant}Bonne route — tout se passe dans l'application.`;
+}
+
+/** Appel GLM (API gratuite, compatible OpenAI) — z.ai par défaut. */
+async function glmCall(env: Env, b: GuideBody): Promise<string | null> {
+  const key = env.GLM_API_KEY || env.ZAI_API_KEY;
+  if (!key) return null;
+  const model = env.GLM_MODEL || "glm-4.5-flash"; // modèle gratuit z.ai
+  const dest = b.destination ?? {};
+  const contexte = [
+    `Destination : chez ${dest.nom ?? "le bénéficiaire"}${dest.quartier ? `, quartier ${dest.quartier}` : ""}${dest.arrondissement ? `, ${dest.arrondissement}` : ""}, Yaoundé (Mfoundi), Cameroun.`,
+    b.position?.latitude != null ? `Position actuelle de l'utilisateur : ${b.position.latitude.toFixed(5)}, ${b.position.longitude?.toFixed(5)}.` : "",
+    b.trajet ? `Trajet routier total : ${String(b.trajet.km ?? "?").replace(".", ",")} km (~${b.trajet.minutes ?? "?"} min).` : "",
+    b.restant ? `Distance restante : ${String(b.restant.km).replace(".", ",")} km (~${b.restant.minutes} min).` : "",
+    b.trajet?.etapes?.length ? `Prochaines manœuvres : ${b.trajet.etapes.join(" ; ")}.` : "",
+    b.horsTrajet ? "L'utilisateur s'est ÉCARTÉ du trajet (recalcul en cours)." : "",
+    b.suivi ? "Le guidage automatique est ACTIF (position suivie en continu)." : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 12000);
+  try {
+    const res = await fetch("https://api.z.ai/api/paas/v4/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: "system",
+            content:
+              "Tu es l'assistant de route de l'application Famille.Mbeutetsa (tontine familiale à Yaoundé, Cameroun). " +
+              "Tu aides un membre à rejoindre à pied/en voiture la maison du bénéficiaire de la réunion du mois. " +
+              "RÈGLES : réponds UNIQUEMENT en français, ton chaleureux et rassurant ; réponses COURTES (2 à 4 phrases max, ~60 mots) ; " +
+              "base-toi STRICTEMENT sur le contexte fourni (distance, manœuvres, quartiers) — n'invente jamais de nom de rue ; " +
+              "si l'information manque, dis simplement de suivre le trajet vert et d'appeler le bénéficiaire si besoin ; " +
+              "pas de listes à puces, pas de markdown. " +
+              "Tout se passe DANS l'application : ne renvoie jamais vers Google Maps, OpenStreetMap ou un lien externe.",
+          },
+          {
+            role: "user",
+            content:
+              `${b.mode === "question" ? `Question du membre : « ${b.question ?? ""} »\n\n` : "Donne un conseil de guidage spontané, bref.\n\n"}Contexte du guidage :\n${contexte}`,
+          },
+        ],
+        temperature: 0.4,
+        max_tokens: 300,
+      }),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) return null;
+    const j = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    return j.choices?.[0]?.message?.content?.trim() || null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(t);
+  }
+}
 
 async function readBody(req: Request): Promise<Record<string, unknown>> {
   try {
@@ -289,6 +401,14 @@ export default {
         await ntfAppend(env, item);
         const r = await engineCall(env, "/send", { token: adminToken, title, body, url: "/" });
         return json({ ok: r.data.ok === true, sent: r.data.sent ?? 0, failed: r.data.failed ?? 0, id: item.id });
+      }
+
+      /* ── Assistant de route « S'y rendre » — GLM (clé gratuite) ou conseil local ── */
+      if (path === "/api/ai/guide" && method === "POST") {
+        const b = (await readBody(request)) as unknown as GuideBody;
+        const local = conseilLocal(b);
+        const glm = await glmCall(env, b);
+        return json({ ok: true, reply: glm || local, ai: !!glm });
       }
 
       // Route API non gérée par le worker → réponse propre (les routes Next n'existent pas en statique)
