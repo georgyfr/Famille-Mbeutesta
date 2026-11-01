@@ -284,6 +284,46 @@ export function osmViewUrl(p: { latitude: number; longitude: number }, zoom = 15
   return `https://www.openstreetmap.org/?mlat=${p.latitude}&mlon=${p.longitude}#map=${zoom}/${p.latitude}/${p.longitude}`;
 }
 
+/* ─── Itinéraire TRACÉ DANS L'APPLICATION — OSRM (serveur public gratuit,
+   sans clé, sans compte) ───
+   L'utilisateur ne quitte jamais l'application : le trajet est dessiné sur la
+   carte Leaflet interne (fc-route-map.tsx). En cas d'échec (hors connexion,
+   serveur indisponible), la carte trace une ligne droite et la distance
+   Haversine locale est affichée à la place. */
+export type RouteInfo = {
+  points: [number, number][]; // [lat, lng] — trajet routier complet
+  distanceKm: number;
+  minutes: number; // durée estimée en voiture
+};
+
+export async function fetchRoute(from: PointGeo, to: PointGeo): Promise<RouteInfo | null> {
+  const url =
+    `https://router.project-osrm.org/route/v1/driving/` +
+    `${from.longitude},${from.latitude};${to.longitude},${to.latitude}` +
+    `?overview=full&geometries=geojson`;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 9000);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) return null;
+    const j = (await res.json()) as {
+      routes?: { distance?: number; duration?: number; geometry?: { coordinates?: [number, number][] } }[];
+    };
+    const r = j.routes?.[0];
+    const coords = r?.geometry?.coordinates;
+    if (!r || !coords || coords.length < 2) return null;
+    return {
+      points: coords.map(([lon, lat]) => [lat, lon] as [number, number]),
+      distanceKm: (r.distance ?? 0) / 1000,
+      minutes: Math.max(1, Math.round((r.duration ?? 0) / 60)),
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 /* ─── Géocodage avant (adresse → coordonnées) — Nominatim, gratuit sans clé ───
    Sert quand l'utilisateur corrige son adresse après une détection :
    les coordonnées GPS sont recalculées pour coller à la ville corrigée. */

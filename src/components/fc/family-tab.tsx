@@ -12,22 +12,29 @@
 //    à part (« Hors du Mfoundi ») — un clic sur « Voir » vole vers leur position
 //    avec un bandeau explicatif et un bouton « Retour au Mfoundi ».
 //
+// TOUT SE PASSE DANS L'APPLICATION : « Y aller » trace le trajet réel sur la
+// carte INTERNE (OSRM — serveur public gratuit, sans clé) avec la distance et
+// la durée ; repli : ligne droite + distance Haversine locale. L'utilisateur
+// ne quitte jamais l'application — plus aucun lien vers Google Maps/OSM.
+//
 // Tout est gratuit et sans clé API :
 //  • Carte : OpenStreetMap (tuiles libres) + Leaflet (CDN public, sans compte)
+//  • Trajets : OSRM (serveur démo public) — dessinés sur la carte interne
 //  • Distances : calcul Haversine local (dans le téléphone, pas de serveur)
-//  • Itinéraires : liens profonds Google Maps / OpenStreetMap — gratuits,
-//    ils ouvrent directement l'application de navigation du téléphone.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/fc-client";
 import {
-  estDansMfoundi, formatDistance, googleMapsDirectionsUrl, haversineKm, MFOUNDI, osmDirectionsUrl,
+  estDansMfoundi, fetchRoute, formatDistance, haversineKm, MFOUNDI, type PointGeo,
 } from "@/lib/fc-geo";
+import {
+  escapeHtml, loadLeaflet, pinIcon, type LMapLike, type LeafletLike,
+} from "@/lib/fc-leaflet";
 import { FcButton, FcCard } from "./ui";
 import {
-  ArrowLeft, Copy, Crosshair, LocateFixed, MapPin, MapPinned, Navigation, PencilLine, RefreshCw, Route, Users,
+  ArrowLeft, Copy, Crosshair, LocateFixed, MapPin, MapPinned, Navigation, PencilLine, RefreshCw, Users,
 } from "lucide-react";
 
 export type FamilyLocation = {
@@ -47,69 +54,6 @@ export type FamilyLocation = {
   updatedAt?: string | null;
 };
 
-/* ─── Chargement différé de Leaflet (CDN public, gratuit) ─── */
-type LeafletLike = {
-  map: (el: HTMLElement, opts: Record<string, unknown>) => LMapLike;
-  tileLayer: (url: string, opts: Record<string, unknown>) => { addTo: (m: LMapLike) => void };
-  divIcon: (opts: Record<string, unknown>) => unknown;
-  marker: (latlng: [number, number], opts?: Record<string, unknown>) => {
-    addTo: (m: LMapLike) => { bindPopup: (html: string) => void };
-  };
-  polyline: (pts: [number, number][], opts?: Record<string, unknown>) => { addTo: (m: LMapLike) => void };
-  rectangle: (bounds: [[number, number], [number, number]], opts?: Record<string, unknown>) => {
-    addTo: (m: LMapLike) => { bindTooltip: (html: string, opts?: Record<string, unknown>) => void };
-  };
-};
-type LMapLike = {
-  setView: (c: [number, number], z?: number) => LMapLike;
-  remove: () => void;
-  fitBounds: (b: [number, number][], opts?: Record<string, unknown>) => void;
-  removeLayer: (layer: unknown) => LMapLike;
-};
-
-function loadLeaflet(): Promise<LeafletLike> {
-  const w = window as unknown as { L?: LeafletLike };
-  if (w.L) return Promise.resolve(w.L);
-  return new Promise((resolve, reject) => {
-    if (!document.getElementById("fc-leaflet-css")) {
-      const css = document.createElement("link");
-      css.id = "fc-leaflet-css";
-      css.rel = "stylesheet";
-      css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-      document.head.appendChild(css);
-    }
-    const existing = document.getElementById("fc-leaflet-js") as HTMLScriptElement | null;
-    if (existing) {
-      existing.addEventListener("load", () => w.L ? resolve(w.L) : reject(new Error("Leaflet absent")));
-      existing.addEventListener("error", () => reject(new Error("Leaflet indisponible")));
-      return;
-    }
-    const s = document.createElement("script");
-    s.id = "fc-leaflet-js";
-    s.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-    s.onload = () => (w.L ? resolve(w.L) : reject(new Error("Leaflet absent")));
-    s.onerror = () => reject(new Error("Leaflet indisponible"));
-    document.head.appendChild(s);
-  });
-}
-
-const PIN_ME = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="42" viewBox="0 0 30 42"><path d="M15 0C6.7 0 0 6.7 0 15c0 11.2 15 27 15 27s15-15.8 15-27C30 6.7 23.3 0 15 0z" fill="#C89F62"/><circle cx="15" cy="15" r="6" fill="#fff"/></svg>`;
-const PIN_OTHER = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="42" viewBox="0 0 30 42"><path d="M15 0C6.7 0 0 6.7 0 15c0 11.2 15 27 15 27s15-15.8 15-27C30 6.7 23.3 0 15 0z" fill="#1E4D2B"/><circle cx="15" cy="15" r="6" fill="#fff"/></svg>`;
-const PIN_HORS = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="42" viewBox="0 0 30 42"><path d="M15 0C6.7 0 0 6.7 0 15c0 11.2 15 27 15 27s15-15.8 15-27C30 6.7 23.3 0 15 0z" fill="#B85C33"/><circle cx="15" cy="15" r="6" fill="#fff"/></svg>`;
-
-type PinKind = "me" | "other" | "hors";
-
-function pinIcon(L: LeafletLike, kind: PinKind) {
-  const svg = kind === "me" ? PIN_ME : kind === "hors" ? PIN_HORS : PIN_OTHER;
-  return L.divIcon({
-    html: `<img src="data:image/svg+xml;utf8,${encodeURIComponent(svg)}" style="width:30px;height:42px" alt=""/>`,
-    className: "fc-pin",
-    iconSize: [30, 42],
-    iconAnchor: [15, 42],
-    popupAnchor: [0, -40],
-  });
-}
-
 /* Vue de la carte : vue famille (Mfoundi) ou position d'un membre précis. */
 type Vue = { type: "famille" } | { type: "membre"; membre: FamilyLocation };
 
@@ -118,6 +62,7 @@ export function FamilyTab({ onEditLocation }: { onEditLocation: () => void }) {
   const [loading, setLoading] = useState(true);
   const [mapError, setMapError] = useState(false);
   const [vue, setVue] = useState<Vue>({ type: "famille" });
+  const [trajet, setTrajet] = useState<string | null>(null);
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapObj = useRef<LMapLike | null>(null);
   const marqueurTemp = useRef<unknown>(null);
@@ -161,9 +106,9 @@ export function FamilyTab({ onEditLocation }: { onEditLocation: () => void }) {
     if (loading || mapError || members.length === 0) return;
     let cancelled = false;
     loadLeaflet()
-      .then((L) => {
+      .then((L: LeafletLike) => {
         if (cancelled || !mapRef.current || mapObj.current) return;
-        const map = L.map(mapRef.current, { zoomControl: true, attributionControl: true });
+        const map = L.map(mapRef.current, { zoomControl: true, attributionControl: true, scrollWheelZoom: false });
         L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
           maxZoom: 19,
           attribution: "© OpenStreetMap",
@@ -187,18 +132,6 @@ export function FamilyTab({ onEditLocation }: { onEditLocation: () => void }) {
           );
         }
 
-        // Traits pointillés entre moi et les membres proches (dans la zone).
-        if (me && estDansMfoundi(me)) {
-          for (const o of othersDans) {
-            L.polyline([[me.latitude, me.longitude], [o.latitude, o.longitude]], {
-              color: "#C89F62",
-              weight: 2,
-              opacity: 0.55,
-              dashArray: "6 8",
-            }).addTo(map);
-          }
-        }
-
         // Vue initiale : les membres du Mfoundi (ou tout le département si aucun).
         const pts = dansZone.map((m) => [m.latitude, m.longitude] as [number, number]);
         if (pts.length > 0) {
@@ -219,13 +152,19 @@ export function FamilyTab({ onEditLocation }: { onEditLocation: () => void }) {
       }
       marqueurTemp.current = null;
     };
-  }, [loading, mapError, members, me, othersDans, dansZone]);
+  }, [loading, mapError, members, dansZone]);
 
-  /* ─── Vue courante : retour famille ou position d'un membre précis ─── */
+  /* ─── Vue courante : retour famille ou position d'un membre précis + trajet ─── */
   useEffect(() => {
     const L = (window as unknown as { L?: LeafletLike }).L;
     const map = mapObj.current;
     if (!L || !map) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    // Reset du libellé de trajet hors chemin synchrone (évite un rendu en cascade)
+    const resetTrajet = () => {
+      timer = setTimeout(() => setTrajet(null), 0);
+    };
 
     if (marqueurTemp.current) {
       map.removeLayer(marqueurTemp.current);
@@ -233,17 +172,22 @@ export function FamilyTab({ onEditLocation }: { onEditLocation: () => void }) {
     }
 
     if (vue.type === "famille") {
+      resetTrajet();
       const pts = dansZone.map((m) => [m.latitude, m.longitude] as [number, number]);
       if (pts.length > 0) {
         map.fitBounds(pts, { padding: [45, 45], maxZoom: 16 });
       } else {
         map.fitBounds([[MFOUNDI.south, MFOUNDI.west], [MFOUNDI.north, MFOUNDI.east]], { padding: [15, 15] });
       }
-      return;
+      return () => {
+        cancelled = true;
+        if (timer) clearTimeout(timer);
+      };
     }
 
     const m = vue.membre;
     map.setView([m.latitude, m.longitude], 16);
+
     // Marqueur temporaire réservé aux membres HORS du Mfoundi (absents de la
     // carte par défaut) — orange, avec un bandeau explicatif au-dessus.
     if (!estDansMfoundi(m)) {
@@ -255,7 +199,47 @@ export function FamilyTab({ onEditLocation }: { onEditLocation: () => void }) {
       );
       marqueurTemp.current = mk;
     }
-  }, [vue, dansZone]);
+
+    // Trajet INTERNE de vous → ce membre (OSRM, gratuit ; repli ligne droite).
+    // L'application ne s'ouvre jamais ailleurs : tout est dessiné sur cette carte.
+    if (me && !m.isMe) {
+      const moi: PointGeo = { latitude: me.latitude, longitude: me.longitude };
+      const dest: PointGeo = { latitude: m.latitude, longitude: m.longitude };
+      void (async () => {
+        const route = await fetchRoute(moi, dest);
+        if (cancelled || !mapObj.current) return;
+        const carte = mapObj.current;
+        const Lnow = (window as unknown as { L?: LeafletLike }).L;
+        if (!Lnow) return;
+        if (route) {
+          Lnow.polyline(route.points, { color: "#1E4D2B", weight: 4, opacity: 0.85 }).addTo(carte);
+          setTrajet(`Chez ${m.fullName.split(" ")[0]} : ${formatDistance(route.distanceKm)} · ~${route.minutes} min en voiture`);
+        } else {
+          Lnow.polyline([[moi.latitude, moi.longitude], [dest.latitude, dest.longitude]], {
+            color: "#C89F62",
+            weight: 2.5,
+            dashArray: "6 8",
+            opacity: 0.8,
+          }).addTo(carte);
+          setTrajet(`Chez ${m.fullName.split(" ")[0]} : ${formatDistance(haversineKm(moi, dest))} à vol d'oiseau`);
+        }
+        carte.fitBounds(
+          [
+            [moi.latitude, moi.longitude],
+            [dest.latitude, dest.longitude],
+          ],
+          { padding: [45, 45], maxZoom: 16 }
+        );
+      })();
+    } else {
+      resetTrajet();
+    }
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [vue, dansZone, me]);
 
   const voirSurCarte = useCallback((m: FamilyLocation) => {
     setVue({ type: "membre", membre: m });
@@ -365,7 +349,7 @@ export function FamilyTab({ onEditLocation }: { onEditLocation: () => void }) {
         ) : mapError ? (
           <p className="px-4 pb-5 pt-1 text-[12.5px] text-[#8A9288]">
             La carte interactive n&apos;a pas pu charger (connexion limitée). La liste ci-dessous reste pleinement
-            fonctionnelle avec les liens d&apos;itinéraire.
+            fonctionnelle.
           </p>
         ) : (
           <>
@@ -377,7 +361,9 @@ export function FamilyTab({ onEditLocation }: { onEditLocation: () => void }) {
             />
             <p className="border-t border-[#E5DCC0] px-4 py-2 text-[11px] leading-relaxed text-[#8A9288]">
               <span className="font-bold text-[#1E4D2B]">Cadre vert :</span> département du Mfoundi (Yaoundé).
-              Zoomez jusqu&apos;au quartier et à la maison — cartes libres OpenStreetMap, gratuites.
+              Touchez « Y aller » : le trajet se trace sur cette carte — l&apos;application ne s&apos;ouvre jamais
+              ailleurs.
+              {trajet && <span className="ml-1 font-bold text-[#1E4D2B]">{trajet}</span>}
             </p>
           </>
         )}
@@ -415,8 +401,6 @@ export function FamilyTab({ onEditLocation }: { onEditLocation: () => void }) {
                       key={m.id}
                       m={m}
                       distanceLabel={m.distanceKm !== null ? `à ${formatDistance(m.distanceKm)} de vous` : undefined}
-                      showRoute={!!me}
-                      from={me ? { latitude: me.latitude, longitude: me.longitude } : undefined}
                       onCopy={copyCoords}
                       onVoir={() => voirSurCarte(m)}
                     />
@@ -440,8 +424,6 @@ export function FamilyTab({ onEditLocation }: { onEditLocation: () => void }) {
                       key={m.id}
                       m={m}
                       distanceLabel={m.distanceKm !== null ? `à ${formatDistance(m.distanceKm)} de vous` : undefined}
-                      showRoute={!!me}
-                      from={me ? { latitude: me.latitude, longitude: me.longitude } : undefined}
                       onCopy={copyCoords}
                       onVoir={() => voirSurCarte(m)}
                       horsZone
@@ -458,25 +440,19 @@ export function FamilyTab({ onEditLocation }: { onEditLocation: () => void }) {
         )}
 
         <p className="mt-3 text-[11.5px] leading-relaxed text-[#8A9288]">
-          « Y aller » ouvre gratuitement Google Maps (ou OpenStreetMap) avec la position du membre comme
-          destination — le guidage se fait comme pour n&apos;importe quelle adresse.
+          « Y aller » trace le trajet jusqu&apos;au membre sur la carte interne (distance + durée) — tout se passe
+          dans l&apos;application, sans jamais en sortir.
         </p>
       </FcCard>
     </div>
   );
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] ?? c));
-}
-
 function MemberRow({
-  m, distanceLabel, showRoute, from, onCopy, onVoir, highlight, horsZone,
+  m, distanceLabel, onCopy, onVoir, highlight, horsZone,
 }: {
   m: FamilyLocation;
   distanceLabel?: string;
-  showRoute?: boolean;
-  from?: { latitude: number; longitude: number };
   onCopy: (m: FamilyLocation) => void;
   onVoir?: (m: FamilyLocation) => void;
   highlight?: boolean;
@@ -510,14 +486,13 @@ function MemberRow({
           )}
         </div>
         <div className="flex shrink-0 items-start gap-0.5">
-          {onVoir && (
+          {onVoir && !m.isMe && (
             <button
               onClick={() => onVoir(m)}
-              className="rounded-lg p-2 text-[#2A4A3A] hover:bg-[#2A4A3A]/10"
-              aria-label={`Voir ${m.fullName} sur la carte`}
-              title="Voir sur la carte"
+              className="inline-flex min-h-[36px] items-center gap-1.5 rounded-xl bg-[#1F5B3F] px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-[#184a33]"
+              aria-label={`Y aller chez ${m.fullName} — trajet tracé sur la carte interne`}
             >
-              <Crosshair className="h-4 w-4" />
+              <Navigation className="h-3.5 w-3.5" /> Y aller
             </button>
           )}
           <button
@@ -530,26 +505,6 @@ function MemberRow({
           </button>
         </div>
       </div>
-      {showRoute && from && (
-        <div className="mt-2 flex flex-wrap gap-2">
-          <a
-            href={googleMapsDirectionsUrl(m)}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex min-h-[36px] items-center gap-1.5 rounded-xl bg-[#1F5B3F] px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-[#184a33]"
-          >
-            <Navigation className="h-3.5 w-3.5" /> Y aller (Google Maps)
-          </a>
-          <a
-            href={osmDirectionsUrl(from, m)}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex min-h-[36px] items-center gap-1.5 rounded-xl border border-[#C9B98A] px-3 py-1.5 text-[12.5px] font-semibold text-[#2A4A3A] hover:bg-[#C89F62]/10"
-          >
-            <Route className="h-3.5 w-3.5" /> Itinéraire OSM
-          </a>
-        </div>
-      )}
     </li>
   );
 }
