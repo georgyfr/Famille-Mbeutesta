@@ -11,6 +11,8 @@ import {
 import { AuthFlow } from "./auth-flow";
 import { Dashboard, type SessionData } from "./dashboard";
 import { LocationWizard } from "./location-wizard";
+import { RoleWizard } from "./role-wizard";
+import { loadVousRole } from "./tontine-bureau";
 import { FcSpinner } from "./ui";
 
 /** Décision durable du browser gate (layout.tsx) — survit à l'hydratation React,
@@ -58,11 +60,27 @@ function Splash() {
   );
 }
 
+/** Marqueur « localisation passée » — lié au COMPTE (valeur = uid), pas à
+ *  l'appareil : un autre membre qui s'inscrit sur le même téléphone doit avoir
+ *  son propre parcours d'accueil (localisation puis rôle). */
+function locSkippedActuel(): boolean {
+  try {
+    const uid = localStorage.getItem("fc_uid") ?? "";
+    if (!uid) return false;
+    return localStorage.getItem("fc_loc_skipped") === uid;
+  } catch {
+    return false;
+  }
+}
+
 export function MainApp() {
   const [loading, setLoading] = useState(true);
   const [splashMin, setSplashMin] = useState(true);
   const [session, setSession] = useState<SessionData | null>(null);
   const [locSkipped, setLocSkipped] = useState(false);
+  // Rôle dans la cantine : null = pas encore vérifié (évite un flash de l'écran
+  // de rôle avant la lecture du stockage local).
+  const [roleChoisi, setRoleChoisi] = useState<boolean | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   const loadSession = useCallback(async () => {
@@ -100,13 +118,12 @@ export function MainApp() {
           installDemoApi();
         }
       }
-      // L'utilisateur a-t-il déjà repoussé l'assistant de localisation ?
+      // L'utilisateur a-t-il déjà repoussé l'assistant de localisation (marqueur
+      // lié au COMPTE, pas à l'appareil — valeur = uid) ? A-t-il déjà choisi son
+      // rôle dans la cantine ?
       const t0 = setTimeout(() => {
-        try {
-          setLocSkipped(localStorage.getItem("fc_loc_skipped") === "1");
-        } catch {
-          /* rien */
-        }
+        setLocSkipped(locSkippedActuel());
+        setRoleChoisi(loadVousRole() !== null);
       }, 0);
 
       // Service Worker (push app fermée) + invite d'installation PWA différée (Ma sécurité)
@@ -127,6 +144,11 @@ export function MainApp() {
   }, [loadSession]);
 
   const handleReady = useCallback(async () => {
+    // Inscription ou connexion : on relit l'état de l'appareil — une NOUVELLE
+    // inscription ayant effacé rôle + marqueur « localisation passée »,
+    // l'enchaînement est : géolocalisation PUIS rôle dans la cantine.
+    setLocSkipped(locSkippedActuel());
+    setRoleChoisi(loadVousRole() !== null);
     await loadSession();
   }, [loadSession]);
 
@@ -146,8 +168,11 @@ export function MainApp() {
   }, [loadSession]);
 
   const skipLocation = useCallback(async () => {
+    // Marqueur « localisation plus tard » lié au compte (valeur = uid) : un
+    // autre membre qui s'inscrit sur le même appareil doit avoir SON parcours.
     try {
-      localStorage.setItem("fc_loc_skipped", "1");
+      const uid = localStorage.getItem("fc_uid") ?? "";
+      if (uid) localStorage.setItem("fc_loc_skipped", uid);
     } catch {
       /* rien */
     }
@@ -155,10 +180,18 @@ export function MainApp() {
     await loadSession();
   }, [loadSession]);
 
+  /** Rôle validé juste après la géolocalisation → on entre dans l'application. */
+  const handleRoleDone = useCallback(() => {
+    setRoleChoisi(true);
+  }, []);
+
   const ready = !loading && !splashMin;
   // Après l'inscription (ou une session sans localisation validée) : l'application DEMANDE
   // où se trouve la personne — détection automatique modifiable puis enregistrement.
   const needsLocation = !!session && !session.user.hasLocation && !locSkipped;
+  // JUSTE APRÈS la géolocalisation : le rôle dans la cantine (président,
+  // secrétaire, trésorier…) — il ouvre la page du bureau et les droits associés.
+  const needsRole = !!session && !needsLocation && roleChoisi === false;
 
   return (
     <div ref={rootRef} className="flex flex-1 flex-col">
@@ -166,6 +199,8 @@ export function MainApp() {
         <Splash />
       ) : needsLocation && session ? (
         <LocationWizard firstRun onSaved={handleLocationSaved} onSkip={skipLocation} />
+      ) : needsRole && session ? (
+        <RoleWizard onDone={handleRoleDone} />
       ) : session ? (
         <Dashboard session={session} onLoggedOut={handleLoggedOut} onRefresh={loadSession} />
       ) : (
