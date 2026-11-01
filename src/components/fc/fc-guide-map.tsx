@@ -580,7 +580,7 @@ export function FcGuideMap({ dest, onFermer }: { dest: DestCarte; onFermer: () =
                         {m.texte}
                         {m.de === "ia" && m.iaReel === false && (
                           <span className="mt-1 block text-[10px] italic text-[#8A9288]">
-                            (conseil calculé hors ligne — la clé IA gratuite n&apos;est pas encore ajoutée)
+                            (conseil calculé hors ligne — assistant IA momentanément indisponible)
                           </span>
                         )}
                       </div>
