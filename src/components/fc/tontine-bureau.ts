@@ -61,9 +61,9 @@ export const peutGererTaux = (r: RoleKey | null) => r === "president" || r === "
 /** Valider les nouvelles épargnes : PRÉSIDENT et SECRÉTAIRE uniquement. */
 export const peutValiderEpargnes = (r: RoleKey | null) => r === "president" || r === "secretariat";
 
-/** Allouer / corriger les dettes (prêts) : les acteurs du bureau de caisse. */
-export const peutGererDettes = (r: RoleKey | null) =>
-  r === "president" || r === "secretariat" || r === "tresorier";
+/** Allouer / corriger les dettes (prêts) : PRÉSIDENT et SECRÉTAIRE uniquement
+ *  (même règle que les épargnes — demande de l'administrateur, 2026-11). */
+export const peutGererDettes = (r: RoleKey | null) => r === "president" || r === "secretariat";
 
 /** Traiter les signalements : tout le bureau. */
 export const peutTraiterSignalements = (r: RoleKey | null) => r !== null && r !== "membre";
@@ -152,6 +152,7 @@ export type Signalement = {
   cibleLabel: string; // libellé lisible — « Épargne de mars · 10 000 FCFA »
   motif: MotifSignalement;
   message: string;
+  vocal?: string | null; // message vocal (data URL audio, MediaRecorder) — facultatif
   auteur: string; // nom du membre qui signale
   auteurRole: RoleKey | null;
   creeLe: string; // ISO
@@ -187,6 +188,7 @@ export function deposerSignalement(input: {
   cibleLabel: string;
   motif: MotifSignalement;
   message: string;
+  vocal?: string | null;
   auteur: string;
   auteurRole: RoleKey | null;
 }): Signalement {
@@ -197,6 +199,7 @@ export function deposerSignalement(input: {
     cibleLabel: input.cibleLabel,
     motif: input.motif,
     message: input.message.trim(),
+    vocal: input.vocal ?? null,
     auteur: input.auteur || "Un membre",
     auteurRole: input.auteurRole,
     creeLe: maintenant(),

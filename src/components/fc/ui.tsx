@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 export function FcWatermark() {
   return (
     <img
-      src="/logo-famille.png"
+      src="/logo-famille.webp"
       alt=""
       aria-hidden
       className="fc-watermark fixed -right-24 top-1/4 w-[420px] max-w-[70vw] opacity-[0.07]"
@@ -17,7 +17,7 @@ export function FcWatermark() {
 export function FcLogo({ size = 96, className }: { size?: number; className?: string }) {
   return (
     <img
-      src="/logo-famille.png"
+      src="/logo-famille.webp"
       alt="Armoiries de la Famille Mbeutetsa"
       width={size}
       height={size}

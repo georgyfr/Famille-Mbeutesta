@@ -45,7 +45,7 @@ function Splash() {
       aria-label="Démarrage de l'application"
     >
       <img
-        src="/logo-famille.png"
+        src="/logo-famille.webp"
         alt="Armoiries de la famille Mbeutetsa"
         className="h-24 w-24 animate-pulse rounded-3xl bg-[#FBF7EA] p-2 shadow-lg ring-1 ring-[#C89F62]/70"
       />

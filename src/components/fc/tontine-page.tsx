@@ -37,12 +37,12 @@
 // tous les calculs affichés en sont dérivés, jamais codés en dur.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
-  AlertTriangle, ArrowLeft, BarChart3, CalendarDays, Check, ChevronRight, Coins, Coffee, Crown, Eye,
-  ClipboardList, FileSearch, FileText, Flag, Gift, HandCoins, Hourglass, Info, Lock, MapPin, Percent, Phone, PiggyBank, Plus,
-  ScrollText, ShieldAlert, Stamp, Trash2, TrendingUp, UserCheck, Users, Wallet, X,
+  AlertTriangle, ArrowLeft, AudioLines, BarChart3, CalendarDays, Check, ChevronRight, Coins, Coffee, Crown, Eye,
+  ClipboardList, FileSearch, FileText, Flag, Gift, HandCoins, Hourglass, Info, Lock, MapPin, Mic, Percent, Phone, PiggyBank, Plus,
+  ScrollText, ShieldAlert, Square, Stamp, Trash2, TrendingUp, UserCheck, Users, Wallet, X,
 } from "lucide-react";
 import { FcButton, FcCard, FcSpinner } from "./ui";
 import {
@@ -1289,7 +1289,7 @@ function RolePage({ role, annee, roster, payes, vousRole, vousName, sigVersion, 
         />
       )}
 
-      {peutGererDettes(vousRole) && (role === "president" || role === "secretariat" || role === "tresorier") && (
+      {peutGererDettes(vousRole) && (role === "president" || role === "secretariat") && (
         <>
           <BureauValidations
             annee={annee}
@@ -1667,8 +1667,10 @@ function TauxParametrable({ taux, onAppliquer, editable = false, vousRole, onSig
     const t = Math.round(Number(val.replace(",", ".")) * 10) / 10;
     if (!isFinite(t) || t < 0 || t > 20) {
       toast.error("Taux invalide — entrez un pourcentage entre 0 et 20 %.");
+      setVal(String(taux)); // on restaure la valeur en vigueur
       return;
     }
+    if (t === taux) return; // pas de changement — aucune décision enregistrée
     onAppliquer(t);
     toast.success(`Décision du bureau enregistrée — taux mensuel réglé à ${fmtTaux(t)} (épargnes et prêts mis à jour).`);
   };
@@ -1708,7 +1710,7 @@ function TauxParametrable({ taux, onAppliquer, editable = false, vousRole, onSig
   return (
     <div className="mt-2.5">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1 rounded-xl border border-[#E5DCC0] bg-[#FFFDF6] px-3 py-2">
+        <div className="flex items-center gap-1 rounded-xl border border-[#C89F62]/60 bg-[#FFFDF6] px-3 py-2">
           <input
             type="number"
             inputMode="decimal"
@@ -1717,20 +1719,25 @@ function TauxParametrable({ taux, onAppliquer, editable = false, vousRole, onSig
             step={0.5}
             value={val}
             onChange={(ev) => setVal(ev.target.value)}
-            aria-label="Taux mensuel en pourcentage"
+            onBlur={() => appliquer()}
+            onKeyDown={(ev) => {
+              if (ev.key === "Enter") {
+                ev.preventDefault();
+                appliquer();
+              }
+            }}
+            aria-label="Taux mensuel en pourcentage — la valeur s'applique en quittant le champ ou avec Entrée"
             className="w-16 bg-transparent text-right text-[15px] font-bold text-[#1E4D2B] outline-none"
           />
           <Percent className="h-4 w-4 text-[#8A6420]" aria-hidden="true" />
         </div>
-        <FcButton onClick={appliquer} className="w-auto">
-          Appliquer le taux
-        </FcButton>
         <Chip cls={CHIP_GOLD}>Par défaut : {fmtTaux(TAUX_DEFAUT)} par mois</Chip>
         {onSignaler && (
           <SignalerButton onClick={() => onSignaler({ cible: "taux", cibleId: null, cibleLabel: `Taux mensuel (${fmtTaux(taux)})` })} />
         )}
       </div>
       <p className="mt-2 text-[11px] leading-relaxed text-[#8A9288]">
+        Tapez la valeur puis <strong className="text-[#1E4D2B]">quittez le champ (ou appuyez sur Entrée)</strong> — le taux s&apos;applique aussitôt, sans bouton.
         Chaque réglage est signé de votre rôle et notifié au membre — qui dispose de 7 jours pour le valider, sinon il est reconnu validé par défaut.
       </p>
     </div>
@@ -1820,19 +1827,14 @@ function EpargnesPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler
       return;
     }
     const now = new Date().toISOString();
-    // Le bureau (président / secrétaire) inscrit d'office une épargne validée ;
-    // le membre propose une épargne qui attend la validation du bureau.
-    const e: Epargne = bureauEpargne
-      ? { id: uid(), month0: m0, capital, statut: "validée", origine: "bureau", valideLe: now, validePar: vousRole, membreConfirmeLe: null, autoValideLe: null }
-      : { id: uid(), month0: m0, capital, statut: "proposée", origine: "membre", valideLe: null, validePar: null, membreConfirmeLe: null, autoValideLe: null };
+    // Le bureau (président / secrétaire) inscrit d'office une épargne validée —
+    // les membres ne peuvent pas ajouter d'épargne (règle du bureau, 2026-11).
+    const e: Epargne =
+      { id: uid(), month0: m0, capital, statut: "validée", origine: "bureau", valideLe: now, validePar: vousRole, membreConfirmeLe: null, autoValideLe: null };
     const next = [...epargnes, e].sort((a, b) => a.month0 - b.month0 || a.id.localeCompare(b.id));
     setEpargnes(next);
     saveEpargnes(next);
-    if (bureauEpargne) {
-      toast.success(`Épargne de ${fmtFcfa(capital)} inscrite au registre pour ${cap(annee[m0].mois)} — le membre dispose de 7 jours pour la valider.`);
-    } else {
-      toast.success(`Épargne de ${fmtFcfa(capital)} proposée pour ${cap(annee[m0].mois)} — en attente de validation du bureau (président ou secrétaire).`);
-    }
+    toast.success(`Épargne de ${fmtFcfa(capital)} inscrite au registre pour ${cap(annee[m0].mois)} — le membre dispose de 7 jours pour la valider.`);
     setMontant("");
   };
 
@@ -1856,14 +1858,6 @@ function EpargnesPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler
     setEpargnes(next);
     saveEpargnes(next);
     toast.success("Merci — décision du bureau validée ✓");
-  };
-
-  /** Le bureau VALIDE la proposition d'un membre (président / secrétaire). */
-  const validerProposition = (id: string) => {
-    const next = epargnes.map((x) => (x.id === id ? bureauValide(x, vousRole) : x));
-    setEpargnes(next);
-    saveEpargnes(next);
-    toast.success(`Proposition validée — le membre dispose de ${DELAI_VALIDATION_JOURS} jours pour confirmer.`);
   };
 
   const appliquerTaux = (t: number) => {
@@ -1948,46 +1942,58 @@ function EpargnesPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler
         />
       </Block>
 
-      <Block
-        title={bureauEpargne ? "Nouvelle épargne — registre du bureau" : "Nouvelle épargne — proposition du membre"}
-        icon={<Plus className="h-4.5 w-4.5" />}
-        note={
-          bureauEpargne
-            ? "En tant que président / secrétaire, l'épargne est inscrite d'office au registre, validée — le membre la valide ensuite (7 jours, sinon validée par défaut)."
-            : "Choisissez le mois du dépôt et la somme : votre épargne part au bureau (président ou secrétaire) pour validation, puis vous n'aurez plus qu'à la valider. Elle apparaît aussitôt dans « Mes mois d'épargne » et met les calendriers à jour."
-        }
-      >
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <select
-            value={moisChoisi}
-            onChange={(ev) => setMoisChoisi(ev.target.value)}
-            aria-label="Mois de l'épargne"
-            className="min-h-[44px] rounded-xl border border-[#E5DCC0] bg-[#FFFDF6] px-3 text-[13px] font-semibold text-[#2B3530] outline-none focus-visible:outline-2 focus-visible:outline-[#C89F62]"
-          >
-            {annee.map((t) => (
-              <option key={t.month0} value={t.month0}>
-                {cap(t.mois)} — réunion le {fmtDateCourte(t.iso)}
-              </option>
-            ))}
-          </select>
-          <div className="flex items-center gap-1 rounded-xl border border-[#E5DCC0] bg-[#FFFDF6] px-3 py-2">
-            <input
-              type="number"
-              inputMode="numeric"
-              min={500}
-              step={500}
-              value={montant}
-              onChange={(ev) => setMontant(ev.target.value)}
-              aria-label="Montant de l'épargne en FCFA"
-              className="w-24 bg-transparent text-right text-[14px] font-bold text-[#1E4D2B] outline-none"
-            />
-            <span className="text-[11px] font-bold text-[#8A9288]">FCFA</span>
+      {/* NOUVELLE ÉPARGNE — RÉSERVÉE AU BUREAU (président / secrétaire) :
+          un membre ne peut PAS ajouter d'épargne (demande de l'administrateur,
+          2026-11). Le membre consulte « Mes mois d'épargne », valide les
+          décisions du bureau et signale un problème si besoin. */}
+      {bureauEpargne ? (
+        <Block
+          title="Nouvelle épargne — registre du bureau"
+          icon={<Plus className="h-4.5 w-4.5" />}
+          note="En tant que président / secrétaire, l'épargne est inscrite d'office au registre, validée — le membre la valide ensuite (7 jours, sinon validée par défaut)."
+        >
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <select
+              value={moisChoisi}
+              onChange={(ev) => setMoisChoisi(ev.target.value)}
+              aria-label="Mois de l'épargne"
+              className="min-h-[44px] rounded-xl border border-[#E5DCC0] bg-[#FFFDF6] px-3 text-[13px] font-semibold text-[#2B3530] outline-none focus-visible:outline-2 focus-visible:outline-[#C89F62]"
+            >
+              {annee.map((t) => (
+                <option key={t.month0} value={t.month0}>
+                  {cap(t.mois)} — réunion le {fmtDateCourte(t.iso)}
+                </option>
+              ))}
+            </select>
+            <div className="flex items-center gap-1 rounded-xl border border-[#E5DCC0] bg-[#FFFDF6] px-3 py-2">
+              <input
+                type="number"
+                inputMode="numeric"
+                min={500}
+                step={500}
+                value={montant}
+                onChange={(ev) => setMontant(ev.target.value)}
+                aria-label="Montant de l'épargne en FCFA"
+                className="w-24 bg-transparent text-right text-[14px] font-bold text-[#1E4D2B] outline-none"
+              />
+              <span className="text-[11px] font-bold text-[#8A9288]">FCFA</span>
+            </div>
+            <FcButton onClick={ajouter} className="w-auto">
+              Inscrire l&apos;épargne
+            </FcButton>
           </div>
-          <FcButton onClick={ajouter} className="w-auto">
-            {bureauEpargne ? "Inscrire l'épargne" : "Proposer l'épargne"}
-          </FcButton>
+        </Block>
+      ) : (
+        <div className="flex items-start gap-2.5 rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] px-3.5 py-3">
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#C89F62]/18 text-[#8A6420]">
+            <Lock className="h-4 w-4" />
+          </span>
+          <p className="text-[12px] leading-relaxed text-[#5C6B60]">
+            <strong className="text-[#1E4D2B]">Les épargnes sont inscrites par le bureau</strong> — seul le président ou la secrétaire ajoute un dépôt au registre.
+            Vous consultez vos mois d&apos;épargne ci-dessous, vous validez les décisions du bureau, et vous utilisez «&nbsp;Signaler&nbsp;» en cas d&apos;erreur.
+          </p>
         </div>
-      </Block>
+      )}
 
       {rows.length === 0 ? (
         <Block title="Aucune épargne pour le moment" icon={<Info className="h-4.5 w-4.5" />}>
@@ -2316,7 +2322,7 @@ function PretsPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler }:
     return () => clearTimeout(t);
   }, []);
 
-  const bureauDettes = peutGererDettes(vousRole); // président / secrétaire / trésorier
+  const bureauDettes = peutGererDettes(vousRole); // président / secrétaire — un membre ne peut pas allouer de dette
 
   const ajouter = () => {
     const m0 = Number(moisChoisi);
@@ -2326,19 +2332,14 @@ function PretsPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler }:
       return;
     }
     const now = new Date().toISOString();
-    // Le bureau alloue la dette directement (registre officiel) ; le membre
-    // envoie une DEMANDE qui attend la validation du bureau.
-    const pret: Pret = bureauDettes
-      ? { id: uid(), month0: m0, capital, rembourseMois: null, rembourseMontant: 0, statut: "validée", origine: "bureau", valideLe: now, validePar: vousRole, membreConfirmeLe: null, autoValideLe: null }
-      : { id: uid(), month0: m0, capital, rembourseMois: null, rembourseMontant: 0, statut: "proposée", origine: "membre", valideLe: null, validePar: null, membreConfirmeLe: null, autoValideLe: null };
+    // Le bureau (président / secrétaire) alloue la dette directement (registre
+    // officiel) — les membres ne peuvent pas ajouter de dette (2026-11).
+    const pret: Pret =
+      { id: uid(), month0: m0, capital, rembourseMois: null, rembourseMontant: 0, statut: "validée", origine: "bureau", valideLe: now, validePar: vousRole, membreConfirmeLe: null, autoValideLe: null };
     const next = [...prets, pret].sort((a, b) => a.month0 - b.month0 || a.id.localeCompare(b.id));
     setPrets(next);
     savePrets(next);
-    if (bureauDettes) {
-      toast.success(`Dette de ${fmtFcfa(capital)} allouée pour ${cap(annee[m0].mois)} — le membre dispose de 7 jours pour la valider.`);
-    } else {
-      toast.success(`Demande de prêt de ${fmtFcfa(capital)} envoyée pour ${cap(annee[m0].mois)} — le bureau (président, secrétaire ou trésorier) doit l'acter.`);
-    }
+    toast.success(`Dette de ${fmtFcfa(capital)} allouée pour ${cap(annee[m0].mois)} — le membre dispose de 7 jours pour la valider.`);
     setMontant("");
   };
 
@@ -2419,46 +2420,57 @@ function PretsPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler }:
         />
       </Block>
 
-      <Block
-        title={bureauDettes ? "Nouvelle dette — registre du bureau" : "Nouvelle demande de prêt"}
-        icon={<Plus className="h-4.5 w-4.5" />}
-        note={
-          bureauDettes
-            ? "En tant qu'acteur du bureau, la dette est allouée d'office au membre — il ne pourra ni la modifier ni la supprimer, seulement la rembourser ou la signaler."
-            : "Choisissez le mois et la somme demandée : votre demande part au bureau pour acte — une fois allouée, la dette ne peut plus être modifiée par vous (seuls remboursement et signalement restent possibles)."
-        }
-      >
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <select
-            value={moisChoisi}
-            onChange={(ev) => setMoisChoisi(ev.target.value)}
-            aria-label="Mois du prêt"
-            className="min-h-[44px] rounded-xl border border-[#E5DCC0] bg-[#FFFDF6] px-3 text-[13px] font-semibold text-[#2B3530] outline-none focus-visible:outline-2 focus-visible:outline-[#C89F62]"
-          >
-            {annee.map((t) => (
-              <option key={t.month0} value={t.month0}>
-                {cap(t.mois)} — réunion le {fmtDateCourte(t.iso)}
-              </option>
-            ))}
-          </select>
-          <div className="flex items-center gap-1 rounded-xl border border-[#E5DCC0] bg-[#FFFDF6] px-3 py-2">
-            <input
-              type="number"
-              inputMode="numeric"
-              min={500}
-              step={500}
-              value={montant}
-              onChange={(ev) => setMontant(ev.target.value)}
-              aria-label="Somme demandée en FCFA"
-              className="w-24 bg-transparent text-right text-[14px] font-bold text-[#1E4D2B] outline-none"
-            />
-            <span className="text-[11px] font-bold text-[#8A9288]">FCFA</span>
+      {/* NOUVELLE DETTE — RÉSERVÉE AU BUREAU (président / secrétaire) : un
+          membre ne peut ni ajouter ni modifier une dette — il la rembourse
+          ou la signale (demande de l'administrateur, 2026-11). */}
+      {bureauDettes ? (
+        <Block
+          title="Nouvelle dette — registre du bureau"
+          icon={<Plus className="h-4.5 w-4.5" />}
+          note="En tant que président / secrétaire, la dette est allouée d'office au membre — il ne pourra ni la modifier ni la supprimer, seulement la rembourser ou la signaler."
+        >
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <select
+              value={moisChoisi}
+              onChange={(ev) => setMoisChoisi(ev.target.value)}
+              aria-label="Mois du prêt"
+              className="min-h-[44px] rounded-xl border border-[#E5DCC0] bg-[#FFFDF6] px-3 text-[13px] font-semibold text-[#2B3530] outline-none focus-visible:outline-2 focus-visible:outline-[#C89F62]"
+            >
+              {annee.map((t) => (
+                <option key={t.month0} value={t.month0}>
+                  {cap(t.mois)} — réunion le {fmtDateCourte(t.iso)}
+                </option>
+              ))}
+            </select>
+            <div className="flex items-center gap-1 rounded-xl border border-[#E5DCC0] bg-[#FFFDF6] px-3 py-2">
+              <input
+                type="number"
+                inputMode="numeric"
+                min={500}
+                step={500}
+                value={montant}
+                onChange={(ev) => setMontant(ev.target.value)}
+                aria-label="Somme demandée en FCFA"
+                className="w-24 bg-transparent text-right text-[14px] font-bold text-[#1E4D2B] outline-none"
+              />
+              <span className="text-[11px] font-bold text-[#8A9288]">FCFA</span>
+            </div>
+            <FcButton onClick={ajouter} className="w-auto">
+              Allouer la dette
+            </FcButton>
           </div>
-          <FcButton onClick={ajouter} className="w-auto">
-            {bureauDettes ? "Allouer la dette" : "Demander le prêt"}
-          </FcButton>
+        </Block>
+      ) : (
+        <div className="flex items-start gap-2.5 rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] px-3.5 py-3">
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#B85C33]/14 text-[#B85C33]">
+            <Lock className="h-4 w-4" />
+          </span>
+          <p className="text-[12px] leading-relaxed text-[#5C6B60]">
+            <strong className="text-[#1E4D2B]">Les dettes sont allouées par le bureau</strong> — seul le président ou la secrétaire inscrit un prêt au registre.
+            Vous consultez vos dettes ci-dessous, vous les remboursez à l&apos;échéance, et vous utilisez «&nbsp;Signaler&nbsp;» en cas d&apos;erreur.
+          </p>
         </div>
-      </Block>
+      )}
 
       {rows.length === 0 ? (
         <Block title="Aucun prêt pour le moment" icon={<Info className="h-4.5 w-4.5" />}>
@@ -3024,7 +3036,9 @@ function SignalerButton({ onClick, label, small }: { onClick: () => void; label?
   );
 }
 
-/** Pop-up de signalement — enregistré localement, notifié à TOUS les membres du\n *  bureau ; sans action, la notification réapparaît tous les 3 JOURS jusqu'au\n *  traitement. */
+/** Pop-up de signalement — enregistré localement, notifié à TOUS les membres du\n *  bureau ; sans action, la notification réapparaît tous les 3 JOURS jusqu'au\n *  traitement. Message ÉCRIT et/ou message VOCAL (micro de l'appareil). */
+const VOCAL_MAX_SECONDES = 60; // durée max du message vocal (limite le stockage local)
+
 function SignalementModal({ cible, cibleId, cibleLabel, auteur, auteurRole, onClose, onDepose }: {
   cible: Signalement["cible"]; cibleId: string | null; cibleLabel: string;
   auteur: string; auteurRole: RoleKey;
@@ -3032,12 +3046,84 @@ function SignalementModal({ cible, cibleId, cibleLabel, auteur, auteurRole, onCl
 }) {
   const [motif, setMotif] = useState<MotifSignalement>(cible === "pret" ? "dette_mal_inseree" : cible === "taux" ? "taux" : "montant");
   const [message, setMessage] = useState("");
+  const [vocal, setVocal] = useState<string | null>(null); // data URL audio — enregistré avec le signalement
+  const [enCours, setEnCours] = useState(false);
+  const [secondes, setSecondes] = useState(0);
+  const [micErreur, setMicErreur] = useState<string | null>(null);
+  const recRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const vocalPossible =
+    typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia &&
+    typeof window !== "undefined" && typeof window.MediaRecorder !== "undefined";
+
+  const stopMicro = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setEnCours(false);
+  };
+
+  // Nettoyage du micro si la pop-up se ferme pendant l'enregistrement
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  const demarrerVocal = async () => {
+    setMicErreur(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((m) =>
+        typeof MediaRecorder.isTypeSupported === "function" ? MediaRecorder.isTypeSupported(m) : m === "audio/webm",
+      );
+      const rec = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 24_000 } : { audioBitsPerSecond: 24_000 });
+      chunksRef.current = [];
+      rec.ondataavailable = (ev) => {
+        if (ev.data.size > 0) chunksRef.current.push(ev.data);
+      };
+      rec.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" });
+        const fr = new FileReader();
+        fr.onload = () => setVocal(typeof fr.result === "string" ? fr.result : null);
+        fr.readAsDataURL(blob);
+        stopMicro();
+      };
+      rec.start();
+      recRef.current = rec;
+      setSecondes(0);
+      setEnCours(true);
+      timerRef.current = setInterval(() => {
+        setSecondes((s) => {
+          if (s + 1 >= VOCAL_MAX_SECONDES) {
+            if (recRef.current && recRef.current.state === "recording") recRef.current.stop();
+            return VOCAL_MAX_SECONDES;
+          }
+          return s + 1;
+        });
+      }, 1000);
+    } catch {
+      setMicErreur("Micro indisponible — autorisez l'accès au microphone, ou décrivez le problème par écrit.");
+    }
+  };
+
+  const arreterVocal = () => {
+    if (recRef.current && recRef.current.state === "recording") recRef.current.stop();
+  };
+
   const envoyer = () => {
-    if (message.trim().length < 5) {
-      toast.error("Décrivez le problème en quelques mots (au moins 5 caractères).");
+    if (message.trim().length < 5 && !vocal) {
+      toast.error("Décrivez le problème (5 caractères au moins) OU envoyez un message vocal.");
       return;
     }
-    deposerSignalement({ cible, cibleId, cibleLabel, motif, message, auteur, auteurRole });
+    deposerSignalement({ cible, cibleId, cibleLabel, motif, message, vocal, auteur, auteurRole });
     toast.success("Signalement enregistré — tous les membres du bureau sont notifiés 🔔", {
       description: `Sans action du bureau, un rappel réapparaîtra tous les ${RAPPEL_SIGNALEMENT_JOURS} jours jusqu'au traitement.`,
       duration: 7000,
@@ -3085,24 +3171,74 @@ function SignalementModal({ cible, cibleId, cibleLabel, auteur, auteurRole, onCl
           </div>
           <div>
             <label htmlFor="fc-sig-msg" className="mb-1 block px-1 text-[11px] font-bold uppercase tracking-wide text-[#8A9288]">
-              Décrivez le problème
+              Décrivez le problème — par écrit ou à la voix
             </label>
             <textarea
               id="fc-sig-msg"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              rows={4}
+              rows={3}
               maxLength={600}
               placeholder="Ex : le trésorier a inséré une dette de 15 000 FCFA en mars alors que je n'ai rien emprunté ce mois-là…"
               className="w-full rounded-xl border border-[#E5DCC0] bg-[#FFFDF6] px-3 py-2.5 text-[13px] leading-relaxed text-[#2B3530] outline-none focus-visible:outline-2 focus-visible:outline-[#C89F62]"
             />
             <p className="mt-1 px-1 text-right text-[10.5px] text-[#8A9288]">{message.length}/600</p>
           </div>
+          {/* Message vocal — enregistré au micro, joint au signalement (facultatif) */}
+          <div className="rounded-xl border border-[#E5DCC0] bg-[#FBF7EA] p-3">
+            <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-[#8A9288]">
+              <AudioLines className="h-3.5 w-3.5" /> Message vocal — {vocalPossible ? "facultatif" : "indisponible ici"}
+            </p>
+            {vocalPossible ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {!enCours && !vocal && (
+                  <FcButton onClick={() => void demarrerVocal()} className="w-auto" variant="outline">
+                    <Mic className="h-4 w-4" /> Enregistrer un message vocal
+                  </FcButton>
+                )}
+                {enCours && (
+                  <>
+                    <span className="flex items-center gap-1.5 rounded-full bg-[#B85C33]/12 px-3 py-1.5 text-[12px] font-bold text-[#B85C33]">
+                      <span className="h-2 w-2 animate-pulse rounded-full bg-[#B85C33]" aria-hidden="true" />
+                      Enregistrement… {secondes}s / {VOCAL_MAX_SECONDES}s
+                    </span>
+                    <FcButton onClick={arreterVocal} className="w-auto">
+                      <Square className="h-3.5 w-3.5" /> Arrêter
+                    </FcButton>
+                  </>
+                )}
+                {vocal && !enCours && (
+                  <>
+                    <audio controls src={vocal} className="h-10 max-w-[230px] flex-1" aria-label="Votre message vocal" />
+                    <button
+                      type="button"
+                      onClick={() => setVocal(null)}
+                      aria-label="Supprimer le message vocal"
+                      title="Supprimer le message vocal"
+                      className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#E5DCC0] bg-[#FFFDF6] text-[#8A9288] transition-colors hover:border-[#A5473D]/40 hover:text-[#A5473D]"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </>
+                )}
+                {micErreur && <p className="w-full text-[11px] font-semibold text-[#A5473D]">{micErreur}</p>}
+                {!vocal && !enCours && !micErreur && (
+                  <p className="w-full text-[10.5px] leading-relaxed text-[#8A9288]">
+                    Jusqu&apos;à {VOCAL_MAX_SECONDES} secondes — le vocal est enregistré avec le signalement et écouté par le bureau.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-[11.5px] leading-relaxed text-[#5C6B60]">
+                Votre navigateur ne permet pas l&apos;enregistrement vocal — décrivez le problème par écrit ci-dessus.
+              </p>
+            )}
+          </div>
           <div className="flex items-start gap-2 rounded-xl border border-[#C89F62]/40 bg-[#C89F62]/10 p-3 text-[11.5px] leading-relaxed text-[#7A5B2E]">
             <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
             <p>
-              Tous les membres du bureau (président, vice-président, secrétaire, trésorier, commissaire, censeur) sont notifiés.
-              <strong> Rappel automatique tous les {RAPPEL_SIGNALEMENT_JOURS} jours</strong> tant que le problème n&apos;est pas traité.
+              Tous les membres du bureau (président, vice-président, secrétaire, trésorier, commissaire, censeur) sont notifiés —
+              message écrit et vocal compris. <strong> Rappel automatique tous les {RAPPEL_SIGNALEMENT_JOURS} jours</strong> tant que le problème n&apos;est pas traité.
             </p>
           </div>
           <div className="flex gap-2">
@@ -3173,6 +3309,14 @@ function BureauSignalements({ vousRole, sigVersion, onSignaler }: {
                   <strong>{libelleMotif(s.motif)}</strong> — signalé par {s.auteur}{s.auteurRole && s.auteurRole !== "membre" ? ` (${ROLE_META[s.auteurRole].short})` : ""} le {dateCourte(s.creeLe)}
                 </p>
                 <p className="mt-1.5 rounded-lg bg-[#FBF7EA] px-3 py-2 text-[12px] leading-relaxed text-[#2B3530]">{s.message}</p>
+                {s.vocal && (
+                  <div className="mt-2">
+                    <p className="mb-1 flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">
+                      <AudioLines className="h-3.5 w-3.5" /> Message vocal joint
+                    </p>
+                    <audio controls src={s.vocal} className="h-10 w-full max-w-sm" aria-label={`Message vocal du signalement — ${s.cibleLabel}`} />
+                  </div>
+                )}
                 {!ouvert && s.resolution && (
                   <p className="mt-1.5 rounded-lg bg-[#2F6B45]/8 px-3 py-2 text-[12px] font-semibold leading-relaxed text-[#2F6B45]">
                     Suite donnée{s.traitePar ? ` par ${ROLE_META[s.traitePar].label.toLowerCase()}` : ""} : {s.resolution}
@@ -3595,6 +3739,9 @@ function MesSignalements({ cible, sigVersion, onSignaler }: {
               </Chip>
             </div>
             <p className="mt-1 text-[11.5px] leading-relaxed text-[#5C6B60]">« {s.message} »</p>
+            {s.vocal && (
+              <audio controls src={s.vocal} className="mt-1.5 h-10 w-full max-w-[260px]" aria-label={`Votre message vocal — ${s.cibleLabel}`} />
+            )}
             {s.resolution && (
               <p className="mt-1.5 rounded-lg bg-[#2F6B45]/8 px-3 py-2 text-[12px] font-semibold leading-relaxed text-[#2F6B45]">
                 Suite donnée par le bureau : {s.resolution} ({dateCourte(s.traiteLe ?? s.creeLe)})
