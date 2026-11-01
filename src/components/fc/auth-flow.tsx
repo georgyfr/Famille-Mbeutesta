@@ -137,7 +137,7 @@ export function AuthFlow({ onReady }: { onReady: (name: string) => void }) {
         <div className="relative z-10">
           <div className="mb-12 flex items-center gap-4">
             <img
-              src="/logo-famille.png"
+              src="/logo-famille.webp"
               alt="Armoiries de la famille Mbeutetsa"
               className="h-16 w-16 rounded-2xl bg-[#FBF7EA] p-1.5 shadow-lg ring-1 ring-[#C89F62]/70"
             />
@@ -179,7 +179,7 @@ export function AuthFlow({ onReady }: { onReady: (name: string) => void }) {
 
         <div className="relative z-10 mb-2 flex w-full max-w-md items-center justify-center gap-3 lg:hidden">
           <img
-            src="/logo-famille.png"
+            src="/logo-famille.webp"
             alt="Armoiries de la famille Mbeutetsa"
             className="h-16 w-auto drop-shadow-sm"
           />
@@ -483,7 +483,7 @@ function VerifyScreen({
       <div className="mb-4 rounded-2xl border border-[#E5DCC0] bg-white p-4 shadow-sm">
         <div className="flex items-start gap-3">
           <img
-            src="/logo-famille.png"
+            src="/logo-famille.webp"
             alt=""
             aria-hidden="true"
             className="h-9 w-9 rounded-lg bg-[#FBF7EA] p-0.5 ring-1 ring-[#C89F62]/50"

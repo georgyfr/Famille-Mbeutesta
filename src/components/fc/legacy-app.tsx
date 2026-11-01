@@ -184,7 +184,7 @@ export function LegacyApp() {
         {/* ── En-tête ── */}
         <header className="l-header">
           <div className="l-brand">
-            <img src="/logo-famille.png" alt="Armoiries de la famille Mbeutetsa" className="l-logo" />
+            <img src="/logo-famille.webp" alt="Armoiries de la famille Mbeutetsa" className="l-logo" />
             <div>
               <p className="l-brand-name">Famille.Mbeutetsa</p>
               <p className="l-brand-sub">Le registre vivant</p>
@@ -201,7 +201,7 @@ export function LegacyApp() {
         {/* ══ Parcours d'inscription façon WhatsApp ══ */}
         <div id="l-auth">
           <div className="l-auth-head">
-            <img src="/logo-famille.png" alt="" className="l-auth-logo" />
+            <img src="/logo-famille.webp" alt="" className="l-auth-logo" />
             <p className="l-auth-title">Bienvenue 🌳</p>
             <p className="l-auth-sub">
               Votre numéro de téléphone est votre identifiant — comme sur WhatsApp. Aucun mot de passe à
@@ -239,7 +239,7 @@ export function LegacyApp() {
             </p>
             <div id="l-push" className="l-push" style={{ display: "none" }}>
               <div className="l-push-head">
-                <img src="/logo-famille.png" alt="" className="l-push-logo" />
+                <img src="/logo-famille.webp" alt="" className="l-push-logo" />
                 <p>
                   <b>Famille.Mbeutetsa</b> · à l&apos;instant
                 </p>
