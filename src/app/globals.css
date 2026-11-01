@@ -198,3 +198,25 @@
 .fc-zone-label::before {
   display: none;
 }
+
+/* Étiquette PERMANENTE des pins (nom + quartier) — nos propres données de
+   géocodage, donc toujours lisibles même quand les tuiles OSM n'affichent
+   pas les petits quartiers. Fond vert, texte blanc. La double classe bat
+   la feuille Leaflet (chargée après le CSS de l'app). */
+.fc-pin-label,
+.leaflet-tooltip.fc-pin-label {
+  background: rgba(30, 77, 43, 0.93) !important;
+  border: none !important;
+  border-radius: 999px !important;
+  color: #fff !important;
+  font-size: 10.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.02em;
+  padding: 2px 9px !important;
+  box-shadow: 0 1px 5px rgba(30, 77, 43, 0.4);
+  white-space: nowrap;
+}
+.fc-pin-label::before,
+.leaflet-tooltip.fc-pin-label::before {
+  display: none !important;
+}

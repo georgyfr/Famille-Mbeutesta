@@ -41,11 +41,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertTriangle, ArrowLeft, AudioLines, BarChart3, CalendarDays, Check, ChevronRight, Coins, Coffee, Crown, Eye,
-  ClipboardList, FileSearch, FileText, Flag, Gift, HandCoins, Hourglass, Info, Lock, MapPin, MapPinned, MessageCircle, Mic, Navigation, PencilLine, Percent, Phone, PiggyBank, Plus,
-  ScrollText, Share2, ShieldAlert, Square, Stamp, Trash2, TrendingUp, UserCheck, Users, Wallet, X,
+  ClipboardList, FileSearch, FileText, Flag, Gift, HandCoins, Hourglass, Info, Lock, MapPin, MessageCircle, Mic, PencilLine, Percent, Phone, PiggyBank, Plus,
+  ScrollText, ShieldAlert, Square, Stamp, Trash2, TrendingUp, UserCheck, Users, Wallet, X,
 } from "lucide-react";
 import { api } from "@/lib/fc-client";
-import { googleMapsDirectionsUrl, osmViewUrl, type LocationDraft } from "@/lib/fc-geo";
+import { type LocationDraft } from "@/lib/fc-geo";
+import { FcRouteMap, type DestCarte } from "./fc-route-map";
 import { LocationWizard } from "./location-wizard";
 import { FcButton, FcCard, FcSpinner } from "./ui";
 import {
@@ -1043,18 +1044,30 @@ function FicheReunion({ t, vousId, onFermer }: { t: TourMois; vousId: string; on
   );
 }
 
-/* ══════════════════════════ informations du bénéficiaire ══════════════════════════
+/* ══════════════════════════ fiche du bénéficiaire — pop-up « Voir ses informations » ══════════════════════════
 
    Pop-up « Voir ses informations » — ouverte depuis la bannière de la réunion
    du mois. L'ESSENTIEL y est : le NUMÉRO DE TÉLÉPHONE et la GÉOLOCALISATION,
    pour appeler le bénéficiaire, s'orienter et arriver directement chez lui.
 
    • Bénéficiaire = un autre membre : ses coordonnées (téléphone cliquable,
-     WhatsApp, itinéraire GPS Google Maps / OpenStreetMap si son GPS existe).
+     carte INTERNE avec trajet — l'utilisateur ne quitte jamais l'application).
    • Bénéficiaire = vous : vous MODIFIEZ votre contact et votre géolocalisation,
-     et vous PARTAGEZ votre position (partage natif du téléphone, sinon copie
-     + WhatsApp) pour que chacun puisse se guider jusqu'à votre porte.
-   Tout est gratuit : liens profonds Maps/OSM, partage natif — aucune API payante. */
+     et votre position enregistrée est VISIBLE PAR LA FAMILLE sur la carte
+     famille (onglet Famille) — plus de partage WhatsApp.
+   Tout est gratuit : tuiles OSM + Leaflet + OSRM — aucune API payante. */
+
+/** Position simplifiée de l'annuaire famille — sert au placement sur la carte.
+ *  (Pour un AUTRE membre bénéficiaire, ses coordonnées GPS ne figurent pas dans
+ *  le registre de la tontine : on les retrouve dans l'annuaire par son nom.) */
+type FamilyLocLight = {
+  fullName: string;
+  quartier: string | null;
+  arrondissement: string | null;
+  city: string | null;
+  latitude: number;
+  longitude: number;
+};
 
 function FicheBeneficiaire({ t, vousPhone, onFermer }: { t: TourMois; vousPhone?: string | null; onFermer: () => void }) {
   const b = t.beneficiary;
@@ -1068,6 +1081,9 @@ function FicheBeneficiaire({ t, vousPhone, onFermer }: { t: TourMois; vousPhone?
   // Téléphone affiché/éditable — pour vous il démarre du compte, sinon du membre.
   const [tel, setTel] = useState(estVous ? (vousPhone ?? "") : (b?.phone ?? ""));
   const [enregTel, setEnregTel] = useState(false);
+  // Annuaire famille — place sur la carte un AUTRE membre bénéficiaire (ses
+  // coordonnées GPS ne figurent pas dans le registre de la tontine).
+  const [famLocs, setFamLocs] = useState<FamilyLocLight[] | null>(null);
 
   const chargeLocation = async () => {
     try {
@@ -1101,6 +1117,21 @@ function FicheBeneficiaire({ t, vousPhone, onFermer }: { t: TourMois; vousPhone?
     void chargeLocation();
   }, [estVous]);
 
+  useEffect(() => {
+    let vivant = true;
+    void (async () => {
+      try {
+        const res = await api<{ ok: boolean; members: FamilyLocLight[] }>("/api/family/locations");
+        if (vivant && res.ok) setFamLocs(res.members);
+      } catch {
+        /* hors connexion — la carte simple restera affichée sans trajet */
+      }
+    })();
+    return () => {
+      vivant = false;
+    };
+  }, []);
+
   // Échap pour fermer + verrouille le défilement de la page derrière la fiche
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
@@ -1125,25 +1156,35 @@ function FicheBeneficiaire({ t, vousPhone, onFermer }: { t: TourMois; vousPhone?
       : "";
   const telNet = tel.replace(/[^0-9+]/g, "");
   const waNum = tel.replace(/[^0-9]/g, "").replace(/^0+/, "");
-  const mapsLien = gps ? `https://www.google.com/maps/search/?api=1&query=${gps.latitude},${gps.longitude}` : null;
 
-  const partagerPosition = async () => {
-    if (!mapsLien) return;
-    const texte = `🏠 Réunion de la tontine chez ${b.name}${adresse ? ` — ${adresse}` : ""}. Itinéraire jusqu'à chez ${b.isVous ? "moi" : prenom(b)} : ${mapsLien}`;
-    try {
-      if (typeof navigator !== "undefined" && navigator.share) {
-        await navigator.share({ title: `Réunion chez ${b.name}`, text: texte, url: mapsLien });
-        return;
+  // Destination sur la carte INTERNE : vous (position chargée ci-dessus) ou un
+  // autre membre (position retrouvée dans l'annuaire famille par son nom).
+  // TOUT se passe dans l'application — plus aucun lien externe.
+  const locAutre = !estVous && famLocs ? famLocs.find((m) => m.fullName === b.name) ?? null : null;
+  const dest: DestCarte | null = gps
+    ? {
+        nom: b.name,
+        estVous: true,
+        quartier: loc?.quartier || null,
+        arrondissement: loc?.arrondissement || null,
+        city: loc?.city || null,
+        latitude: gps.latitude,
+        longitude: gps.longitude,
       }
-      await navigator.clipboard.writeText(texte);
-      toast.success("Position copiée — collez-la dans WhatsApp pour guider la famille 🧭");
-    } catch (e) {
-      if (e instanceof Error && e.name === "AbortError") return; // partage natif annulé — rien à dire
-      // Presse-papiers refusé (réglage du navigateur) : le lien reste affiché
-      // dans la fiche — le membre peut le copier à la main depuis « S'y rendre ».
-      toast.info("Copie impossible — utilisez « S'y rendre » puis partagez depuis votre application de navigation.");
-    }
-  };
+    : locAutre
+      ? {
+          nom: b.name,
+          estVous: false,
+          quartier: locAutre.quartier,
+          arrondissement: locAutre.arrondissement,
+          city: locAutre.city,
+          latitude: locAutre.latitude,
+          longitude: locAutre.longitude,
+        }
+      : null;
+  const gpsAutreTexte = locAutre
+    ? `${locAutre.quartier ? `Quartier ${locAutre.quartier} · ` : ""}GPS ${locAutre.latitude.toFixed(5)}, ${locAutre.longitude.toFixed(5)}`
+    : null;
 
   const enregistrerTel = () => {
     const v = tel.trim();
@@ -1303,46 +1344,41 @@ function FicheBeneficiaire({ t, vousPhone, onFermer }: { t: TourMois; vousPhone?
               </div>
             )}
 
-            {/* ── Géolocalisation — s'orienter, arriver directement chez lui ── */}
+            {/* ── Géolocalisation — CARTE INTERNE : tout se passe dans l'application,
+                l'utilisateur ne quitte jamais l'app (plus de liens externes). ── */}
             <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Géolocalisation</p>
             <div className="rounded-2xl border border-[#E5DCC0] bg-[#FFFDF6] p-3">
               {!locChargee && estVous ? (
                 <div className="flex items-center justify-center gap-2 py-3 text-[12.5px] text-[#8A9288]" role="status">
                   <FcSpinner className="h-4 w-4 text-[#C89F62]" /> Chargement de votre position…
                 </div>
-              ) : gps ? (
+              ) : dest ? (
                 <>
                   <p className="flex items-start gap-1.5 text-[12.5px] leading-relaxed text-[#2B3530]">
                     <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#B85C33]" />
-                    <span>{adresse || "Position GPS enregistrée"}</span>
+                    <span>
+                      {estVous
+                        ? adresse || "Position GPS enregistrée"
+                        : [dest.quartier, dest.arrondissement, dest.city].filter(Boolean).join(", ") || "Position GPS enregistrée"}
+                    </span>
                   </p>
                   <p className="mt-1 text-[10.5px] text-[#8A9288]">
-                    {loc?.quartier ? `Quartier ${loc.quartier} · ` : ""}GPS {gps.latitude.toFixed(5)}, {gps.longitude.toFixed(5)}{loc?.accuracy ? ` · précision ~${Math.round(loc.accuracy)} m` : ""}
+                    {estVous
+                      ? `${loc?.quartier ? `Quartier ${loc.quartier} · ` : ""}GPS ${dest.latitude.toFixed(5)}, ${dest.longitude.toFixed(5)}${loc?.accuracy ? ` · précision ~${Math.round(loc.accuracy)} m` : ""}`
+                      : gpsAutreTexte}
                   </p>
-                  <div className="mt-2.5 grid grid-cols-2 gap-2">
-                    <a
-                      href={googleMapsDirectionsUrl(gps)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex min-h-[42px] items-center justify-center gap-1.5 rounded-xl bg-[#1E4D2B] px-2 text-center text-[12.5px] font-bold text-white transition-colors hover:bg-[#2F6B45]"
-                    >
-                      <Navigation className="h-4 w-4" /> S&apos;y rendre
-                    </a>
-                    <a
-                      href={osmViewUrl(gps, 17)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex min-h-[42px] items-center justify-center gap-1.5 rounded-xl border border-[#C9B98A] px-2 text-center text-[12.5px] font-bold text-[#2A4A3A] hover:bg-[#C89F62]/10"
-                    >
-                      <MapPinned className="h-4 w-4" /> Voir sur la carte
-                    </a>
+                  {/* Carte + trajet DANS l'app : pin étiqueté (nom + quartier —
+                      nos données, lisibles même quand les tuiles OSM n'affichent
+                      pas les petits quartiers), votre position et le trajet. */}
+                  <div className="mt-2.5">
+                    <FcRouteMap dest={dest} />
                   </div>
                 </>
               ) : estVous ? (
                 <>
                   <p className="flex items-start gap-1.5 text-[12.5px] leading-relaxed text-[#5C6B60]">
                     <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#8A9288]" />
-                    <span>{adresse || "Aucune adresse enregistrée"} — enregistrez votre géolocalisation pour que la famille puisse se guider jusqu&apos;à votre porte.</span>
+                    <span>{adresse || "Aucune adresse enregistrée"} — partagez votre position pour que la famille puisse se guider jusqu&apos;à votre porte, directement dans l&apos;application.</span>
                   </p>
                 </>
               ) : (
@@ -1355,26 +1391,30 @@ function FicheBeneficiaire({ t, vousPhone, onFermer }: { t: TourMois; vousPhone?
                 </p>
               )}
 
-              {/* Actions du bénéficiaire — modifier + partager sa position */}
+              {/* Actions du bénéficiaire — PARTAGER = rendre sa position visible
+                  par la famille dans l'app (carte famille), pas WhatsApp. */}
               {estVous && !editerLoc && (
                 <div className="mt-2.5 space-y-2">
+                  {gps ? (
+                    <div className="rounded-2xl border border-[#2F6B45]/30 bg-[#2F6B45]/8 p-3">
+                      <p className="flex items-center gap-1.5 text-[12.5px] font-bold text-[#1E4D2B]">
+                        <Check className="h-4 w-4" /> Position partagée avec la famille
+                      </p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-[#5C6B60]">
+                        Les membres vous voient sur la carte famille (onglet Famille) et peuvent se
+                        guider jusqu&apos;à vous quand vous recevez la réunion — tout se passe dans
+                        l&apos;application.
+                      </p>
+                    </div>
+                  ) : (
+                    <FcButton className="h-11 w-full" onClick={() => setEditerLoc(true)}>
+                      <MapPin className="h-4 w-4" /> Partager ma position avec la famille
+                    </FcButton>
+                  )}
                   <FcButton variant="outline" className="h-11 w-full" onClick={() => setEditerLoc(true)}>
                     <PencilLine className="h-4 w-4" /> Modifier ma géolocalisation
                   </FcButton>
-                  {mapsLien && (
-                    <FcButton className="h-11 w-full" onClick={partagerPosition}>
-                      <Share2 className="h-4 w-4" /> Partager ma position (WhatsApp…)
-                    </FcButton>
-                  )}
                 </div>
-              )}
-              {!estVous && mapsLien && (
-                <button
-                  onClick={partagerPosition}
-                  className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-[12.5px] font-bold text-[#2A4A3A] hover:bg-[#C89F62]/10"
-                >
-                  <Share2 className="h-4 w-4" /> Partager sa position
-                </button>
               )}
               {estVous && (
                 <p className="mt-2 flex items-start gap-1.5 text-[10.5px] leading-relaxed text-[#8A9288]">
