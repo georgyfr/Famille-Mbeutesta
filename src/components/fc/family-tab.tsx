@@ -30,11 +30,14 @@ import {
   estDansMfoundi, fetchRoute, formatDistance, haversineKm, MFOUNDI, type PointGeo,
 } from "@/lib/fc-geo";
 import {
-  escapeHtml, loadLeaflet, pinIcon, type LMapLike, type LeafletLike,
+  addBasemapSwitcher, addQuartierLabels, escapeHtml, loadLeaflet, pinIcon,
+  type LMapLike, type LeafletLike,
 } from "@/lib/fc-leaflet";
 import { FcButton, FcCard } from "./ui";
+import { FcGuideMap } from "./fc-guide-map";
+import type { DestCarte } from "./fc-route-map";
 import {
-  ArrowLeft, Copy, Crosshair, LocateFixed, MapPin, MapPinned, Navigation, PencilLine, RefreshCw, Users,
+  ArrowLeft, Copy, Crosshair, LocateFixed, MapPin, MapPinned, Navigation, PencilLine, RefreshCw, Sparkles, Users,
 } from "lucide-react";
 
 export type FamilyLocation = {
@@ -63,6 +66,8 @@ export function FamilyTab({ onEditLocation }: { onEditLocation: () => void }) {
   const [mapError, setMapError] = useState(false);
   const [vue, setVue] = useState<Vue>({ type: "famille" });
   const [trajet, setTrajet] = useState<string | null>(null);
+  // Fenêtre de guidage IA « S'y rendre » ouverte depuis la ligne d'un membre
+  const [guideDest, setGuideDest] = useState<DestCarte | null>(null);
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapObj = useRef<LMapLike | null>(null);
   const marqueurTemp = useRef<unknown>(null);
@@ -105,14 +110,18 @@ export function FamilyTab({ onEditLocation }: { onEditLocation: () => void }) {
   useEffect(() => {
     if (loading || mapError || members.length === 0) return;
     let cancelled = false;
+    let nettoyerQuartiers: (() => void) | null = null;
     loadLeaflet()
       .then((L: LeafletLike) => {
         if (cancelled || !mapRef.current || mapObj.current) return;
         const map = L.map(mapRef.current, { zoomControl: true, attributionControl: true, scrollWheelZoom: false });
-        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          maxZoom: 19,
-          attribution: "© OpenStreetMap",
-        }).addTo(map);
+        // Fond de carte « Quartiers » (HOT) par défaut + sélecteur : plan clair
+        // (CARTO Voyager), rues OSM, satellite Esri — tous gratuits, sans clé.
+        addBasemapSwitcher(L, map, "hot");
+        // Étiquettes de quartiers/arrondissements de Yaoundé posées par l'app :
+        // les noms restent lisibles même quand les tuiles n'affichent pas les
+        // petites localités (c'était la plainte principale de l'utilisateur).
+        nettoyerQuartiers = addQuartierLabels(L, map);
 
         // Cadre du département du Mfoundi — la zone de vie de la famille.
         const cadre = L.rectangle(
@@ -146,6 +155,7 @@ export function FamilyTab({ onEditLocation }: { onEditLocation: () => void }) {
       .catch(() => setMapError(true));
     return () => {
       cancelled = true;
+      nettoyerQuartiers?.();
       if (mapObj.current) {
         mapObj.current.remove();
         mapObj.current = null;
@@ -257,6 +267,20 @@ export function FamilyTab({ onEditLocation }: { onEditLocation: () => void }) {
 
   const membreVue = vue.type === "membre" ? vue.membre : null;
   const membreVueHors = membreVue && !estDansMfoundi(membreVue) ? membreVue : null;
+
+  /** Destination DestCarte pour le guidage IA d'un membre. */
+  const destDuMembre = useCallback(
+    (m: FamilyLocation): DestCarte => ({
+      nom: m.fullName,
+      estVous: false,
+      quartier: m.quartier,
+      arrondissement: m.arrondissement,
+      city: m.city,
+      latitude: m.latitude,
+      longitude: m.longitude,
+    }),
+    []
+  );
 
   return (
     <div className="space-y-4">
@@ -403,6 +427,7 @@ export function FamilyTab({ onEditLocation }: { onEditLocation: () => void }) {
                       distanceLabel={m.distanceKm !== null ? `à ${formatDistance(m.distanceKm)} de vous` : undefined}
                       onCopy={copyCoords}
                       onVoir={() => voirSurCarte(m)}
+                      onGuide={() => setGuideDest(destDuMembre(m))}
                     />
                   ))}
                 </ul>
@@ -426,6 +451,7 @@ export function FamilyTab({ onEditLocation }: { onEditLocation: () => void }) {
                       distanceLabel={m.distanceKm !== null ? `à ${formatDistance(m.distanceKm)} de vous` : undefined}
                       onCopy={copyCoords}
                       onVoir={() => voirSurCarte(m)}
+                      onGuide={() => setGuideDest(destDuMembre(m))}
                       horsZone
                     />
                   ))}
@@ -440,21 +466,26 @@ export function FamilyTab({ onEditLocation }: { onEditLocation: () => void }) {
         )}
 
         <p className="mt-3 text-[11.5px] leading-relaxed text-[#8A9288]">
-          « Y aller » trace le trajet jusqu&apos;au membre sur la carte interne (distance + durée) — tout se passe
-          dans l&apos;application, sans jamais en sortir.
+          « Y aller » trace le trajet jusqu&apos;au membre sur la carte interne ; « Guidage IA » ouvre l&apos;assistant
+          d&apos;orientation pas à pas (suivi de position + conseils GLM) — tout se passe dans l&apos;application, sans
+          jamais en sortir.
         </p>
       </FcCard>
+
+      {/* Fenêtre de guidage IA « S'y rendre » — 100 % interne */}
+      {guideDest && <FcGuideMap dest={guideDest} onFermer={() => setGuideDest(null)} />}
     </div>
   );
 }
 
 function MemberRow({
-  m, distanceLabel, onCopy, onVoir, highlight, horsZone,
+  m, distanceLabel, onCopy, onVoir, onGuide, highlight, horsZone,
 }: {
   m: FamilyLocation;
   distanceLabel?: string;
   onCopy: (m: FamilyLocation) => void;
   onVoir?: (m: FamilyLocation) => void;
+  onGuide?: (m: FamilyLocation) => void;
   highlight?: boolean;
   horsZone?: boolean;
 }) {
@@ -493,6 +524,15 @@ function MemberRow({
               aria-label={`Y aller chez ${m.fullName} — trajet tracé sur la carte interne`}
             >
               <Navigation className="h-3.5 w-3.5" /> Y aller
+            </button>
+          )}
+          {onGuide && !m.isMe && (
+            <button
+              onClick={() => onGuide(m)}
+              className="inline-flex min-h-[36px] items-center gap-1.5 rounded-xl border border-[#C89F62]/60 bg-[#C89F62]/10 px-3 py-1.5 text-[12.5px] font-semibold text-[#8A6420] hover:bg-[#C89F62]/20"
+              aria-label={`Guidage assisté par IA jusqu'à chez ${m.fullName} — dans l'application`}
+            >
+              <Sparkles className="h-3.5 w-3.5" /> Guidage IA
             </button>
           )}
           <button

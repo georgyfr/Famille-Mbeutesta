@@ -20,7 +20,9 @@ import { useEffect, useRef, useState } from "react";
 import { MapPinned } from "lucide-react";
 import { api } from "@/lib/fc-client";
 import { fetchRoute, formatDistance, haversineKm, type PointGeo } from "@/lib/fc-geo";
-import { escapeHtml, loadLeaflet, pinIcon, type LMapLike } from "@/lib/fc-leaflet";
+import {
+  addBasemapSwitcher, addQuartierLabels, escapeHtml, loadLeaflet, pinIcon, type LMapLike,
+} from "@/lib/fc-leaflet";
 import { FcSpinner } from "./ui";
 
 export type DestCarte = {
@@ -41,16 +43,18 @@ export function FcRouteMap({ dest, height = 250 }: { dest: DestCarte; height?: n
   useEffect(() => {
     let cancelled = false;
     let map: LMapLike | null = null;
+    let nettoyerQuartiers: (() => void) | null = null;
 
     (async () => {
       try {
         const L = await loadLeaflet();
         if (cancelled || !mapRef.current) return;
         map = L.map(mapRef.current, { zoomControl: true, attributionControl: true, scrollWheelZoom: false });
-        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          maxZoom: 19,
-          attribution: "© OpenStreetMap",
-        }).addTo(map);
+        // Fond « Quartiers » (HOT — montre mieux les petits lieux) + sélecteur
+        // plan clair / rues OSM / satellite ; étiquettes de quartiers posées
+        // par l'app (nos données) pour des noms TOUJOURS lisibles.
+        addBasemapSwitcher(L, map, "hot");
+        nettoyerQuartiers = addQuartierLabels(L, map);
 
         // Étiquette permanente : nom + quartier (nos données, toujours lisibles)
         const etiquette = [
@@ -122,6 +126,7 @@ export function FcRouteMap({ dest, height = 250 }: { dest: DestCarte; height?: n
 
     return () => {
       cancelled = true;
+      if (nettoyerQuartiers) nettoyerQuartiers();
       if (map) map.remove();
       map = null;
     };
@@ -155,7 +160,7 @@ export function FcRouteMap({ dest, height = 250 }: { dest: DestCarte; height?: n
       <div className="flex items-center justify-between gap-2 border-t border-[#E5DCC0] bg-[#FBF7EA] px-3 py-1.5">
         <p className="flex min-w-0 items-center gap-1 text-[10.5px] leading-snug text-[#8A9288]">
           <MapPinned className="h-3 w-3 shrink-0" />
-          <span className="truncate">Carte interne — pincez/zoomez jusqu&apos;à la maison</span>
+          <span className="truncate">Carte interne — fond au choix (en haut à droite), pincez/zoomez jusqu&apos;à la maison</span>
         </p>
         {trajet && <p className="shrink-0 text-[10.5px] font-bold text-[#1E4D2B]">{trajet}</p>}
       </div>

@@ -41,12 +41,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertTriangle, ArrowLeft, AudioLines, BarChart3, CalendarDays, Check, ChevronRight, Coins, Coffee, Crown, Eye,
-  ClipboardList, FileSearch, FileText, Flag, Gift, HandCoins, Hourglass, Info, Lock, MapPin, MessageCircle, Mic, PencilLine, Percent, Phone, PiggyBank, Plus,
+  ClipboardList, FileSearch, FileText, Flag, Gift, HandCoins, Hourglass, Info, Lock, MapPin, MessageCircle, Mic, Navigation, PencilLine, Percent, Phone, PiggyBank, Plus,
   ScrollText, ShieldAlert, Square, Stamp, Trash2, TrendingUp, UserCheck, Users, Wallet, X,
 } from "lucide-react";
 import { api } from "@/lib/fc-client";
 import { type LocationDraft } from "@/lib/fc-geo";
 import { FcRouteMap, type DestCarte } from "./fc-route-map";
+import { FcGuideMap } from "./fc-guide-map";
 import { LocationWizard } from "./location-wizard";
 import { FcButton, FcCard, FcSpinner } from "./ui";
 import {
@@ -1084,6 +1085,8 @@ function FicheBeneficiaire({ t, vousPhone, onFermer }: { t: TourMois; vousPhone?
   // Annuaire famille — place sur la carte un AUTRE membre bénéficiaire (ses
   // coordonnées GPS ne figurent pas dans le registre de la tontine).
   const [famLocs, setFamLocs] = useState<FamilyLocLight[] | null>(null);
+  // Fenêtre de guidage IA « S'y rendre » (itinéraire + suivi + assistant GLM)
+  const [guideOuvert, setGuideOuvert] = useState(false);
 
   const chargeLocation = async () => {
     try {
@@ -1373,6 +1376,20 @@ function FicheBeneficiaire({ t, vousPhone, onFermer }: { t: TourMois; vousPhone?
                   <div className="mt-2.5">
                     <FcRouteMap dest={dest} />
                   </div>
+                  {/* S'Y RENDRE — guidage assisté par IA, 100 % dans l'app :
+                      itinéraire pas à pas, suivi GPS en continu, recalcul auto
+                      en cas de détour, assistant GLM (questions + conseils). */}
+                  {!estVous && (
+                    <div className="mt-2.5">
+                      <FcButton className="h-11 w-full" onClick={() => setGuideOuvert(true)}>
+                        <Navigation className="h-4 w-4" /> S&apos;y rendre — guidé par l&apos;IA
+                      </FcButton>
+                      <p className="mt-1.5 text-[10.5px] leading-relaxed text-[#8A9288]">
+                        Itinéraire pas à pas, suivi automatique de votre position et assistant IA
+                        (GLM gratuit) — sans jamais quitter l&apos;application.
+                      </p>
+                    </div>
+                  )}
                 </>
               ) : estVous ? (
                 <>
@@ -1440,6 +1457,12 @@ function FicheBeneficiaire({ t, vousPhone, onFermer }: { t: TourMois; vousPhone?
               </div>
             </div>
           </div>
+        )}
+
+        {/* Fenêtre de guidage IA « S'y rendre » — par-dessus la fiche,
+            toujours DANS l'application. */}
+        {guideOuvert && dest && !estVous && (
+          <FcGuideMap dest={dest} onFermer={() => setGuideOuvert(false)} />
         )}
 
         {/* Pied — fermer */}
