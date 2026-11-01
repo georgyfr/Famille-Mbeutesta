@@ -12,14 +12,79 @@
 
 /* ══════════════════════════ règles de la tontine ══════════════════════════ */
 
-export const TONTINE = {
-  montantCotisation: 10_000, // FCFA par membre et par réunion
-  montantCollation: 2_000, // FCFA par personne et par réunion
-  fraisAdhesion: 5_000, // une seule fois — alimente la caisse sociale
+export type ReglagesTontine = {
+  montantCotisation: number; // FCFA par membre et par réunion
+  montantCollation: number; // FCFA par personne et par réunion
+  fraisAdhesion: number; // une seule fois — caisse sociale
+  penaliteRetard: number;
+  penaliteAbsence: number;
+  jourLabel: string;
+};
+
+/** Règles de la tontine — modifiables par le bureau (président & secrétaire,
+ *  voir saveMontants) : toutes les sommes affichées dans l'application en
+ *  DÉRIVENT, jamais codées en dur dans l'interface. */
+export const TONTINE: ReglagesTontine = {
+  montantCotisation: 10_000,
+  montantCollation: 2_000,
+  fraisAdhesion: 5_000,
   penaliteRetard: 500,
   penaliteAbsence: 1_000,
   jourLabel: "2ᵉ dimanche du mois",
-} as const;
+};
+
+/* ─── Paramétrage des montants — décision du bureau ───
+   Comme le taux mensuel : le président et le secrétaire règlent les montants
+   (cotisation, collation, frais d'adhésion, pénalités) ; un membre les voit
+   en lecture seule et peut les signaler. Persistés localement — le téléphone
+   de la famille parle à lui-même, gratuit et hors ligne. */
+
+const MONTANTS_KEY = "fc_tontine_montants_v1";
+
+/** Bornes de validation — évite les fautes de frappe catastrophiques. */
+const MONTANTS_BORNES: Record<Exclude<keyof ReglagesTontine, "jourLabel">, [number, number]> = {
+  montantCotisation: [500, 500_000],
+  montantCollation: [0, 100_000],
+  fraisAdhesion: [0, 500_000],
+  penaliteRetard: [0, 50_000],
+  penaliteAbsence: [0, 100_000],
+};
+
+/** Lit le paramétrage enregistré et l'applique aux règles en vigueur. */
+export function loadMontants(): ReglagesTontine {
+  try {
+    const raw = localStorage.getItem(MONTANTS_KEY);
+    if (raw) {
+      const p = JSON.parse(raw) as Partial<ReglagesTontine>;
+      (Object.keys(MONTANTS_BORNES) as Exclude<keyof ReglagesTontine, "jourLabel">[]).forEach((k) => {
+        const v = Number(p[k]);
+        const [min, max] = MONTANTS_BORNES[k];
+        if (isFinite(v) && v >= min && v <= max) TONTINE[k] = Math.round(v);
+      });
+    }
+  } catch {
+    /* réglages absents ou corrompus → valeurs par défaut conservées */
+  }
+  return TONTINE;
+}
+
+/** Enregistre un nouveau montant (décision du bureau) et l'applique aussitôt. */
+export function saveMontants(patch: Partial<ReglagesTontine>): ReglagesTontine {
+  (Object.keys(MONTANTS_BORNES) as Exclude<keyof ReglagesTontine, "jourLabel">[]).forEach((k) => {
+    const v = Number(patch[k]);
+    if (!isFinite(v)) return;
+    const [min, max] = MONTANTS_BORNES[k];
+    if (v < min || v > max) return;
+    TONTINE[k] = Math.round(v);
+  });
+  try {
+    const { montantCotisation, montantCollation, fraisAdhesion, penaliteRetard, penaliteAbsence } = TONTINE;
+    localStorage.setItem(MONTANTS_KEY, JSON.stringify({ montantCotisation, montantCollation, fraisAdhesion, penaliteRetard, penaliteAbsence }));
+  } catch {
+    /* stockage plein/privé — le réglage reste valable pour la session */
+  }
+  return TONTINE;
+}
 
 export const MOIS_FR = [
   "janvier", "février", "mars", "avril", "mai", "juin",

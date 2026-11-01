@@ -41,9 +41,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertTriangle, ArrowLeft, AudioLines, BarChart3, CalendarDays, Check, ChevronRight, Coins, Coffee, Crown, Eye,
-  ClipboardList, FileSearch, FileText, Flag, Gift, HandCoins, Hourglass, Info, Lock, MapPin, Mic, Percent, Phone, PiggyBank, Plus,
-  ScrollText, ShieldAlert, Square, Stamp, Trash2, TrendingUp, UserCheck, Users, Wallet, X,
+  ClipboardList, FileSearch, FileText, Flag, Gift, HandCoins, Hourglass, Info, Lock, MapPin, MapPinned, MessageCircle, Mic, Navigation, PencilLine, Percent, Phone, PiggyBank, Plus,
+  ScrollText, Share2, ShieldAlert, Square, Stamp, Trash2, TrendingUp, UserCheck, Users, Wallet, X,
 } from "lucide-react";
+import { api } from "@/lib/fc-client";
+import { googleMapsDirectionsUrl, osmViewUrl, type LocationDraft } from "@/lib/fc-geo";
+import { LocationWizard } from "./location-wizard";
 import { FcButton, FcCard, FcSpinner } from "./ui";
 import {
   DELAI_VALIDATION_JOURS, RAPPEL_SIGNALEMENT_JOURS,
@@ -59,10 +62,10 @@ import {
   ANOMALIES, MOIS_FR_SHORT, MISSIONS, ROLE_META, SUPPLEANCES, TAUX_DEFAUT, TONTINE,
   buildAnnee, buildRoster, caissesDuMoment, classementCotisants, collationMensuelle,
   detteParPersonne, dettePretAuMois, etatReunion, interetEpargneMois, isoDate,
-  journalDeCaisse, joursAvant, loadEpargnes, loadPayes, loadPrets, loadTaux, moisDuTour,
-  moisCourantAnnee, moisEcoules, potMensuel, projectionAnnee, saveEpargnes, savePrets, saveTaux,
+  journalDeCaisse, joursAvant, loadEpargnes, loadMontants, loadPayes, loadPrets, loadTaux, moisDuTour,
+  moisCourantAnnee, moisEcoules, potMensuel, projectionAnnee, saveEpargnes, saveMontants, savePrets, saveTaux,
   soldeEpargneAuMois, statutMembreDuMois, uid,
-  type Epargne, type Member, type Payes, type Pret, type RoleKey, type TourMois,
+  type Epargne, type Member, type Payes, type Pret, type ReglagesTontine, type RoleKey, type TourMois,
 } from "./tontine-data";
 
 /* ══════════════════════════ petits utilitaires ══════════════════════════ */
@@ -216,7 +219,7 @@ function hashFor(p: TPage): string {
 
 /* ══════════════════════════ composant principal ══════════════════════════ */
 
-export function TontinePage({ onBack, vousName }: { onBack: () => void; vousName?: string | null }) {
+export function TontinePage({ onBack, vousName, vousPhone }: { onBack: () => void; vousName?: string | null; vousPhone?: string | null }) {
   const [mounted, setMounted] = useState(false);
   const [page, setPage] = useState<TPage>("reunion");
   const [payes, setPayes] = useState<Payes>({});
@@ -229,6 +232,9 @@ export function TontinePage({ onBack, vousName }: { onBack: () => void; vousName
   const [sigVersion, setSigVersion] = useState(0);
   const [signalements, setSignalements] = useState<Signalement[]>([]);
   const [signaler, setSignaler] = useState<{ cible: Signalement["cible"]; cibleId: string | null; cibleLabel: string } | null>(null);
+  // Montants de la tontine — version incrémentée quand le bureau les règle :
+  // tout le calendrier (sommes, collations, totaux) est recalculé aussitôt.
+  const [montVersion, setMontVersion] = useState(0);
 
   useEffect(() => {
     const sync = () => setPage(routeFromHash());
@@ -237,6 +243,9 @@ export function TontinePage({ onBack, vousName }: { onBack: () => void; vousName
     const t = setTimeout(() => {
       sync();
       setPayes(loadPayes());
+      // Montants réglés par le bureau (cotisation, collation, frais, pénalités)
+      // appliqués AVANT la construction du calendrier.
+      loadMontants();
       const role = loadVousRole() ?? "membre";
       setVousRole(role);
       // Rappels de signalements — TOUS LES 3 JOURS la notification réapparaît
@@ -263,7 +272,12 @@ export function TontinePage({ onBack, vousName }: { onBack: () => void; vousName
   }, []);
 
   const roster = useMemo(() => buildRoster(vousName, vousRole), [vousName, vousRole]);
-  const annee = useMemo(() => (mounted ? buildAnnee(new Date().getFullYear(), roster) : []), [mounted, roster]);
+  // Le calendrier est reconstruit quand les montants du bureau changent : les
+  // sommes du mois, les collations et les totaux reflètent le nouveau réglage.
+  const annee = useMemo(
+    () => (mounted ? (loadMontants(), buildAnnee(new Date().getFullYear(), roster)) : []),
+    [mounted, roster, montVersion],
+  );
   const roleActif: RoleKey = vousRole ?? "membre";
   const ouverts = signalementsOuverts(signalements);
 
@@ -317,7 +331,7 @@ export function TontinePage({ onBack, vousName }: { onBack: () => void; vousName
         </div>
       )}
 
-      {page === "reunion" && <ReunionPage annee={annee} roster={roster} />}
+      {page === "reunion" && <ReunionPage annee={annee} roster={roster} vousPhone={vousPhone} />}
       {page === "membres" && (
         <MembresPage
           annee={annee} roster={roster} payes={payes}
@@ -329,6 +343,7 @@ export function TontinePage({ onBack, vousName }: { onBack: () => void; vousName
           role={page as BureauPage} annee={annee} roster={roster} payes={payes}
           vousRole={roleActif} vousName={vousName} sigVersion={sigVersion}
           onSignaler={(c) => setSignaler(c)}
+          onMontantsChange={() => setMontVersion((v) => v + 1)}
         />
       )}
       {page === "cotisations" && (
@@ -517,9 +532,12 @@ function OngletsBureau({ page, onGo, vousRole, nbSignalementsOuverts }: {
 
 /* ══════════════════════════ page RÉUNIONS — calendrier de l'année ══════════════════════════ */
 
-function ReunionPage({ annee, roster }: { annee: TourMois[]; roster: Member[] }) {
+function ReunionPage({ annee, roster, vousPhone }: { annee: TourMois[]; roster: Member[]; vousPhone?: string | null }) {
   // Fiche réunion : s'ouvre quand on touche un mois du calendrier ou une ligne du tableau
   const [fiche, setFiche] = useState<TourMois | null>(null);
+  // Informations du bénéficiaire du mois — pop-up « Voir ses informations » :
+  // téléphone, quartier, géolocalisation, itinéraire GPS et partage.
+  const [infos, setInfos] = useState(false);
   const vousId = roster.find((m) => m.isVous)?.id ?? "vous";
   const courant = annee.find((t) => t.etat === "courant") ?? annee[0];
   const er = etatReunion(courant);
@@ -539,22 +557,11 @@ function ReunionPage({ annee, roster }: { annee: TourMois[]; roster: Member[] })
 
   return (
     <div className="space-y-3.5">
-      {/* Bannière — réunion du mois. Cliquable : ouvre la fiche de la réunion. */}
+      {/* Bannière — réunion du mois. AFFICHAGE UNIQUEMENT (non cliquable) :
+          les informations du bénéficiaire sont dans la section « Voir ses
+          informations » juste en dessous. */}
       <FcCard className="overflow-hidden">
-        <div
-          role="button"
-          tabIndex={0}
-          aria-label={`Ouvrir la fiche de la réunion de ${courant.mois} — qui reçoit, son téléphone, son lieu et la cotisation de chacun`}
-          title="Touchez pour ouvrir la fiche de cette réunion"
-          onClick={() => setFiche(courant)}
-          onKeyDown={(ev) => {
-            if (ev.key === "Enter" || ev.key === " ") {
-              ev.preventDefault();
-              setFiche(courant);
-            }
-          }}
-          className="cursor-pointer transition-[filter] hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C89F62] active:brightness-95"
-        >
+        <div>
           <div className="bg-[#1E4D2B] px-4 py-4 text-white">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
@@ -574,9 +581,6 @@ function ReunionPage({ annee, roster }: { annee: TourMois[]; roster: Member[] })
                 <Chip cls={er === "passee" ? "border-transparent bg-[#2F6B45] text-white" : er === "aujourdhui" ? "border-transparent bg-[#C89F62] text-[#2B2416]" : "border-white/25 bg-white/12 text-white"}>
                   {er === "passee" ? "Réunion tenue ✓" : er === "aujourdhui" ? "Aujourd'hui !" : `Dans ${jr} jour${jr > 1 ? "s" : ""}`}
                 </Chip>
-                <span className="flex items-center gap-0.5 rounded-full bg-[#C89F62]/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#C89F62]">
-                  Voir la fiche <ChevronRight className="h-3 w-3" aria-hidden="true" />
-                </span>
               </span>
             </div>
           </div>
@@ -596,6 +600,22 @@ function ReunionPage({ annee, roster }: { annee: TourMois[]; roster: Member[] })
                 <p className="text-[9.5px] font-bold uppercase tracking-wide text-[#8A9288]">Total à collecter</p>
                 <p className="text-[13.5px] font-bold text-[#2F6B45]">{fmtN(courant.total)}</p>
               </div>
+            </div>
+          )}
+          {/* Voir ses informations — le numéro de téléphone et la géolocalisation
+              du bénéficiaire : appeler, se guider par GPS, partager l'adresse.
+              Quand le bénéficiaire c'est vous : modification de vos coordonnées. */}
+          {!courant.ag && courant.beneficiary && (
+            <div className="border-t border-[#E5DCC0] bg-[#FBF7EA] px-4 py-3">
+              <FcButton variant="outline" className="w-full" onClick={() => setInfos(true)}>
+                <Info className="h-4 w-4" />
+                {courant.beneficiary.isVous
+                  ? "Voir mes informations — contact & géolocalisation"
+                  : `Voir ses informations — contact de ${prenom(courant.beneficiary)}`}
+              </FcButton>
+              <p className="mt-1.5 text-center text-[10.5px] leading-relaxed text-[#8A9288]">
+                Téléphone, quartier et géolocalisation — pour appeler, s&apos;orienter et arriver directement chez {courant.beneficiary.isVous ? "vous" : prenom(courant.beneficiary)}.
+              </p>
             </div>
           )}
         </div>
@@ -693,6 +713,11 @@ function ReunionPage({ annee, roster }: { annee: TourMois[]; roster: Member[] })
 
       {/* Fiche réunion — modale ouverte au clic sur un mois du calendrier */}
       {fiche && <FicheReunion t={fiche} vousId={vousId} onFermer={() => setFiche(null)} />}
+
+      {/* Informations du bénéficiaire du mois — téléphone + géolocalisation */}
+      {infos && courant.beneficiary && (
+        <FicheBeneficiaire t={courant} vousPhone={vousPhone} onFermer={() => setInfos(false)} />
+      )}
     </div>
   );
 }
@@ -1018,6 +1043,376 @@ function FicheReunion({ t, vousId, onFermer }: { t: TourMois; vousId: string; on
   );
 }
 
+/* ══════════════════════════ informations du bénéficiaire ══════════════════════════
+
+   Pop-up « Voir ses informations » — ouverte depuis la bannière de la réunion
+   du mois. L'ESSENTIEL y est : le NUMÉRO DE TÉLÉPHONE et la GÉOLOCALISATION,
+   pour appeler le bénéficiaire, s'orienter et arriver directement chez lui.
+
+   • Bénéficiaire = un autre membre : ses coordonnées (téléphone cliquable,
+     WhatsApp, itinéraire GPS Google Maps / OpenStreetMap si son GPS existe).
+   • Bénéficiaire = vous : vous MODIFIEZ votre contact et votre géolocalisation,
+     et vous PARTAGEZ votre position (partage natif du téléphone, sinon copie
+     + WhatsApp) pour que chacun puisse se guider jusqu'à votre porte.
+   Tout est gratuit : liens profonds Maps/OSM, partage natif — aucune API payante. */
+
+function FicheBeneficiaire({ t, vousPhone, onFermer }: { t: TourMois; vousPhone?: string | null; onFermer: () => void }) {
+  const b = t.beneficiary;
+  const estVous = !!b?.isVous;
+
+  // Géolocalisation réelle du bénéficiaire — pour vous-même, elle est chargée
+  // depuis l'API (mode démo : répondeur local ; production : base famille).
+  const [loc, setLoc] = useState<LocationDraft | null>(null);
+  const [locChargee, setLocChargee] = useState(!estVous);
+  const [editerLoc, setEditerLoc] = useState(false);
+  // Téléphone affiché/éditable — pour vous il démarre du compte, sinon du membre.
+  const [tel, setTel] = useState(estVous ? (vousPhone ?? "") : (b?.phone ?? ""));
+  const [enregTel, setEnregTel] = useState(false);
+
+  const chargeLocation = async () => {
+    try {
+      const res = await api<{ ok: boolean; location: Record<string, unknown> | null }>("/api/me/location");
+      if (res.ok && res.location) {
+        const L = res.location;
+        setLoc({
+          country: String(L.country ?? ""),
+          region: String(L.region ?? ""),
+          department: String(L.department ?? ""),
+          city: String(L.city ?? ""),
+          arrondissement: String(L.arrondissement ?? ""),
+          quartier: String(L.quartier ?? ""),
+          latitude: typeof L.latitude === "number" ? L.latitude : null,
+          longitude: typeof L.longitude === "number" ? L.longitude : null,
+          accuracy: typeof L.accuracy === "number" ? L.accuracy : null,
+          source: "manual",
+        });
+      } else {
+        setLoc(null);
+      }
+    } catch {
+      /* hors connexion — on garde l'affichage local */
+    } finally {
+      setLocChargee(true);
+    }
+  };
+
+  useEffect(() => {
+    if (!estVous) return;
+    void chargeLocation();
+  }, [estVous]);
+
+  // Échap pour fermer + verrouille le défilement de la page derrière la fiche
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") onFermer();
+    };
+    window.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onFermer]);
+
+  if (!b) return null;
+
+  const gps = loc && loc.latitude !== null && loc.longitude !== null ? { latitude: loc.latitude, longitude: loc.longitude } : null;
+  const adresse = loc
+    ? [loc.quartier, loc.arrondissement, loc.city, loc.region, loc.country].filter(Boolean).join(", ")
+    : b.city
+      ? `${b.city}${b.fictif ? "" : " — non précisé"}`
+      : "";
+  const telNet = tel.replace(/[^0-9+]/g, "");
+  const waNum = tel.replace(/[^0-9]/g, "").replace(/^0+/, "");
+  const mapsLien = gps ? `https://www.google.com/maps/search/?api=1&query=${gps.latitude},${gps.longitude}` : null;
+
+  const partagerPosition = async () => {
+    if (!mapsLien) return;
+    const texte = `🏠 Réunion de la tontine chez ${b.name}${adresse ? ` — ${adresse}` : ""}. Itinéraire jusqu'à chez ${b.isVous ? "moi" : prenom(b)} : ${mapsLien}`;
+    try {
+      if (typeof navigator !== "undefined" && navigator.share) {
+        await navigator.share({ title: `Réunion chez ${b.name}`, text: texte, url: mapsLien });
+        return;
+      }
+      await navigator.clipboard.writeText(texte);
+      toast.success("Position copiée — collez-la dans WhatsApp pour guider la famille 🧭");
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") return; // partage natif annulé — rien à dire
+      // Presse-papiers refusé (réglage du navigateur) : le lien reste affiché
+      // dans la fiche — le membre peut le copier à la main depuis « S'y rendre ».
+      toast.info("Copie impossible — utilisez « S'y rendre » puis partagez depuis votre application de navigation.");
+    }
+  };
+
+  const enregistrerTel = () => {
+    const v = tel.trim();
+    if (v.replace(/[^0-9]/g, "").length < 6) {
+      toast.error("Numéro incomplet — entrez un numéro joignable (au moins 6 chiffres).");
+      return;
+    }
+    try {
+      localStorage.setItem("fc_phone", v);
+    } catch {
+      /* rien */
+    }
+    setEnregTel(true);
+    setTimeout(() => setEnregTel(false), 2000);
+    toast.success("Numéro enregistré — la famille peut maintenant vous joindre 📞");
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-[#2B2416]/55 p-2 backdrop-blur-[2px] sm:items-center sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={estVous ? "Vos informations — contact et géolocalisation" : `Informations de ${b.name} — contact et géolocalisation`}
+      onClick={onFermer}
+    >
+      <div
+        className="fc-fade-up max-h-[92vh] w-full max-w-md overflow-y-auto rounded-3xl border border-[#E5DCC0] bg-[#FFFDF6] shadow-[0_24px_70px_rgba(43,53,48,0.45)]"
+        onClick={(ev) => ev.stopPropagation()}
+      >
+        {/* En-tête */}
+        <div className="sticky top-0 z-10 bg-[#1E4D2B] px-4 py-4 text-white">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-[10.5px] font-bold uppercase tracking-wide opacity-80">
+                {estVous ? "Vos informations" : "Ses informations"} — réunion de {t.mois}
+              </p>
+              <p className="fc-serif mt-0.5 text-[16px] font-bold">{estVous ? "Contact & géolocalisation" : b.name}</p>
+              <p className="mt-0.5 text-[11.5px] opacity-85">
+                {cap(fmtDateLong(t.iso))} — chez {estVous ? "vous" : prenom(b)}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onFermer}
+              aria-label="Fermer les informations"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/12 transition hover:bg-white/25"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {editerLoc && estVous ? (
+          /* Édition de la géolocalisation — le même assistant qu'à l'inscription */
+          <div className="px-2 py-3">
+            <p className="mb-2 flex items-center gap-1.5 px-2 text-[12px] font-semibold text-[#5C6B60]">
+              <PencilLine className="h-4 w-4 text-[#8A6420]" /> Corrigez votre adresse — elle guide la famille jusqu&apos;à vous.
+            </p>
+            <LocationWizard
+              initial={loc}
+              firstRun={false}
+              onSaved={async () => {
+                setEditerLoc(false);
+                await chargeLocation();
+              }}
+            />
+            <div className="px-2 pb-2">
+              <button
+                onClick={() => setEditerLoc(false)}
+                className="w-full text-center text-[12.5px] text-[#8A9288] hover:underline"
+              >
+                Annuler la modification
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3.5 px-4 py-4">
+            {/* Identité du bénéficiaire */}
+            <div className="flex items-center gap-3 rounded-2xl border border-[#C89F62]/45 bg-[#C89F62]/10 p-3">
+              <Avatar m={b} size={46} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[14.5px] font-bold text-[#2B3530]">
+                  {b.name}{b.isVous ? " (vous)" : ""}
+                </p>
+                <p className="mt-0.5 flex items-center gap-1 text-[11px] font-semibold text-[#8A6420]">
+                  <Gift className="h-3 w-3" />
+                  {b.isVous ? "Vous recevez la réunion ce mois-ci" : `Bénéficiaire du mois — reçoit ${fmtN(t.pot)} FCFA`}
+                </p>
+              </div>
+              <Chip cls={ROLE_META[b.role].badge}>{ROLE_META[b.role].short}</Chip>
+            </div>
+
+            {/* ── Téléphone — L'ESSENTIEL : on peut l'appeler directement ── */}
+            <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Numéro de téléphone</p>
+            {estVous ? (
+              <div className="rounded-2xl border border-[#E5DCC0] bg-[#FFFDF6] p-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#1E4D2B]/10 text-[#1E4D2B]">
+                    <Phone className="h-4 w-4" />
+                  </span>
+                  <input
+                    value={tel}
+                    onChange={(ev) => setTel(ev.target.value)}
+                    inputMode="tel"
+                    placeholder="Votre numéro — ex : +237 6 XX XX XX XX"
+                    aria-label="Votre numéro de téléphone"
+                    className="h-11 min-w-0 flex-1 rounded-xl border border-[#C9B98A] bg-[#FFFDF6] px-3 text-[15px] font-semibold text-[#2B3530] placeholder:font-normal placeholder:text-[#B7B0A0] focus:border-[#2A4A3A] focus:outline-none focus:ring-2 focus:ring-[#2A4A3A]/15"
+                  />
+                </div>
+                <FcButton onClick={enregistrerTel} className="mt-2.5 h-11 w-full" variant={enregTel ? "outline" : "primary"}>
+                  {enregTel ? <><Check className="h-4 w-4" /> Enregistré ✓</> : <><Check className="h-4 w-4" /> Enregistrer mon numéro</>}
+                </FcButton>
+                {telNet.replace(/[^0-9]/g, "").length >= 6 && (
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <a
+                      href={`tel:${telNet}`}
+                      className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border border-[#C9B98A] px-2 text-[12.5px] font-bold text-[#2A4A3A] hover:bg-[#C89F62]/10"
+                    >
+                      <Phone className="h-4 w-4" /> Appeler
+                    </a>
+                    <a
+                      href={`https://wa.me/${waNum}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border border-[#C9B98A] px-2 text-[12.5px] font-bold text-[#2A4A3A] hover:bg-[#C89F62]/10"
+                    >
+                      <MessageCircle className="h-4 w-4" /> WhatsApp
+                    </a>
+                  </div>
+                )}
+                <p className="mt-2 text-[10.5px] leading-relaxed text-[#8A9288]">
+                  Ce numéro s&apos;affiche pour les membres de la famille quand c&apos;est votre tour de recevoir la réunion.
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[#E5DCC0] bg-[#FFFDF6] p-3">
+                {b.phone ? (
+                  <>
+                    <a
+                      href={`tel:${b.phone.replace(/\s/g, "")}`}
+                      className="flex min-h-[42px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#1E4D2B] px-3 text-[13px] font-bold text-white transition-colors hover:bg-[#2F6B45]"
+                    >
+                      <Phone className="h-4 w-4" /> {b.phone}
+                    </a>
+                    <a
+                      href={`https://wa.me/${b.phone.replace(/[^0-9]/g, "").replace(/^0+/, "")}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex min-h-[42px] items-center justify-center gap-1.5 rounded-xl border border-[#C9B98A] px-3 text-[13px] font-bold text-[#2A4A3A] hover:bg-[#C89F62]/10"
+                    >
+                      <MessageCircle className="h-4 w-4" /> WhatsApp
+                    </a>
+                  </>
+                ) : (
+                  <p className="text-[12px] italic text-[#8A9288]">Numéro non renseigné — passez voir le secrétaire de la cantine.</p>
+                )}
+              </div>
+            )}
+
+            {/* ── Géolocalisation — s'orienter, arriver directement chez lui ── */}
+            <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Géolocalisation</p>
+            <div className="rounded-2xl border border-[#E5DCC0] bg-[#FFFDF6] p-3">
+              {!locChargee && estVous ? (
+                <div className="flex items-center justify-center gap-2 py-3 text-[12.5px] text-[#8A9288]" role="status">
+                  <FcSpinner className="h-4 w-4 text-[#C89F62]" /> Chargement de votre position…
+                </div>
+              ) : gps ? (
+                <>
+                  <p className="flex items-start gap-1.5 text-[12.5px] leading-relaxed text-[#2B3530]">
+                    <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#B85C33]" />
+                    <span>{adresse || "Position GPS enregistrée"}</span>
+                  </p>
+                  <p className="mt-1 text-[10.5px] text-[#8A9288]">
+                    {loc?.quartier ? `Quartier ${loc.quartier} · ` : ""}GPS {gps.latitude.toFixed(5)}, {gps.longitude.toFixed(5)}{loc?.accuracy ? ` · précision ~${Math.round(loc.accuracy)} m` : ""}
+                  </p>
+                  <div className="mt-2.5 grid grid-cols-2 gap-2">
+                    <a
+                      href={googleMapsDirectionsUrl(gps)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex min-h-[42px] items-center justify-center gap-1.5 rounded-xl bg-[#1E4D2B] px-2 text-center text-[12.5px] font-bold text-white transition-colors hover:bg-[#2F6B45]"
+                    >
+                      <Navigation className="h-4 w-4" /> S&apos;y rendre
+                    </a>
+                    <a
+                      href={osmViewUrl(gps, 17)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex min-h-[42px] items-center justify-center gap-1.5 rounded-xl border border-[#C9B98A] px-2 text-center text-[12.5px] font-bold text-[#2A4A3A] hover:bg-[#C89F62]/10"
+                    >
+                      <MapPinned className="h-4 w-4" /> Voir sur la carte
+                    </a>
+                  </div>
+                </>
+              ) : estVous ? (
+                <>
+                  <p className="flex items-start gap-1.5 text-[12.5px] leading-relaxed text-[#5C6B60]">
+                    <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#8A9288]" />
+                    <span>{adresse || "Aucune adresse enregistrée"} — enregistrez votre géolocalisation pour que la famille puisse se guider jusqu&apos;à votre porte.</span>
+                  </p>
+                </>
+              ) : (
+                <p className="flex items-start gap-1.5 text-[12.5px] leading-relaxed text-[#5C6B60]">
+                  <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#8A9288]" />
+                  <span>
+                    {b.city ? `Quartier de référence : ${b.city}. ` : ""}
+                    {prenom(b)} n&apos;a pas encore enregistré sa géolocalisation GPS — appelez-le pour le guidage.
+                  </span>
+                </p>
+              )}
+
+              {/* Actions du bénéficiaire — modifier + partager sa position */}
+              {estVous && !editerLoc && (
+                <div className="mt-2.5 space-y-2">
+                  <FcButton variant="outline" className="h-11 w-full" onClick={() => setEditerLoc(true)}>
+                    <PencilLine className="h-4 w-4" /> Modifier ma géolocalisation
+                  </FcButton>
+                  {mapsLien && (
+                    <FcButton className="h-11 w-full" onClick={partagerPosition}>
+                      <Share2 className="h-4 w-4" /> Partager ma position (WhatsApp…)
+                    </FcButton>
+                  )}
+                </div>
+              )}
+              {!estVous && mapsLien && (
+                <button
+                  onClick={partagerPosition}
+                  className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-[12.5px] font-bold text-[#2A4A3A] hover:bg-[#C89F62]/10"
+                >
+                  <Share2 className="h-4 w-4" /> Partager sa position
+                </button>
+              )}
+              {estVous && (
+                <p className="mt-2 flex items-start gap-1.5 text-[10.5px] leading-relaxed text-[#8A9288]">
+                  <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  Visible uniquement par les membres de la tontine, uniquement pour les rencontres.
+                </p>
+              )}
+            </div>
+
+            {/* Rappel des sommes — dérivées du paramétrage du bureau */}
+            <div className="grid grid-cols-3 divide-x divide-[#E5DCC0] rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] text-center">
+              <div className="px-1.5 py-2.5">
+                <p className="text-[9.5px] font-bold uppercase tracking-wide text-[#8A9288]">Somme reçue</p>
+                <p className="text-[13px] font-bold text-[#1E4D2B]">{fmtN(t.pot)}</p>
+              </div>
+              <div className="px-1.5 py-2.5">
+                <p className="text-[9.5px] font-bold uppercase tracking-wide text-[#8A9288]">Collation</p>
+                <p className="text-[13px] font-bold text-[#B85C33]">{fmtN(t.collation)}</p>
+              </div>
+              <div className="px-1.5 py-2.5">
+                <p className="text-[9.5px] font-bold uppercase tracking-wide text-[#8A9288]">Chacun verse</p>
+                <p className="text-[13px] font-bold text-[#2F6B45]">{fmtN(detteParPersonne())}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Pied — fermer */}
+        <div className="sticky bottom-0 border-t border-[#E5DCC0] bg-[#FBF7EA] px-4 py-3">
+          <FcButton onClick={onFermer} className="w-full">
+            Fermer
+          </FcButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ══════════════════════════ page MEMBRES ══════════════════════════ */
 
 function MembresPage({ annee, roster, payes, selected, onSelect, onGoRole }: {
@@ -1178,10 +1573,11 @@ function PanneauMembre({ m, annee, onGoRole, onFermer }: {
 
 /* ══════════════════════════ pages du BUREAU (une page par rôle) ══════════════════════════ */
 
-function RolePage({ role, annee, roster, payes, vousRole, vousName, sigVersion, onSignaler }: {
+function RolePage({ role, annee, roster, payes, vousRole, vousName, sigVersion, onSignaler, onMontantsChange }: {
   role: BureauPage; annee: TourMois[]; roster: Member[]; payes: Payes;
   vousRole: RoleKey; vousName?: string | null; sigVersion: number;
   onSignaler: (c: { cible: Signalement["cible"]; cibleId: string | null; cibleLabel: string }) => void;
+  onMontantsChange: () => void;
 }) {
   const meta = ROLE_META[role];
   const Icon = ROLE_ICON[role];
@@ -1274,6 +1670,21 @@ function RolePage({ role, annee, roster, payes, vousRole, vousName, sigVersion, 
               const decisions = enregistrerDecisionTaux(ancienne, t, vousRole);
               appliqueAutoValidationsDecisions(decisions);
             }}
+            onSignaler={onSignaler}
+          />
+        </Block>
+      )}
+
+      {(role === "president" || role === "secretariat") && (
+        <Block
+          title="Montants de la tontine — réglage réservé au bureau"
+          icon={<Coins className="h-4.5 w-4.5" />}
+          note={`Cotisation, collation, frais d'adhésion et pénalités : seul le président ou la secrétaire les règle${peutGererTaux(vousRole) ? "" : " — vous êtes en consultation"}. Toutes les sommes affichées dans l'application (calendrier, fiche de réunion, finances, statistiques) se mettent à jour aussitôt.`}
+        >
+          <MontantsParametrable
+            editable={peutGererTaux(vousRole)}
+            vousRole={vousRole}
+            onAppliquer={onMontantsChange}
             onSignaler={onSignaler}
           />
         </Block>
@@ -1740,6 +2151,129 @@ function TauxParametrable({ taux, onAppliquer, editable = false, vousRole, onSig
         Tapez la valeur puis <strong className="text-[#1E4D2B]">quittez le champ (ou appuyez sur Entrée)</strong> — le taux s&apos;applique aussitôt, sans bouton.
         Chaque réglage est signé de votre rôle et notifié au membre — qui dispose de 7 jours pour le valider, sinon il est reconnu validé par défaut.
       </p>
+    </div>
+  );
+}
+
+/** Montants de la tontine — réglage RÉSERVÉ au bureau (président & secrétaire),
+ *  sur le même modèle que le taux mensuel : la valeur s'applique en quittant
+ *  le champ (ou avec Entrée), sans bouton. Un membre voit les montants en
+ *  lecture seule, avec un bouton « Signaler un problème » s'il estime qu'ils
+ *  sont incorrects. Tous les affichages dérivent de ces montants. */
+function MontantsParametrable({ editable = false, vousRole, onAppliquer, onSignaler }: {
+  editable?: boolean; vousRole?: RoleKey;
+  onAppliquer: () => void;
+  onSignaler?: (c: { cible: Signalement["cible"]; cibleId: string | null; cibleLabel: string }) => void;
+}) {
+  // Champs contrôlés localement, réinitialisés quand le réglage global change.
+  const [champs, setChamps] = useState<{ k: Exclude<keyof ReglagesTontine, "jourLabel">; label: string; aide: string }[]>(() => [
+    { k: "montantCotisation", label: "Cotisation mensuelle", aide: "par membre et par réunion" },
+    { k: "montantCollation", label: "Collation", aide: "par personne et par réunion" },
+    { k: "fraisAdhesion", label: "Frais d'adhésion", aide: "une seule fois — caisse sociale" },
+    { k: "penaliteRetard", label: "Pénalité de retard", aide: "versée à la caisse sociale" },
+    { k: "penaliteAbsence", label: "Absence non excusée", aide: "versée à la caisse sociale" },
+  ]);
+  const [vals, setVals] = useState<Record<string, string>>(() =>
+    Object.fromEntries(champs.map((c) => [c.k, String(TONTINE[c.k])])),
+  );
+
+  const appliquer = (k: Exclude<keyof ReglagesTontine, "jourLabel">) => {
+    const brut = (vals[k] ?? "").replace(/[^\d]/g, "");
+    const v = brut ? Math.round(Number(brut)) : NaN;
+    const bornes: Record<string, [number, number]> = {
+      montantCotisation: [500, 500_000],
+      montantCollation: [0, 100_000],
+      fraisAdhesion: [0, 500_000],
+      penaliteRetard: [0, 50_000],
+      penaliteAbsence: [0, 100_000],
+    };
+    const [min, max] = bornes[k];
+    if (!isFinite(v) || v < min || v > max) {
+      toast.error(`Montant invalide — entrez une valeur entre ${fmtN(min)} et ${fmtN(max)} FCFA.`);
+      setVals((s) => ({ ...s, [k]: String(TONTINE[k]) }));
+      return;
+    }
+    if (v === TONTINE[k]) return; // pas de changement
+    const avant = TONTINE[k];
+    saveMontants({ [k]: v } as Partial<ReglagesTontine>);
+    setVals((s) => ({ ...s, [k]: String(TONTINE[k]) }));
+    onAppliquer();
+    const libelle = champs.find((c) => c.k === k)?.label ?? k;
+    toast.success(`Décision du bureau enregistrée — ${libelle.toLowerCase()} réglé à ${fmtN(TONTINE[k])} FCFA (au lieu de ${fmtN(avant)}).`);
+  };
+
+  const signalerMontants = () =>
+    onSignaler?.({
+      cible: "autre",
+      cibleId: null,
+      cibleLabel: `Montants de la tontine (cotisation ${fmtN(TONTINE.montantCotisation)} · collation ${fmtN(TONTINE.montantCollation)})`,
+    });
+
+  // MEMBRE : lecture seule verrouillée — les montants ne doivent jamais être
+  // modifiés par un membre ; il ne peut que les constater ou les signaler.
+  if (!editable) {
+    return (
+      <div className="mt-2.5">
+        <TableWrap label="Montants en vigueur">
+          <tbody>
+            {champs.map((c, i) => (
+              <tr key={c.k} className={i % 2 === 0 ? "bg-[#FFFDF6]" : "bg-[#FBF7EA]"}>
+                <td className={`${TD} font-bold text-[#2B3530]`}>
+                  {c.label}
+                  <span className="block text-[10px] font-medium text-[#8A9288]">{c.aide}</span>
+                </td>
+                <td className={`${TD} whitespace-nowrap text-right text-[13.5px] font-bold text-[#1E4D2B]`}>{fmtN(TONTINE[c.k])} FCFA</td>
+              </tr>
+            ))}
+          </tbody>
+        </TableWrap>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="flex items-center gap-1.5 text-[11px] text-[#8A9288]">
+            <Lock className="h-3.5 w-3.5" />
+            Réservé au président et à la secrétaire{vousRole && vousRole !== "membre" ? ` — vous êtes ${ROLE_META[vousRole].short}` : ""}.
+          </p>
+          {onSignaler && <SignalerButton onClick={signalerMontants} />}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2.5 space-y-2">
+      {champs.map((c) => (
+        <div key={c.k} className="flex items-center justify-between gap-2 rounded-xl border border-[#C89F62]/50 bg-[#FFFDF6] px-3 py-2">
+          <div className="min-w-0">
+            <p className="text-[13px] font-bold text-[#2B3530]">{c.label}</p>
+            <p className="text-[10.5px] text-[#8A9288]">{c.aide}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1 rounded-xl border border-[#C89F62]/60 bg-[#FFFDF6] px-2.5 py-1.5">
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              value={vals[c.k] ?? ""}
+              onChange={(ev) => setVals((s) => ({ ...s, [c.k]: ev.target.value }))}
+              onBlur={() => appliquer(c.k)}
+              onKeyDown={(ev) => {
+                if (ev.key === "Enter") {
+                  ev.preventDefault();
+                  appliquer(c.k);
+                }
+              }}
+              aria-label={`${c.label} en FCFA — la valeur s'applique en quittant le champ ou avec Entrée`}
+              className="w-20 bg-transparent text-right text-[14.5px] font-bold text-[#1E4D2B] outline-none"
+            />
+            <span className="text-[10px] font-bold uppercase text-[#8A6420]">FCFA</span>
+          </div>
+        </div>
+      ))}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] leading-relaxed text-[#8A9288]">
+          Tapez le montant puis <strong className="text-[#1E4D2B]">quittez le champ (ou Entrée)</strong> — il s&apos;applique aussitôt, sans bouton,
+          et toutes les sommes de l&apos;application se recalculent.
+        </p>
+        {onSignaler && <SignalerButton onClick={signalerMontants} />}
+      </div>
     </div>
   );
 }
