@@ -124,11 +124,13 @@ function conseilLocal(b: GuideBody): string {
   return `${etape}${apres}${restant}Bonne route — tout se passe dans l'application.`;
 }
 
-/** Appel GLM (API gratuite, compatible OpenAI) — z.ai par défaut. */
+/** Appel GLM (API gratuite, compatible OpenAI) — cascade z.ai → open.bigmodel.cn.
+ *  La clé fonctionne sur les deux plateformes ; z.ai est parfois ponctuellement
+ *  lent : le second endpoint double la fiabilité. */
 async function glmCall(env: Env, b: GuideBody): Promise<string | null> {
   const key = env.GLM_API_KEY || env.ZAI_API_KEY;
   if (!key) return null;
-  const model = env.GLM_MODEL || "glm-4.5-flash"; // modèle gratuit z.ai
+  const model = env.GLM_MODEL || "glm-4.5-flash"; // modèle gratuit (clé sans solde sur 4.7)
   const dest = b.destination ?? {};
   const contexte = [
     `Destination : chez ${dest.nom ?? "le bénéficiaire"}${dest.quartier ? `, quartier ${dest.quartier}` : ""}${dest.arrondissement ? `, ${dest.arrondissement}` : ""}, Yaoundé (Mfoundi), Cameroun.`,
@@ -141,45 +143,54 @@ async function glmCall(env: Env, b: GuideBody): Promise<string | null> {
   ]
     .filter(Boolean)
     .join("\n");
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 12000);
-  try {
-    const res = await fetch("https://api.z.ai/api/paas/v4/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model,
-        messages: [
-          {
-            role: "system",
-            content:
-              "Tu es l'assistant de route de l'application Famille.Mbeutetsa (tontine familiale à Yaoundé, Cameroun). " +
-              "Tu aides un membre à rejoindre à pied/en voiture la maison du bénéficiaire de la réunion du mois. " +
-              "RÈGLES : réponds UNIQUEMENT en français, ton chaleureux et rassurant ; réponses COURTES (2 à 4 phrases max, ~60 mots) ; " +
-              "base-toi STRICTEMENT sur le contexte fourni (distance, manœuvres, quartiers) — n'invente jamais de nom de rue ; " +
-              "si l'information manque, dis simplement de suivre le trajet vert et d'appeler le bénéficiaire si besoin ; " +
-              "pas de listes à puces, pas de markdown. " +
-              "Tout se passe DANS l'application : ne renvoie jamais vers Google Maps, OpenStreetMap ou un lien externe.",
-          },
-          {
-            role: "user",
-            content:
-              `${b.mode === "question" ? `Question du membre : « ${b.question ?? ""} »\n\n` : "Donne un conseil de guidage spontané, bref.\n\n"}Contexte du guidage :\n${contexte}`,
-          },
-        ],
-        temperature: 0.4,
-        max_tokens: 300,
-      }),
-      signal: ctrl.signal,
-    });
-    if (!res.ok) return null;
-    const j = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    return j.choices?.[0]?.message?.content?.trim() || null;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(t);
+  const messages = [
+    {
+      role: "system",
+      content:
+        "Tu es l'assistant de route de l'application Famille.Mbeutetsa (tontine familiale à Yaoundé, Cameroun). " +
+        "Tu aides un membre à rejoindre à pied/en voiture la maison du bénéficiaire de la réunion du mois. " +
+        "RÈGLES : réponds UNIQUEMENT en français, ton chaleureux et rassurant ; réponses COURTES (2 à 4 phrases max, ~60 mots) ; " +
+        "base-toi STRICTEMENT sur le contexte fourni (distance, manœuvres, quartiers) — n'invente jamais de nom de rue ; " +
+        "si l'information manque, dis simplement de suivre le trajet vert et d'appeler le bénéficiaire si besoin ; " +
+        "pas de listes à puces, pas de markdown. " +
+        "Tout se passe DANS l'application : ne renvoie jamais vers Google Maps, OpenStreetMap, Waze ou un lien externe.",
+    },
+    {
+      role: "user",
+      content:
+        `${b.mode === "question" ? `Question du membre : « ${b.question ?? ""} »\n\n` : "Donne un conseil de guidage spontané, bref.\n\n"}Contexte du guidage :\n${contexte}`,
+    },
+  ];
+  const endpoints = ["https://api.z.ai/api/paas/v4/chat/completions", "https://open.bigmodel.cn/api/paas/v4/chat/completions"];
+  for (const url of endpoints) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 11000);
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: 0.4,
+          max_tokens: 400,
+          // glm-4.5-flash est un modèle « thinking » : sans ce drapeau il consomme
+          // son budget de tokens en raisonnement interne et renvoie un content vide.
+          thinking: { type: "disabled" },
+        }),
+        signal: ctrl.signal,
+      });
+      if (!res.ok) continue;
+      const j = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+      const rep = j.choices?.[0]?.message?.content?.trim() || null;
+      if (rep) return rep;
+    } catch {
+      /* endpoint lent/indisponible → endpoint suivant */
+    } finally {
+      clearTimeout(t);
+    }
   }
+  return null;
 }
 
 async function readBody(req: Request): Promise<Record<string, unknown>> {
