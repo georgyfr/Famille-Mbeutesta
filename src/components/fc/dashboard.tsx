@@ -8,9 +8,9 @@ import { PhoneCountrySelect, usePhoneCountry } from "./phone-country-select";
 import { FcButton, FcCard, PriorityBadge } from "./ui";
 import { roleLabel } from "./auth-flow";
 import {
-  Bell, BellOff, CalendarDays, Check, CheckCheck, Copy, Fingerprint, HeartHandshake, Home, KeyRound, LifeBuoy,
+  Bell, BellOff, CalendarDays, Check, CheckCheck, Copy, Download, Fingerprint, HeartHandshake, Home, KeyRound, LifeBuoy,
   LocateFixed, LogOut, MapPinned, Megaphone, Navigation, PiggyBank, RefreshCw, ScrollText, Send, ShieldCheck,
-  Smartphone, Trash2, UserPlus, Users, Vote,
+  Smartphone, Trash2, UserPlus, Users, Vote, X,
 } from "lucide-react";
 import { FamilyTab } from "./family-tab";
 import { LocationWizard } from "./location-wizard";
@@ -164,6 +164,7 @@ export function Dashboard({
       {showTontine ? (
         <TontinePage
           vousName={session.user.fullName}
+          vousPhone={session.user.phone ?? null}
           onBack={() => {
             try {
               history.replaceState(null, "", window.location.pathname);
@@ -175,6 +176,10 @@ export function Dashboard({
         />
       ) : (
         <>
+          {/* Rappel d'installation — hors app installée, le navigateur affiche
+              l'adresse du site en haut : l'installation (gratuite) la masque et
+              donne une vraie sensation d'application, comme WhatsApp. */}
+          <InstallBanner />
           {tab === "home" && <HomeTab session={session} goFamille={() => setTab("famille")} openLocation={() => setEditLocation(true)} />}
           {tab === "famille" && <FamilyTab onEditLocation={() => setEditLocation(true)} />}
           {tab === "notif" && <NotifTab session={session} />}
@@ -589,6 +594,111 @@ function PushCard() {
         </>
       )}
     </FcCard>
+  );
+}
+
+/* Bannière d'installation — « on voit encore l'URL du site en haut » : tant
+   que l'app n'est pas installée, le navigateur (ou le lien WhatsApp) affiche
+   sa barre d'adresse. Cette bannière propose l'installation en un touche
+   (invite native beforeinstallprompt) ou la marche à suivre ; une fois en
+   mode standalone (app installée / APK), elle disparaît d'elle-même — et
+   l'URL n'existe plus à l'écran. Discret : rabattable pour 14 jours. */
+function InstallBanner() {
+  const [visible, setVisible] = useState(false);
+  const [available, setAvailable] = useState(false);
+  const [estIOS, setEstIOS] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        // Déjà en app installée (PWA standalone / APK TWA) → pas de bannière.
+        const standalone =
+          window.matchMedia?.("(display-mode: standalone)")?.matches ||
+          (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+        if (standalone) return;
+        const raw = localStorage.getItem("fc_install_banner_v1");
+        const until = raw ? Number(raw) : 0;
+        if (until > Date.now()) return;
+        setEstIOS(/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
+        setAvailable(hasDeferredInstallPrompt());
+        setVisible(true);
+      } catch {
+        /* rien */
+      }
+    }, 1200);
+    const onBip = () => setAvailable(true);
+    window.addEventListener("beforeinstallprompt", onBip);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("beforeinstallprompt", onBip);
+    };
+  }, []);
+
+  if (!visible) return null;
+
+  const rabattre = () => {
+    setVisible(false);
+    try {
+      localStorage.setItem("fc_install_banner_v1", String(Date.now() + 14 * 86_400_000));
+    } catch {
+      /* rien */
+    }
+  };
+
+  return (
+    <div
+      role="region"
+      aria-label="Installer l'application sur votre téléphone"
+      className="relative mb-3 overflow-hidden rounded-2xl border border-[#C89F62]/50 bg-gradient-to-br from-[#1E4D2B] to-[#2F6B45] p-4 text-white shadow-lg"
+    >
+      <button
+        onClick={rabattre}
+        aria-label="Rabattre ce rappel"
+        className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-white/15 transition hover:bg-white/30"
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+      <div className="flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#C89F62] text-[#2B2416]">
+          <Smartphone className="h-5 w-5" />
+        </span>
+        <div className="min-w-0 flex-1 pr-7">
+          <p className="fc-serif text-[15px] font-bold leading-tight">Installez l&apos;application — naviguez sans l&apos;URL</p>
+          <p className="mt-1 text-[12px] leading-relaxed text-white/85">
+            {estIOS
+              ? "Sur iPhone : Partager ⎋ → « Sur l'écran d'accueil ». L'adresse du site disparaît, comme une vraie app."
+              : available
+                ? "Un touche suffit : l'icône verte s'ajoute à votre écran d'accueil et la barre d'adresse disparaît."
+                : "Installez l'app Android (APK) ou ajoutez-la à l'écran d'accueil : la barre d'adresse disparaît, comme WhatsApp."}
+          </p>
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            {available && !estIOS && (
+              <button
+                onClick={async () => {
+                  const res = await promptInstall();
+                  if (res === "accepted") {
+                    setVisible(false);
+                    toast.success("Famille.Mbeutetsa installée — ouvrez-la depuis l'icône verte 📱");
+                  }
+                }}
+                className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl bg-[#C89F62] px-3.5 text-[12.5px] font-bold text-[#2B2416] transition hover:bg-[#b98f50]"
+              >
+                <Download className="h-4 w-4" /> Installer maintenant
+              </button>
+            )}
+            {!estIOS && (
+              <a
+                href="/famille-mbeutetsa-1.1.0.apk"
+                download
+                className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border border-white/30 bg-white/10 px-3.5 text-[12.5px] font-bold text-white transition hover:bg-white/20"
+              >
+                <Download className="h-4 w-4" /> Application Android (APK)
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
