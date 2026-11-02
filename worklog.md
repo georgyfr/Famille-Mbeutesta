@@ -801,7 +801,7 @@ Task: Conception locale de l'APK v1.1.0 — signature maison avec la clé exista
 Work Log:
 - Constat : le mode signingMode « mine » de PWABuilder CloudAPK refuse notre keystore PKCS12 (« Signing file must be a base64 encoded string containing the Android keystore file ») ; contournement = génération NON SIGNÉE (signingMode « none ») puis signature locale — l'APK est ainsi réellement « conçu » par nous
 - Options v1.1.0 (scripts/gen-apk-options.ts → scripts/apk-options-v1.1.0.json) : versionName 1.1.0 / versionCode 2, packageId cm.famille.mbeutetsa, fallbackType webview, notifications ON, 4 raccourcis natifs (Membres, Trésor, Événements, Solidarité → /?shortcut=…, icônes 96)
-- APK non signé généré via CloudAPK (HTTP 200, 40 s, 3,27 Mo) ; build-tools r34 téléchargés (dl.google.com, 61 Mo) → zipalign -f -p 4 puis apksigner sign (JDK 21 + /tmp/bt/android-14) avec secrets-android/signing.keystore (alias famille-mbeutetsa-key, mot de passe [MASQUÉ — voir coffre])
+- APK non signé généré via CloudAPK (HTTP 200, 40 s, 3,27 Mo) ; build-tools r34 téléchargés (dl.google.com, 61 Mo) → zipalign -f -p 4 puis apksigner sign (JDK 21 + /tmp/bt/android-14) avec secrets-android/signing.keystore (alias famille-mbeutetsa-key, mot de passe [MDP-KEYSTORE — voir coffre chiffré])
 - Vérifications : apksigner verify → « Verifies » (v1+v2+v3) ; SHA-256 certificat = 9E:58:54:DC:…:BE:4F = identique à l'assetlinks v1.0.0 → MISE À JOUR EN PLACE sans désinstallation ; versionName 1.1.0 + meta android.app.shortcuts confirmés dans le manifeste binaire ; keytool -printcert -jarfile sur l'APK TÉLÉCHARGÉ EN PROD → même empreinte ✓
 - AAB non signé conservé (jarsigner absent du JRE headless — signature AAB à faire au moment de la publication Play Store)
 - Déploiement : .next-demo/famille-mbeutetsa.apk (v1.1.0 courante, 3 314 517 o), famille-mbeutetsa-1.1.0.apk (versionnée), famille-mbeutetsa-1.0.0.apk (archivée, 2 998 005 o), secrets-android/Famille.Mbeutetsa-1.1.0-signed.apk ; wrangler pages deploy (50 fichiers)
@@ -863,7 +863,7 @@ Stage Summary:
 - LES PUSH MARCHENT MAINTENANT SUR LE RÉSEAU CAMEROUNAIS : téléphone → pages.dev (même origine) → réseau interne Cloudflare → moteur fc-push → FCM → notification système sonore sur écran verrouillé, app fermée — 2 appareils réels déjà validés (sent:2 failed:0)
 - Auto-réparation automatique des anciens abonnements (clé factice d'avant) au premier lancement de l'app — aucune action requise de l'utilisateur final
 - ACCÈS DÉVELOPPEUR (PC uniquement, invisible sur mobile) : point discret bas-droite ou Ctrl+Shift+D → code secret → console complète (données, appareils push, diffusion famille, diagnostics)
-- Code développeur : MbeutetsaDev2025! (hash SHA-256 ae46f1f7…a696 ; serveurs vérifient le hash via secret Pages DEV_TOKEN_SHA)
+- Code développeur : [CODE-ADMIN — voir coffre chiffré] (hash SHA-256 ae46f1f7…a696 ; serveurs vérifient le hash via secret Pages DEV_TOKEN_SHA)
 - FCM : sous Android/Chrome la livraison passe DÉJÀ par fcm.googleapis.com (endpoints des abonnements) — Web Push (W3C) + VAPID auto-hébergé = 0 FCFA sans compte ; procédure FCM SDK optionnelle communiquée à l'utilisateur
 - Reproductible : bash scripts/build-cloudflare.sh (build statique + _worker.js) → bunx wrangler@4 pages deploy .next-demo --project-name famille-mbeutetsa --branch main
 
@@ -878,11 +878,11 @@ Work Log:
 - page.tsx : <DevFooterLink/> intégré dans le <footer> après la signature ; .env.cloudflare restauré (token cfut_…9fc605de, échéance 2027-10-27)
 - Lint : 0 erreur nouvelle (12 no-this-alias préexistantes fc-lite.js minifié)
 - Déploiement : bash scripts/build-cloudflare.sh (18 fichiers uploadés) → wrangler pages deploy → https://famille-mbeutetsa.pages.dev
-- Vérifications Agent Browser PRODUCTION : desktop 1440×900 → lien footer true + 2 boutons aria « Accès développeur » + login MbeutetsaDev2025! → « Accès développeur ouvert. » + 4 onglets (Aperçu : mode Démo statique détecté, 52 membres / 245 000 FCFA / 3 événements / 4 branches) ; mobile 390×844 → boutonsDevMobile:0, footer sans le lien ✓ ; passerelle push intacte (/api/push/public-key → vraie VAPID, /api/notify/recent → 200) ; APK v1.1.0 → 200 + MIME package-archive ✓
+- Vérifications Agent Browser PRODUCTION : desktop 1440×900 → lien footer true + 2 boutons aria « Accès développeur » + login [CODE-ADMIN — voir coffre chiffré] → « Accès développeur ouvert. » + 4 onglets (Aperçu : mode Démo statique détecté, 52 membres / 245 000 FCFA / 3 événements / 4 branches) ; mobile 390×844 → boutonsDevMobile:0, footer sans le lien ✓ ; passerelle push intacte (/api/push/public-key → vraie VAPID, /api/notify/recent → 200) ; APK v1.1.0 → 200 + MIME package-archive ✓
 
 Stage Summary:
 - L'accès développeur est MAINTENANT TROUVABLE sur PC : 3 portes d'entrée — lien « Développeur » dans le pied de page, bouton Terminal discret bas-droite, Ctrl+Shift+D — et reste strictement ABSENT sur mobile
-- Code développeur inchangé : MbeutetsaDev2025! (SHA-256 ae46f1f7…a696, préimage jamais dans le code, vérifié côté serveur via secret Pages DEV_TOKEN_SHA)
+- Code développeur inchangé : [CODE-ADMIN — voir coffre chiffré] (SHA-256 ae46f1f7…a696, préimage jamais dans le code, vérifié côté serveur via secret Pages DEV_TOKEN_SHA)
 - Aucune régression : push (clé VAPID, événements récents), APK, gate ES5, dashboard inchangés
 
 ---
@@ -895,11 +895,11 @@ Work Log:
 - dev-access.tsx renommé « administrateur » (console, champ, toasts, session) ; bouton fantôme → pastille blanche lisible « 🔑 Admin » (h-9, KeyRound + label, hover accentué) en bas-droite ; auto-ouverture si location.hash = #admin|#dev|#console (au montage + hashchange, desktop seulement) ; DevFooterLink : libellé « ADMINISTRATION » 11 px opacité 60 % + écoute resize (corrige le lien qui restait si la fenêtre est rétrécie après montage)
 - Bug repéré au test : hash-only navigation ne recharge pas la page (état desktop persistant en simulation) → fix resize listener ; re-test avec chargement frais
 - Déploiements : build-cloudflare.sh + wrangler (2×, token .env.cloudflare re-disparu → recréé + passage inline)
-- Vérifs PROD Agent Browser : desktop 1440×900 frais → /#admin ouvre « Console administrateur », pastille Admin présente, login MbeutetsaDev2025! → « Connexion administrateur réussie. » + 4 onglets ; mobile 390×844 frais → consoleOuverte:false, elementsAdmin:0, footer signature seule ✓ ; push (VAPID 200), APK (200 package-archive), accueil (200) intacts
+- Vérifs PROD Agent Browser : desktop 1440×900 frais → /#admin ouvre « Console administrateur », pastille Admin présente, login [CODE-ADMIN — voir coffre chiffré] → « Connexion administrateur réussie. » + 4 onglets ; mobile 390×844 frais → consoleOuverte:false, elementsAdmin:0, footer signature seule ✓ ; push (VAPID 200), APK (200 package-archive), accueil (200) intacts
 
 Stage Summary:
 - 4 portes d'entrée admin desktop redondantes : ADRESSE DIRECTE https://famille-mbeutetsa.pages.dev/#admin (à mettre en favori — ouvre la console automatiquement), pastille « 🔑 Admin » bas-droite toujours visible, lien « Administration » dans le footer, Ctrl+Shift+D — TOUTES absentes sur mobile/APK (0 élément admin vérifié à 390×844)
-- Code administrateur inchangé : MbeutetsaDev2025!
+- Code administrateur inchangé : [CODE-ADMIN — voir coffre chiffré]
 
 ---
 Task ID: 18
@@ -969,7 +969,7 @@ Stage Summary:
 - FIX : 239 drapeaux PNG 40px téléchargés depuis flagcdn.com (CDN libre, sans clé) → /public/flags/{iso}.png (960 Ko au total, servis same-origin) ; fc-countries.ts : nouveau helper flagUrl(iso) = /flags/{iso}.png ; phone-country-select.tsx : nouveau composant <Flag> = <img loading=lazy> arrondi avec bordure subtile, repli gracieux onError → code pays en toutes lettres (jamais de drapeau cassé) ; bouton + options du sélecteur remplacés ; import flagEmoji retiré du composant (conservé dans lib pour usages futurs/repli)
 - TESTS LOCAL : 239 images /flags/ dans la listbox ✓ ; bouton Cameroun +237 avec drapeau 🇨🇲 réel ✓ ; eslint 0 erreur sur les 2 fichiers ; tsc : 5 erreurs préexistantes confirmées (dev-access/fc-push, présentes sans les modifs — stash test)
 - BUILD + DÉPLOIEMENT : build-cloudflare.sh OK (drapeaux inclus dans .next-demo/flags) ; wrangler pages deploy → déploiement 6cad32c3 (257 fichiers uploadés) ; PRODUCTION : /flags/cm.png 200 (173 o), /flags/fr.png 200, site 200 ; agent-browser : drapeauxImg=239, emojiRestants=0, drapeau Cameroun en tête de liste, 0 erreur page
-- CODE ADMINISTRATEUR rappelé à l'admin (demande explicite) : MbeutetsaDev2025! — SHA-256 vérifié = ae46f1f7f5f314a96dd9283a5e92b4651ca98ecc87564e42f2bc0d52269aa696 (= DEV_TOKEN_SHA du secret Pages + hash dev-access.tsx) ; accès : bouton « Admin » en bas d'écran / #admin / Ctrl+Shift+D (bureau)
+- CODE ADMINISTRATEUR rappelé à l'admin (demande explicite) : [CODE-ADMIN — voir coffre chiffré] — SHA-256 vérifié = ae46f1f7f5f314a96dd9283a5e92b4651ca98ecc87564e42f2bc0d52269aa696 (= DEV_TOKEN_SHA du secret Pages + hash dev-access.tsx) ; accès : bouton « Admin » en bas d'écran / #admin / Ctrl+Shift+D (bureau)
 
 ## Task 31 — Épargnes refondues : « Mes mois d'épargne » + calendrier des sommes perçues [2026-10-31]
 
@@ -1114,7 +1114,7 @@ Stage Summary:
 
 ## Task 41 — Clé GLM branchée en production : l'assistant de route répond avec la VRAIE IA (ai:true), cascade z.ai↔bigmodel.cn [2026-11-01]
 
-- DEMANDE (suite Task 40) : « voici la clé api a utiliser pour la version 4.7: [MASQUÉ — voir coffre] »
+- DEMANDE (suite Task 40) : « voici la clé api a utiliser pour la version 4.7: [CLÉ GLM — secret Cloudflare GLM_API_KEY] »
 - TESTS DE LA CLÉ (curl directs) : format Zhipu/BigModel reconnu sur les DEUX plateformes ; modèle « glm-4.7 » → erreur 1113 « Insufficient balance or no resource package » (le 4.7 est PAYANT, la clé n'a pas de solde) ; glm-4.6 / glm-4.6-flash / glm-4-flash → 1211 Unknown Model ou 1113 ; **glm-4.5-flash → 200 OK, GRATUIT** (le modèle gratuit réel derrière « GLM 4.7 » annoncé) → adopté comme GLM_MODEL
 - DÉCOUVERTE CLÉ : glm-4.5-flash est un modèle « thinking » — sans le drapeau `thinking:{type:"disabled"}` il brûle son budget max_tokens en reasoning_content et renvoie content VIDE (finish_reason length) → FIX appliqué au worker + max_tokens 300→400 ; test validé : réponse FR parfaite (avenue de la Briqueterie, embouteillages…)
 - SECRETS CLOUDFLARE PAGES (PATCH deployment_configs, API v4) : production env_vars = **GLM_API_KEY (secret_text, clé fournie)** + **GLM_MODEL=glm-4.5-flash (plain_text)** + restauration inchangée de PUSH_ENGINE_URL + DEV_TOKEN_SHA (hash du code admin, valeur retrouvée dans le worklog — ne JAMAIS la perdre) ; lecture POST-PATCH confirmée : 4 clés présentes ; clé également sauvegardée dans .env.cloudflare (4 lignes) ET ~/.bashrc (le fichier a déjà disparu 4 fois)
@@ -1127,3 +1127,14 @@ Stage Summary:
 - BOUTON « S'Y RENDRE DISPARN » (claircissement pour l'utilisateur) : le bouton externe n'a pas disparu — il est DEVENU interne : « Y aller » (trajet tracé sur la carte famille) + « Guidage IA » (assistant complet) depuis l'onglet Famille, « S'y rendre — guidé par l'IA » dans la fiche bénéficiaire ; zéro sortie d'app
 - COÛT TOTAL : 0 FCFA — GLM 4.5-flash gratuit, OSRM gratuit sans clé, fonds HOT/CARTO/Esri gratuits sans clé ; la clé reste côté serveur (secret Pages), jamais dans le client
 - COMMIT : build .next-demo à jour + worklog
+
+## Task 42 — Sauvegarde complète sur GitHub (miroir public assaini + coffre chiffré) [2026-11-01]
+
+- DEMANDE : « pousse tous les résultats sur github » + PAT fourni (compte georgyfr)
+- PAT ANALYSÉ : fine-grained, permissions LIMITÉES à Contents read/write sur georgyfr/Famille-Mbeutesta — ni création de dépôt, ni gist, ni PATCH visibilité (403) ; le dépôt existant (PUBLIC, ancienne doc : specs/maquettes/README, 40 fichiers, main=488f304) ne peut PAS être passé en privé → stratégie miroir assaini + coffre chiffré
+- DÉCOUVERTE CRITIQUE : secrets-android/signing.keystore + signing-key-info.txt (mots de passe) SUIVIS dans l'historique local depuis les premières tasks ; worklog.md contenait le CODE ADMIN en clair (4×) et la CLÉ GLM complète (ligne 1117) ; pire : le MDP keystore [mdp tronqué] en dur dans scripts/gen-apk-options.ts + scripts/apk-options-v1.1.0.json + worklog — et la branche distante PRÉEXISTANTE app-nextjs (jusqu'à Task 33) exposait déjà keystore+infos publiquement
+- COFFRE CHIFFRÉ secrets-famille-mbeutetsa.tar.enc (AES-256-CBC + PBKDF2, mot de passe remis au canal admin UNIQUEMENT — jamais committé) contenant : signing.keystore, signing-key-info.txt, .env.cloudflare, coffre-notes.txt (code admin + clé GLM + procédure déploiement) ; ROUNDTRIP vérifié (checksums identiques)
+- PURGE D'HISTORIQUE (git-filter-repo 2.47 sur clone temporaire /tmp/fc-push) : invert-paths signing.keystore + signing-key-info.txt sur TOUTE l'histoire ; replace-text : code admin + clé GLM → placeholders ; scan post-purge vide ; puis MDP keystore détecté dans main → 2e passe replace-text + CORRECTIF CODE : gen-apk-options.ts lit désormais APK_KEYSTORE_PASSWORD (env) ou signing-key-info.txt (parser « Key store password: ») — plus AUCUNE valeur en dur ; JSON régénéré avec placeholders ; worklog courant assaini (mdp + code admin masqués) ; SECRETS.md documente le coffre, la restauration et la branche docs-initiales
+- PUSH : georgyfr/Famille-Mbeutesta — main = projet complet assaini (force push, 1318 fichiers : src/, worklog, .next-demo, APK/AAB sans keystore, coffre, SECRETS.md) ; docs-initiales = ancienne documentation préservée ; app-nextjs (branche préexistante à fuiter) → PURGÉE À SON TOUR (invert-paths + replace-text) puis force push
+- SECRETS SAUVEGARDÉS PARALLÈLEMENT dans ~/.bashrc : CLOUDFLARE_API_TOKEN/ACCOUNT_ID (déjà présents), GLM_API_KEY, FC_ADMIN_CODE, APK_KEYSTORE_PASSWORD — + .env.cloudflare recréé (5ᵉ disparition !)
+- RÈGLE FUTURE : JAMAIS de secret en clair dans les commits ; les valeurs sensibles s'écrivent [MASQUÉ — voir coffre] ; le miroir GitHub se met à jour via clone→filter-repo→push (remplacements relisibles depuis .bashrc) ; vérifier chaque push par scan git grep multi-patterns

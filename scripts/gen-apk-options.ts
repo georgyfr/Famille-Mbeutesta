@@ -1,8 +1,28 @@
 // Génère scripts/apk-options-v1.1.0.json — APK v1.1.0 signé avec la MÊME clé que v1.0.0
 // (mise à jour en place sans désinstallation) + raccourcis natifs Android.
+// ⚠ SÉCURITÉ : le mot de passe du keystore n'est JAMAIS en dur dans ce fichier
+// (le dépôt GitHub est public). Il est lu depuis :
+//   1. l'environnement APK_KEYSTORE_PASSWORD, sinon
+//   2. secrets-android/signing-key-info.txt (restaurable depuis le coffre
+//      chiffré secrets-famille-mbeutetsa.tar.enc — voir SECRETS.md).
 import { readFileSync, writeFileSync } from "node:fs";
 
+function keystorePassword(): string {
+  if (process.env.APK_KEYSTORE_PASSWORD) return process.env.APK_KEYSTORE_PASSWORD;
+  try {
+    const info = readFileSync("/home/z/my-project/secrets-android/signing-key-info.txt", "utf8");
+    const m = info.match(/Key store password:\s*(\S+)/);
+    if (m) return m[1];
+  } catch {
+    /* fichier absent (miroir GitHub) */
+  }
+  throw new Error(
+    "Mot de passe keystore introuvable : définissez APK_KEYSTORE_PASSWORD ou restaurez secrets-android/signing-key-info.txt depuis le coffre (voir SECRETS.md).",
+  );
+}
+
 const keystoreB64 = readFileSync("/tmp/keystore.b64", "utf8").trim();
+const KEYSTORE_PASS = keystorePassword();
 const icon96 = "https://famille-mbeutetsa.pages.dev/icons/icon-96.png";
 
 const shortcut = (name, slug) => ({
@@ -58,9 +78,9 @@ const options = {
     organization: "Famille Mbeutetsa",
     organizationalUnit: "Famille",
     countryCode: "CM",
-    password: "[MASQUÉ — voir coffre]",
-    storePassword: "[MASQUÉ — voir coffre]",
-    keyPassword: "[MASQUÉ — voir coffre]",
+    password: KEYSTORE_PASS,
+    storePassword: KEYSTORE_PASS,
+    keyPassword: KEYSTORE_PASS,
   },
 };
 
