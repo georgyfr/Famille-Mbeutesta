@@ -1138,3 +1138,32 @@ Stage Summary:
 - PUSH : georgyfr/Famille-Mbeutesta — main = projet complet assaini (force push, 1318 fichiers : src/, worklog, .next-demo, APK/AAB sans keystore, coffre, SECRETS.md) ; docs-initiales = ancienne documentation préservée ; app-nextjs (branche préexistante à fuiter) → PURGÉE À SON TOUR (invert-paths + replace-text) puis force push
 - SECRETS SAUVEGARDÉS PARALLÈLEMENT dans ~/.bashrc : CLOUDFLARE_API_TOKEN/ACCOUNT_ID (déjà présents), GLM_API_KEY, FC_ADMIN_CODE, APK_KEYSTORE_PASSWORD — + .env.cloudflare recréé (5ᵉ disparition !)
 - RÈGLE FUTURE : JAMAIS de secret en clair dans les commits ; les valeurs sensibles s'écrivent [MASQUÉ — voir coffre] ; le miroir GitHub se met à jour via clone→filter-repo→push (remplacements relisibles depuis .bashrc) ; vérifier chaque push par scan git grep multi-patterns
+
+## Task 43 — Maquette v2 validée : le président est AUSSI un membre (cotiser, épargner, emprunter, prêter) + nouveau token Cloudflare, déployé en production [2026-11-02]
+
+Demande (validée par l'administrateur) :
+- « Que se passe-t-il quand le président lui aussi veut faire des épargnes, prêter de l'argent, cotiser ? As-tu pensé mettre ce champ ? »
+- L'interface de gestion présidentielle est PARFAITE → l'envoyer dans le projet Cloudflare.
+- Le président doit avoir accès à TOUTES les pages d'un membre simple : il est d'abord membre de la réunion ; la différence = des onglets supplémentaires (la console opérationnelle).
+
+Work Log:
+- ESPACE MEMBRE dans la maquette (src/components/fc/maquette-president.tsx, v1 1433 lignes → v2 ~1900) :
+  - 3 nouveaux onglets après un séparateur « ESPACE MEMBRE » (style teal distinct des onglets bureau) : Mes cotisations · Mes épargnes · Mes prêts.
+  - MES COTISATIONS : rappel « d'abord membre — ensuite président » (mêmes montants/mêmes pénalités/même tour n°1) ; bouton « Cotiser 12 000 FCFA » (10 000 + 2 000 collation, dérivés de TONTINE) ; statut passe « à jour » ; HISTORIQUE par mois ; barre de progression des cotisations déclarées.
+  - INTERACTIF AVEC LE COCKPIT : la cotisation du président incrémente le KPI « Cotisations du mois » du cockpit (7/10 → 8/10) — plus de valeur codée en dur (state cotisDeclarees).
+  - MES ÉPARGNES : solde personnel, dépôts rapides (5k/10k/25k) + montant libre, retrait avec contrôle de solde, historique des mouvements, taux identique pour tous (TAUX_DEFAUT 3 %/mois, fixé par le bureau).
+  - MES PRÊTS (double sens de « prêter ») : (a) EMPRUNTER à la caisse — mêmes règles (motif, garanties, avaliste obligatoire, taux), champ par champ ; (b) PRÊTER SON ARGENT PERSONNEL à un membre — formulaire (membre, montant, conditions, échéance), registre des prêts personnels, bouton « Remboursé », note « le censeur y accède en cas de litige ».
+  - RÉCUSATION (conflit d'intérêts) : la demande de prêt du président part dans la file « Prêts & garanties » marquée « (vous — récusé) » ; le bouton « Accorder » lui est INTERDIT (toast d'erreur) ; le bureau statue sans sa voix — widget de vote 3 votants (vice-présidente, trésorier, censeur), majorité 2/3 → « Accordé » automatique.
+  - En-tête : nouvelle puce « Membre n°1 — cotisation à jour / cotisation du mois à faire » (dorée si à faire).
+  - Journal : chaque action membre s'inscrit au journal des décisions (acteur « Président (membre) » / « Président (particulier) » / « Bureau »).
+  - Bannière et pied de page passés en « MAQUETTE v2 — espace membre du président inclus » (maquette-gate.tsx).
+- VÉRIFICATION E2E LOCALE (agent-browser, viewport 420×900) : 3 onglets présents, cotiser → chip « cotisation à jour » + KPI cockpit 8/10 ✓, épargne +10k puis +10k → solde 140 000 + toasts ✓, demande de prêt 100 000 avec avaliste f02 → file « Prêts & garanties » avec bannière récusation + 3 votants ✓, vote 2× « Pour » → « Majorité du bureau atteinte (2/3) » + « Accordé » ✓, prêt personnel 30 000 à Chantal Djuidje enregistré ✓, zéro erreur console, footer sticky OK desktop.
+- CLOUDFLARE — nouveau token fourni (préfixe cfut_…, expire 2027-10) : vérifié actif par API. SUBTILITÉ : le compte indiqué par l'administrateur (5ab8107e…) renvoie 9109 Unauthorized — ce token est scopé sur le compte « Famille mbeutetsa » (ead74f17…) où vit le projet famille-mbeutetsa (famille-mbeutetsa.pages.dev). Déploiement effectué sur CE compte (URL de production inchangée) ; .env.cloudflare mis à jour avec le nouveau token + l'account id du token (GLM_API_KEY/GLM_MODEL préservés, valeurs dans ~/.bashrc, rien en clair ici).
+- BUILD : scripts/build-cloudflare.sh (static export DEMO_BUILD=1 + _worker.js), index.html contient « MAQUETTE v2 — espace membre du président inclus » + les 3 onglets, chunk JS contient la récusation.
+- DÉPLOIEMENT : wrangler pages deploy → OK. Vérifications production : page 200 avec contenu v2, POST /api/ai/guide → ai:true (GLM toujours branché, secret conservé côté Pages), assetlinks.json 200, E2E navigateur sur la PRODUCTION : maquette v2 rendue, onglet Mes cotisations, cotisation → « Cotisation à jour » ✓.
+
+Stage Summary:
+- Le président est d'abord MEMBRE : il cotise, épargne, emprunte et prête exactement comme tout le monde — sans aucun avantage, sous le contrôle du censeur.
+- Sa propre demande de prêt déclenche une récusation automatique : le bureau statue à 2/3 sans sa voix (transparence totale).
+- Maquette v2 en ligne sur famille-mbeutetsa.pages.dev (bascule maquette ⇄ app conservée) ; les consoles des autres acteurs (trésorier, secrétaire…) suivront le même schéma après validation.
+- Prochaines étapes possibles : intégrer les mêmes onglets « espace membre » dans la vraie fiche du rôle (tontine-page) une fois les consoles branchées aux registres réels.
