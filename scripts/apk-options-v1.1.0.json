@@ -92,8 +92,8 @@
     "organization": "Famille Mbeutetsa",
     "organizationalUnit": "Famille",
     "countryCode": "CM",
-    "password": "7xVBTZaYoar1",
-    "storePassword": "7xVBTZaYoar1",
-    "keyPassword": "7xVBTZaYoar1"
+    "password": "<APK_KEYSTORE_PASSWORD — voir secrets-android/signing-key-info.txt ou coffre chiffré>",
+    "storePassword": "<APK_KEYSTORE_PASSWORD>",
+    "keyPassword": "<APK_KEYSTORE_PASSWORD>"
   }
 }
