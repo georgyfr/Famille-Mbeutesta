@@ -1,13 +1,15 @@
 import { DevAccess, DevFooterLink } from "@/components/fc/dev-access";
 import { LegacyApp } from "@/components/fc/legacy-app";
-import { MainApp } from "@/components/fc/main-app";
+import { MaquetteGate } from "@/components/fc/maquette-gate";
 
 /**
- * Une seule URL, deux moteurs (progressive enhancement) :
- *  - <LegacyApp/>  : app Lite statique ES5 — visible uniquement sur les navigateurs
- *                    de 2015 (iOS 9, Android 5/6, Chrome < 80) via `html.fc-legacy` ;
- *  - <MainApp/>    : app React complète — splash natif, inscription façon WhatsApp,
- *                    session persistante, navigation basse, PWA installable.
+ * Une seule URL, trois étages (progressive enhancement) :
+ *  - <LegacyApp/>    : app Lite statique ES5 — visible uniquement sur les navigateurs
+ *                      de 2015 (iOS 9, Android 5/6, Chrome < 80) via `html.fc-legacy` ;
+ *  - <MaquetteGate/> : maquette « Poste de commandement du Président » soumise à
+ *                      validation — avec bascule vers l'app complète ;
+ *  - <MainApp/>      : app React complète — splash natif, inscription façon WhatsApp,
+ *                      session persistante, navigation basse, PWA installable.
  * Le browser gate ES5 (layout.tsx) tranche avant le premier rendu.
  */
 export default function Page() {
@@ -16,7 +18,7 @@ export default function Page() {
       <main className="flex flex-1 flex-col">
         <LegacyApp />
         <div className="fc-root flex flex-1 flex-col">
-          <MainApp />
+          <MaquetteGate />
         </div>
       </main>
 
