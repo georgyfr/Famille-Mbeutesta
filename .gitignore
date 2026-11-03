@@ -54,3 +54,4 @@ server.log
 /skills/.env.cloudflare
 tool-results/
 upload/
+.tmp-edit/

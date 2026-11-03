@@ -24,7 +24,7 @@ import {
   ClipboardList, Coins, FileText, Gavel, Hand, HandCoins, HandHeart,
   HeartHandshake, Hourglass, Landmark, Layers, ListChecks, Lock, MessageSquarePlus,
   Mic, Pause, Phone, PiggyBank, Play, Plus, ReceiptText, RotateCcw, Scale, ScrollText, Send,
-  ShieldCheck, SlidersHorizontal, Sparkles, Square, Tag, ThumbsDown, ThumbsUp, Timer,
+  ShieldCheck, SlidersHorizontal, Sparkles, Square, Tag, ThumbsDown, ThumbsUp, Timer, TrendingUp,
   Trash2, UserCheck, UserPlus, Users, Vote, Wallet, XCircle,
 } from "lucide-react";
 import { FcCard } from "./ui";
@@ -173,6 +173,8 @@ type PretDemande = {
   /** Dossier du président lui-même : récusation — le bureau statue sans sa voix. */
   president?: boolean;
   votesBureau?: { vice: boolean | null; tresorier: boolean | null; censeur: boolean | null };
+  /** Mois (0-11) auquel le prêt est rattaché — base du calendrier de remboursement. */
+  moisIdx?: number;
 };
 /** Prêt PERSONNEL du président à un membre (hors caisse, inscrit au registre). */
 type PretPerso = {
@@ -180,7 +182,7 @@ type PretPerso = {
   echeance: string; le: string; statut: "en_cours" | "rembourse";
 };
 /** Mouvement d'épargne personnelle du président (démo). */
-type EpargneOp = { id: string; type: "depot" | "retrait"; montant: number; le: string; note: string };
+type EpargneOp = { id: string; type: "depot" | "retrait"; montant: number; le: string; note: string; moisIdx: number };
 type VoteBureau = { vice: boolean | null; secretariat: boolean | null; tresorier: boolean | null; censeur: boolean | null };
 type EvVie = {
   id: string; membreId: string; type: "deuil" | "mariage" | "naissance" | "maladie"; label: string;
@@ -293,9 +295,16 @@ export function MaquettePresident() {
   ]);
   const [epargneSolde, setEpargneSolde] = useState(120_000);
   const [epargneOps, setEpargneOps] = useState<EpargneOp[]>([
-    { id: "eo1", type: "depot", montant: 60_000, le: "14 sept.", note: "Épargne mensuelle" },
-    { id: "eo2", type: "depot", montant: 60_000, le: "12 oct.", note: "Épargne mensuelle + intérêts du mois" },
+    { id: "eo1", type: "depot", montant: 60_000, le: "14 sept.", note: "Épargne mensuelle", moisIdx: 8 },
+    { id: "eo2", type: "depot", montant: 60_000, le: "12 oct.", note: "Épargne mensuelle + intérêts du mois", moisIdx: 9 },
   ]);
+  /* Mois choisi pour le DÉPÔT D'ÉPARGNE en cours (0-11) — on peut avoir oublié
+   * de déposer au mois d'avant : l'épargne est rattachée au mois réel, et les
+   * intérêts sont calculés à partir de CE mois. null = pas encore hydraté. */
+  const [epargneMoisChoisi, setEpargneMoisChoisi] = useState<number | null>(null);
+  /* Mois choisi pour la DEMANDE DE PRÊT en cours (le prêt démarre ce mois). */
+  const [pretMoisChoisi, setPretMoisChoisi] = useState<number | null>(null);
+  const [moisCourantIdx, setMoisCourantIdx] = useState<number | null>(null);
   const [mesPretsForm, setMesPretsForm] = useState({ montant: "", motif: "", garanties: "", avalisteId: "" });
   const [pretsPersos, setPretsPersos] = useState<PretPerso[]>([
     { id: "pp1", membreId: "f07", montant: 50_000, conditions: "Sans intérêt — coup de pouce entre membres", echeance: "Après la levée du membre", le: "02 oct.", statut: "en_cours" },
@@ -335,6 +344,9 @@ export function MaquettePresident() {
       const jReste = Math.round((new Date(y, m, d).getTime() - new Date(n.getFullYear(), n.getMonth(), n.getDate()).getTime()) / 86_400_000);
       setAujourdhuiInfo({ jReste, mois: MOIS_FR[m] });
       setMoisCourant(MOIS_FR[n.getMonth()]);
+      setMoisCourantIdx(n.getMonth());
+      setEpargneMoisChoisi(n.getMonth());
+      setPretMoisChoisi(n.getMonth());
     }, 0);
     return () => clearTimeout(t);
   }, []);
@@ -636,22 +648,27 @@ export function MaquettePresident() {
     toast.success("Votre cotisation est enregistrée", { description: `${fcfa(total)} (cotisation + collation) — reçu immédiat. Le total du mois monte à ${Math.min(cotisDeclarees + 1, roster.length)}/${roster.length} pour le trésorier.` });
     journalAdd(`Le président a cotisé comme membre : ${fcfa(total)} pour ${moisCourant ?? "ce mois"} — mêmes règles que tous, aucune exception.`, "Président (membre)");
   };
-  const epargnerMoi = (montant: number) => {
+  const epargnerMoi = (montant: number, moisIdx: number) => {
     if (!montant || montant <= 0) { toast.error("Indiquez un montant valide"); return; }
+    if (moisCourantIdx != null && moisIdx > moisCourantIdx) { toast.error("On ne dépose pas à l'avance — choisissez le mois réel de l'épargne (en retard, c'est permis)"); return; }
     const solde = epargneSolde + montant;
     setEpargneSolde(solde);
-    setEpargneOps((prev) => [{ id: nid(), type: "depot", montant, le: heure(), note: "Dépôt d’épargne" }, ...prev]);
-    toast.success(`${fcfa(montant)} déposés sur votre épargne`, { description: `Nouveau solde : ${fcfa(solde)} — rémunéré à ${TAUX_DEFAUT} %/mois, exactement comme chaque membre.` });
-    journalAdd(`Épargne du président : +${fcfa(montant)} — solde ${fcfa(solde)} (taux ${TAUX_DEFAUT} %/mois).`, "Président (membre)");
+    setEpargneOps((prev) => [{ id: nid(), type: "depot", montant, le: heure(), note: "Dépôt d’épargne", moisIdx }, ...prev]);
+    const taux = reglement.epargne.tauxMensuel || TAUX_DEFAUT;
+    const moisRestants = moisCourantIdx != null ? Math.max(1, moisCourantIdx - moisIdx + 1) : 1;
+    const deja = Math.round(montant * (taux / 100) * moisRestants);
+    toast.success(`${fcfa(montant)} déposés pour ${MOIS_FR[moisIdx]}`, { description: `Nouveau solde : ${fcfa(solde)} — à ${taux} %/mois, cette épargne rapporte déjà ≈ ${fcfa(deja)} d’intérêts (${moisRestants} mois), et les mois à venir s’ajoutent au tableau.` });
+    journalAdd(`Épargne du président : +${fcfa(montant)} rattachée à ${MOIS_FR[moisIdx]} — solde ${fcfa(solde)} (taux ${taux} %/mois).`, "Président (membre)");
   };
-  const retirerEpargneMoi = (montant: number) => {
+  const retirerEpargneMoi = (montant: number, moisIdx: number) => {
     if (!montant || montant <= 0) { toast.error("Indiquez un montant valide"); return; }
     if (montant > epargneSolde) { toast.error(`Solde insuffisant — votre épargne est de ${fcfa(epargneSolde)}`); return; }
+    if (moisCourantIdx != null && moisIdx > moisCourantIdx) { toast.error("Le retrait se rattache au mois réel (en retard, c'est permis)"); return; }
     const solde = epargneSolde - montant;
     setEpargneSolde(solde);
-    setEpargneOps((prev) => [{ id: nid(), type: "retrait", montant, le: heure(), note: "Retrait sur demande" }, ...prev]);
-    toast.success(`${fcfa(montant)} retirés`, { description: `Nouveau solde : ${fcfa(solde)} — le trésorier prépare le versement.` });
-    journalAdd(`Retrait d’épargne du président : −${fcfa(montant)} — solde ${fcfa(solde)}.`, "Président (membre)");
+    setEpargneOps((prev) => [{ id: nid(), type: "retrait", montant, le: heure(), note: "Retrait sur demande", moisIdx }, ...prev]);
+    toast.success(`${fcfa(montant)} retirés (${MOIS_FR[moisIdx]})`, { description: `Nouveau solde : ${fcfa(solde)} — le trésorier prépare le versement.` });
+    journalAdd(`Retrait d’épargne du président : −${fcfa(montant)} rattaché à ${MOIS_FR[moisIdx]} — solde ${fcfa(solde)}.`, "Président (membre)");
   };
   const demanderPretMoi = () => {
     const montant = Number(mesPretsForm.montant);
@@ -659,13 +676,15 @@ export function MaquettePresident() {
     if (!mesPretsForm.motif.trim()) { toast.error("Indiquez le motif — comme pour tout membre"); return; }
     if (!mesPretsForm.garanties.trim()) { toast.error("Indiquez vos garanties"); return; }
     if (!mesPretsForm.avalisteId) { toast.error("Désignez un avaliste — règle identique pour tous"); return; }
+    const moisIdx = pretMoisChoisi ?? moisCourantIdx ?? 0;
     setPrets((prev) => [{
       id: nid(), membreId: MOI, montant, motif: mesPretsForm.motif.trim(), garanties: mesPretsForm.garanties.trim(),
       avalisteId: mesPretsForm.avalisteId, cosignTresorier: false, statut: "en_attente" as const, motifRefus: "", president: true,
+      moisIdx,
     }, ...prev]);
     setMesPretsForm({ montant: "", motif: "", garanties: "", avalisteId: "" });
-    toast("Demande déposée — vous repassez côté membre", { description: "Récusation automatique : le bureau statue SANS votre voix (vice-présidente, trésorier, censeur — majorité 2/3). Suivez-le dans « Prêts & garanties »." });
-    journalAdd(`Le président a demandé un prêt de ${fcfa(montant)} comme membre — dossier soumis au bureau, président récusé.`, "Président (membre)");
+    toast("Demande déposée — vous repassez côté membre", { description: `Prêt rattaché à ${MOIS_FR[moisIdx]} — calendrier de remboursement mois par mois visible ci-dessous. Récusation automatique : le bureau statue SANS votre voix.` });
+    journalAdd(`Le président a demandé un prêt de ${fcfa(montant)} rattaché à ${MOIS_FR[moisIdx]} — dossier soumis au bureau, président récusé.`, "Président (membre)");
   };
   const voterPretBureau = (id: string, qui: "vice" | "tresorier" | "censeur", pour: boolean) => {
     setPrets((prev) => prev.map((x) => {
@@ -938,6 +957,9 @@ export function MaquettePresident() {
             taux={reglement.epargne.tauxMensuel || TAUX_DEFAUT}
             preavisJours={reglement.epargne.preavisJours}
             typeEpargneNom={reglement.epargne.typeChoisi ? TYPES_EPARGNE_CATALOGUE.find((t) => t.id === reglement.epargne.typeChoisi)?.nom ?? null : null}
+            moisChoisi={epargneMoisChoisi}
+            setMoisChoisi={setEpargneMoisChoisi}
+            moisCourantIdx={moisCourantIdx}
             onDepot={epargnerMoi}
             onRetrait={retirerEpargneMoi}
           />
@@ -951,6 +973,9 @@ export function MaquettePresident() {
             regl={reglement}
             form={mesPretsForm}
             setForm={setMesPretsForm}
+            moisChoisi={pretMoisChoisi}
+            setMoisChoisi={setPretMoisChoisi}
+            moisCourantIdx={moisCourantIdx}
             onDemander={demanderPretMoi}
             formPerso={pretPersoForm}
             setFormPerso={setPretPersoForm}
@@ -1921,10 +1946,46 @@ function MesEpargnesSection(p: {
   solde: number; ops: EpargneOp[]; taux: number; preavisJours: number;
   /** Nom du type d'épargne choisi par le bureau (null = aucun). */
   typeEpargneNom: string | null;
-  onDepot: (montant: number) => void; onRetrait: (montant: number) => void;
+  /** Mois choisi (0-11) pour le dépôt en cours + mois courant (0-11) — les
+   *  mois FUTURS sont interdits, les mois PASSÉS permis (épargne oubliée). */
+  moisChoisi: number | null;
+  setMoisChoisi: (m: number) => void;
+  moisCourantIdx: number | null;
+  onDepot: (montant: number, moisIdx: number) => void; onRetrait: (montant: number, moisIdx: number) => void;
 }) {
   const [montant, setMontant] = useState("");
   const v = Number(montant);
+  const taux = p.taux;
+  const mCourant = p.moisCourantIdx;
+
+  /* — MES INTÉRÊTS MOIS PAR MOIS (cette année) —
+   * Chaque dépôt est rattaché à SON mois ; un mois où l'épargne est en place
+   * rapporte taux % (crédités en fin de mois, intérêt simple). Les mois déjà
+   * passés donnent des intérêts RÉALISÉS, les mois à venir une PROJECTION. */
+  const lignes = useMemo(() => {
+    const parMois: { depots: number; retraits: number }[] = Array.from({ length: 12 }, () => ({ depots: 0, retraits: 0 }));
+    p.ops.forEach((o) => {
+      const m = Math.min(11, Math.max(0, o.moisIdx));
+      if (o.type === "depot") parMois[m].depots += o.montant; else parMois[m].retraits += o.montant;
+    });
+    type Ligne = { mois: string; m: number; depots: number; retraits: number; enPlace: number; interet: number; cumul: number; avenir: boolean; courant: boolean };
+    return MOIS_FR.reduce<Ligne[]>((acc, nom, m) => {
+      const prec = acc[acc.length - 1];
+      const enPlace = (prec?.enPlace ?? 0) + parMois[m].depots - parMois[m].retraits;
+      const interet = Math.round(enPlace * (taux / 100));
+      const avenir = mCourant != null && m > mCourant;
+      acc.push({
+        mois: nom, m, depots: parMois[m].depots, retraits: parMois[m].retraits,
+        enPlace, interet,
+        cumul: (prec?.cumul ?? 0) + (avenir ? 0 : interet), // les mois à venir ne sont pas encore crédités
+        avenir, courant: m === mCourant,
+      });
+      return acc;
+    }, []);
+  }, [p.ops, taux, mCourant]);
+  const cumulRealise = lignes.filter((l) => !l.avenir).reduce((s, l) => s + l.interet, 0);
+  const projectionAnnee = lignes.reduce((s, l) => s + l.interet, 0);
+
   return (
     <>
       <FcCard className="p-4">
@@ -1933,7 +1994,7 @@ function MesEpargnesSection(p: {
             <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Mon épargne personnelle</p>
             <p className="text-[26px] font-black leading-none text-[#1E4D2B]">{fcfa(p.solde)}</p>
           </div>
-          <P cls={TE_CLS}><Coins className="h-3 w-3" /> Rémunérée à {p.taux} %/mois — comme chaque membre</P>
+          <P cls={TE_CLS}><Coins className="h-3 w-3" /> Rémunérée à {taux} %/mois — comme chaque membre</P>
         </div>
         <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
           <div className="rounded-2xl border border-[#E5DCC0] bg-white px-3.5 py-2.5">
@@ -1941,34 +2002,95 @@ function MesEpargnesSection(p: {
             <p className="text-[13px] font-black text-[#2B3530]">{p.typeEpargneNom ?? "Aucun type défini — à fixer par le bureau"}</p>
           </div>
           <div className="rounded-2xl border border-[#E5DCC0] bg-white px-3.5 py-2.5">
-            <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Intérêts cumulés &amp; préavis</p>
-            <p className="text-[13px] font-black text-[#2F6B45]">≈ {fcfa(Math.round(p.solde * p.taux / 100))} / mois</p>
-            <p className="mt-0.5 text-[10.5px] text-[#8A9288]">Préavis de retrait : {p.preavisJours} jour(s)</p>
+            <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Intérêts de l’année</p>
+            <p className="text-[13px] font-black text-[#2F6B45]">Réalisés : {fcfa(cumulRealise)}</p>
+            <p className="mt-0.5 text-[10.5px] text-[#8A9288]">Projection au 31 décembre : {fcfa(projectionAnnee)} · préavis de retrait : {p.preavisJours} jour(s)</p>
           </div>
         </div>
         <p className="mt-2.5 text-[12px] leading-relaxed text-[#5C6B60]">
-          Le taux est le même pour tous : c’est le bureau qui le fixe (vous et le secrétariat, à deux). Les intérêts sont crédités en fin de mois par le trésorier et visibles au journal de caisse.
+          Le taux est le même pour tous : c’est le bureau qui le fixe. Les intérêts sont crédités en fin de mois par le trésorier — le tableau ci-dessous les montre mois par mois, réalisés et projetés.
         </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {[5_000, 10_000, 25_000].map((mt) => (
-            <Btn key={mt} small tone="or" onClick={() => p.onDepot(mt)}><ArrowDownToLine className="h-3.5 w-3.5" /> Déposer {fmt(mt)}</Btn>
-          ))}
-        </div>
-        <div className="mt-2.5 flex flex-wrap gap-2">
-          <input
-            value={montant}
-            onChange={(e) => setMontant(e.target.value.replace(/[^\d]/g, ""))}
-            inputMode="numeric"
-            placeholder="Montant libre…"
-            className="min-w-0 flex-1 rounded-lg border border-[#C9B98A] bg-[#FFFDF6] px-3 py-2 text-[13px] placeholder:text-[#8A9288] focus:outline-none"
-          />
-          <Btn small disabled={!v} onClick={() => { p.onDepot(v); setMontant(""); }}><ArrowDownToLine className="h-3.5 w-3.5" /> Épargner</Btn>
-          <Btn small tone="neutre" disabled={!v} onClick={() => { p.onRetrait(v); setMontant(""); }}><ArrowUpFromLine className="h-3.5 w-3.5" /> Retirer</Btn>
+
+        {/* — mois de l'épargne : on peut avoir OUBLIÉ de déposer un mois — */}
+        <div className="mt-3 rounded-2xl border-2 border-[#C9B98A] bg-[#FFFDF6] p-3">
+          <p className="text-[11.5px] font-bold text-[#2B3530]">Mois de l’épargne</p>
+          <p className="mt-0.5 text-[10.5px] leading-snug text-[#8A9288]">
+            Ce n’est pas toujours le mois en cours : si vous avez oublié de déposer en août, rattachez ce dépôt à août — les intérêts sont calculés à partir de CE mois.
+          </p>
+          <select
+            value={p.moisChoisi ?? ""}
+            onChange={(e) => p.setMoisChoisi(Number(e.target.value))}
+            aria-label="Mois auquel rattacher l'épargne"
+            className="mt-2 w-full rounded-lg border-2 border-[#E5DCC0] bg-white px-2.5 py-2 text-[13px] font-bold text-[#2B3530] outline-none focus:border-[#1F5B3F]"
+          >
+            {MOIS_FR.map((nom, m) => (
+              <option key={nom} value={m} disabled={mCourant != null && m > mCourant}>
+                {nom}{mCourant != null && m > mCourant ? " — à venir (interdit)" : m === mCourant ? " — mois en cours" : ""}
+              </option>
+            ))}
+          </select>
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            {[5_000, 10_000, 25_000].map((mt) => (
+              <Btn key={mt} small tone="or" disabled={p.moisChoisi == null} onClick={() => p.moisChoisi != null && p.onDepot(mt, p.moisChoisi)}><ArrowDownToLine className="h-3.5 w-3.5" /> Déposer {fmt(mt)}</Btn>
+            ))}
+          </div>
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            <input
+              value={montant}
+              onChange={(e) => setMontant(e.target.value.replace(/[^\d]/g, ""))}
+              inputMode="numeric"
+              placeholder="Montant libre…"
+              className="min-w-0 flex-1 rounded-lg border border-[#C9B98A] bg-[#FFFDF6] px-3 py-2 text-[13px] placeholder:text-[#8A9288] focus:outline-none"
+            />
+            <Btn small disabled={!v || p.moisChoisi == null} onClick={() => { if (p.moisChoisi != null) { p.onDepot(v, p.moisChoisi); setMontant(""); } }}><ArrowDownToLine className="h-3.5 w-3.5" /> Épargner</Btn>
+            <Btn small tone="neutre" disabled={!v || p.moisChoisi == null} onClick={() => { if (p.moisChoisi != null) { p.onRetrait(v, p.moisChoisi); setMontant(""); } }}><ArrowUpFromLine className="h-3.5 w-3.5" /> Retirer</Btn>
+          </div>
         </div>
       </FcCard>
 
+      {/* — TABLEAU DES INTÉRÊTS MOIS PAR MOIS — */}
+      <Block
+        title={`Mes intérêts mois par mois — ${new Date().getFullYear()}`}
+        icon={<TrendingUp className="h-4.5 w-4.5" />}
+        note={`Chaque mois où votre épargne est en place rapporte ${taux} % : intérêts RÉALISÉS jusqu’au mois en cours, PROJECTION pour les mois à venir (ligne « à venir »). Un dépôt rattaché à un mois passé rapporte depuis CE mois.`}
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-[12px]">
+            <thead>
+              <tr className="bg-[#1E4D2B] text-white">
+                <th className="px-2.5 py-2 text-left font-black">Mois</th>
+                <th className="px-2.5 py-2 text-right font-black">Dépôts du mois</th>
+                <th className="px-2.5 py-2 text-right font-black">Épargne en place</th>
+                <th className="px-2.5 py-2 text-right font-black">Intérêts du mois</th>
+                <th className="px-2.5 py-2 text-right font-black">Intérêts cumulés</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lignes.filter((l) => l.depots > 0 || l.retraits > 0 || l.enPlace > 0 || !l.avenir).map((l) => (
+                <tr key={l.mois} className={`${l.avenir ? "bg-[#FBF7EA] text-[#8A9288]" : "bg-[#FFFDF6]"} border-b border-[#E5DCC0]`}>
+                  <td className="px-2.5 py-2 font-bold">
+                    {l.mois}
+                    {l.courant && <span className="ml-1.5 rounded-full bg-[#C89F62] px-1.5 py-0.5 text-[9px] font-black text-[#2B2416]">en cours</span>}
+                    {l.avenir && <span className="ml-1.5 rounded-full border border-[#C9D2CB] px-1.5 py-0.5 text-[9px] font-black text-[#8A9288]">à venir</span>}
+                  </td>
+                  <td className="px-2.5 py-2 text-right font-semibold">{l.depots > 0 ? `+${fmt(l.depots)}` : l.retraits > 0 ? `−${fmt(l.retraits)}` : "—"}</td>
+                  <td className="px-2.5 py-2 text-right">{l.enPlace > 0 ? fcfa(l.enPlace) : "—"}</td>
+                  <td className="px-2.5 py-2 text-right font-bold text-[#2F6B45]">{l.enPlace > 0 ? `+${fmt(l.interet)}` : "—"}</td>
+                  <td className="px-2.5 py-2 text-right font-black text-[#1E4D2B]">{fcfa(l.cumul)}</td>
+                </tr>
+              ))}
+              <tr className="bg-[#C89F62]/15">
+                <td className="px-2.5 py-2.5 font-black text-[#2B2416]" colSpan={3}>Projection au 31 décembre</td>
+                <td className="px-2.5 py-2.5 text-right font-black text-[#8A6420]">+{fmt(projectionAnnee)}</td>
+                <td className="px-2.5 py-2.5 text-right font-black text-[#2B2416]">{fcfa(projectionAnnee)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </Block>
+
       <Block title="Mouvements d’épargne" icon={<ReceiptText className="h-4.5 w-4.5" />}
-        note="Chaque dépôt et retrait passe par le trésorier — votre épargne suit exactement les mêmes étapes que celles des membres.">
+        note="Chaque dépôt et retrait passe par le trésorier — avec LE MOIS auquel il est rattaché : les calculs suivent.">
         <ul className="divide-y divide-[#E5DCC0]">
           {p.ops.map((o) => (
             <li key={o.id} className="flex items-center gap-3 px-4 py-2.5">
@@ -1977,7 +2099,7 @@ function MesEpargnesSection(p: {
               </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[12.5px] font-semibold text-[#2B3530]">{o.note}</p>
-                <p className="text-[10.5px] text-[#8A9288]">{o.le}</p>
+                <p className="text-[10.5px] text-[#8A9288]">{MOIS_FR[Math.min(11, Math.max(0, o.moisIdx))]} · {o.le}</p>
               </div>
               <p className={`text-[13px] font-black ${o.type === "depot" ? "text-[#2F6B45]" : "text-[#A5473D]"}`}>
                 {o.type === "depot" ? "+" : "−"}{fcfa(o.montant)}
@@ -2000,6 +2122,11 @@ function MesPretsSection(p: {
   regl: Reglement;
   form: { montant: string; motif: string; garanties: string; avalisteId: string };
   setForm: (f: { montant: string; motif: string; garanties: string; avalisteId: string }) => void;
+  /** Mois (0-11) auquel rattacher le prêt en cours + mois courant — comme pour
+   *  l'épargne, le mois réel n'est pas toujours le mois en cours. */
+  moisChoisi: number | null;
+  setMoisChoisi: (m: number) => void;
+  moisCourantIdx: number | null;
   onDemander: () => void;
   formPerso: { membreId: string; montant: string; conditions: string; echeance: string };
   setFormPerso: (f: { membreId: string; montant: string; conditions: string; echeance: string }) => void;
@@ -2007,10 +2134,31 @@ function MesPretsSection(p: {
   onSolder: (x: PretPerso) => void;
 }) {
   const taux = p.regl.prets.tauxMensuel || TAUX_DEFAUT;
+  const duree = p.regl.prets.dureeMaxMois > 0 ? p.regl.prets.dureeMaxMois : 6;
   const demandeMontant = Number(p.form.montant) || 0;
-  const mensualite = demandeMontant > 0 && p.regl.prets.dureeMaxMois > 0
-    ? Math.round((demandeMontant * (1 + (taux / 100) * p.regl.prets.dureeMaxMois)) / p.regl.prets.dureeMaxMois)
+  const mensualite = demandeMontant > 0
+    ? Math.round((demandeMontant * (1 + (taux / 100) * duree)) / duree)
     : 0;
+
+  /* — Calendrier de remboursement d'un prêt : mois par mois, à partir du mois
+   *    auquel il est rattaché — intérêts, mensualité, reste dû. — */
+  const calendrier = (montant: number, moisIdx: number) => {
+    const interetMois = Math.round(montant * (taux / 100));
+    const mensu = Math.round((montant + interetMois * duree) / duree);
+    const annee = new Date().getFullYear();
+    return Array.from({ length: duree }, (_, i) => {
+      const idx = moisIdx + i;
+      const reste = Math.max(0, montant + interetMois * duree - mensu * (i + 1));
+      return {
+        mois: MOIS_FR[idx % 12],
+        annee: idx >= 12 ? annee + 1 : annee,
+        interet: interetMois,
+        mensu,
+        reste,
+      };
+    });
+  };
+
   return (
     <>
       <FcCard className="p-4">
@@ -2024,7 +2172,7 @@ function MesPretsSection(p: {
         </div>
         {mensualite > 0 && (
           <p className="mt-2 rounded-2xl border border-[#C89F62]/50 bg-[#C89F62]/10 px-3 py-2 text-[11.5px] font-semibold text-[#8A6420]">
-            Estimation — {fcfa(demandeMontant)} sur {p.regl.prets.dureeMaxMois} mois à {taux} %/mois : environ {fcfa(mensualite)} par mois.
+            Estimation — {fcfa(demandeMontant)} sur {duree} mois à {taux} %/mois : environ {fcfa(mensualite)} par mois. Le calendrier complet s’affiche après la demande.
           </p>
         )}
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -2032,6 +2180,23 @@ function MesPretsSection(p: {
           <select value={p.form.avalisteId} onChange={(e) => p.setForm({ ...p.form, avalisteId: e.target.value })} className="rounded-lg border border-[#C9B98A] bg-[#FFFDF6] px-2.5 py-2 text-[12.5px] text-[#2B3530] focus:outline-none">
             <option value="">Avaliste (garant)…</option>
             {p.roster.filter((x) => x.id !== MOI).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+          </select>
+        </div>
+        {/* — mois du prêt : le mois réel, pas forcément le mois en cours — */}
+        <div className="mt-2 rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] px-3 py-2.5">
+          <p className="text-[11.5px] font-bold text-[#2B3530]">Mois du prêt</p>
+          <p className="mt-0.5 text-[10.5px] leading-snug text-[#8A9288]">Le calendrier de remboursement démarre à CE mois — pratique si le prêt correspond à un besoin d’un mois passé ou à venir.</p>
+          <select
+            value={p.moisChoisi ?? ""}
+            onChange={(e) => p.setMoisChoisi(Number(e.target.value))}
+            aria-label="Mois auquel rattacher le prêt"
+            className="mt-1.5 w-full rounded-lg border-2 border-[#E5DCC0] bg-white px-2.5 py-2 text-[13px] font-bold text-[#2B3530] outline-none focus:border-[#1F5B3F]"
+          >
+            {MOIS_FR.map((nom, m) => (
+              <option key={nom} value={m}>
+                {nom}{p.moisCourantIdx != null && m === p.moisCourantIdx ? " — mois en cours" : m > (p.moisCourantIdx ?? 11) ? " — à venir" : ""}
+              </option>
+            ))}
           </select>
         </div>
         <select value={p.form.motif.startsWith("*") ? p.form.motif.slice(1) : ""}
@@ -2050,21 +2215,55 @@ function MesPretsSection(p: {
 
       {p.mesPrets.length > 0 && (
         <Block title="Mes demandes de prêt (caisse de la cantine)" icon={<ScrollText className="h-4.5 w-4.5" />}
-          note="Suivez la décision du bureau dans l’onglet « Prêts & garanties » — votre voix y est désactivée.">
+          note="Suivez la décision du bureau dans l’onglet « Prêts & garanties » — votre voix y est désactivée. Le calendrier de remboursement s’affiche sous chaque dossier.">
           <ul className="divide-y divide-[#E5DCC0]">
             {p.mesPrets.map((pr) => {
               const av = pr.avalisteId ? p.parMembre.get(pr.avalisteId) : null;
+              const moisIdx = pr.moisIdx ?? p.moisCourantIdx ?? 0;
+              const lignes = calendrier(pr.montant, moisIdx);
+              const totalInterets = Math.round(pr.montant * (taux / 100) * duree);
               return (
                 <li key={pr.id} className="px-4 py-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="text-[13.5px] font-bold text-[#2B3530]">{fcfa(pr.montant)} — {pr.motif}</p>
-                      <p className="text-[11.5px] text-[#8A9288]">Garanties : {pr.garanties}{av ? ` · avaliste : ${av.name}` : ""}</p>
+                      <p className="text-[11.5px] text-[#8A9288]">
+                        Rattaché à {MOIS_FR[moisIdx]} · garanties : {pr.garanties}{av ? ` · avaliste : ${av.name}` : ""}
+                      </p>
                     </div>
-                    {pr.statut === "en_attente" ? <P cls={OR_CLS}><Vote className="h-3 w-3" /> Vote bureau 2/3</P>
+                    {pr.statut === "en_attente" ? <P cls={OR_CLS}><Vote className="h-3 w-3" /> Vote bureau</P>
                       : pr.statut === "accorde" ? <P cls={OK_CLS}><BadgeCheck className="h-3 w-3" /> Accordé</P>
                         : <P cls={RJ_CLS}><XCircle className="h-3 w-3" /> Refusé</P>}
                   </div>
+                  {pr.statut !== "refuse" && (
+                    <div className="mt-2.5 overflow-x-auto rounded-2xl border border-[#E5DCC0]">
+                      <table className="w-full border-collapse text-[11.5px]">
+                        <thead>
+                          <tr className="bg-[#1E4D2B] text-white">
+                            <th className="px-2.5 py-1.5 text-left font-black">Mois</th>
+                            <th className="px-2.5 py-1.5 text-right font-black">Intérêts</th>
+                            <th className="px-2.5 py-1.5 text-right font-black">Mensualité</th>
+                            <th className="px-2.5 py-1.5 text-right font-black">Reste dû</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {lignes.map((l) => (
+                            <tr key={l.mois + l.annee} className="border-b border-[#E5DCC0] bg-[#FFFDF6]">
+                              <td className="px-2.5 py-1.5 font-bold text-[#2B3530]">{l.mois} {l.annee > new Date().getFullYear() ? l.annee : ""}</td>
+                              <td className="px-2.5 py-1.5 text-right text-[#8A6420]">{fmt(l.interet)}</td>
+                              <td className="px-2.5 py-1.5 text-right font-bold text-[#2B3530]">{fmt(l.mensu)}</td>
+                              <td className="px-2.5 py-1.5 text-right font-semibold text-[#5C6B60]">{fmt(l.reste)}</td>
+                            </tr>
+                          ))}
+                          <tr className="bg-[#C89F62]/15">
+                            <td className="px-2.5 py-1.5 font-black text-[#2B2416]">Total</td>
+                            <td className="px-2.5 py-1.5 text-right font-black text-[#8A6420]">{fmt(totalInterets)}</td>
+                            <td className="px-2.5 py-1.5 text-right font-black text-[#2B2416]" colSpan={2}>{fcfa(pr.montant + totalInterets)}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </li>
               );
             })}
