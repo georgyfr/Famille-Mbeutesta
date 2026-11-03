@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { FcCard } from "./ui";
 import {
-  MEMBRES_FICTIFS, MOIS_FR, TONTINE, saveMontants, TAUX_DEFAUT,
+  MEMBRES_FICTIFS, MOIS_FR, ROLE_META, TONTINE, saveMontants, TAUX_DEFAUT,
   detteParPersonne, potMensuel, secondSunday,
   type ReglagesTontine,
 } from "./tontine-data";
@@ -73,6 +73,16 @@ const SEANCE_ACTIVE = false;
  *  réafficher (quorum des délibérations, reports tolérés). */
 const QUORUM_ACTIVE = false;
 
+/** COCKPIT / JOURNAL / ADHÉSIONS — masqués à la demande de l'administrateur
+ *  (novembre 2026) : « Masque les pages suivantes : cockpit, journal,
+ *  adhesions. Ajoutez plutôt une page appelée Cotisations et collations. »
+ *  → passer à true pour réafficher un onglet (bouton + contenu) ; les anciens
+ *  liens #president/cockpit… retombent alors sur la page d'accueil tant que
+ *  l'onglet est masqué. */
+const COCKPIT_ACTIVE = false;
+const JOURNAL_ACTIVE = false;
+const ADHESIONS_ACTIVE = false;
+
 /* — sous-onglets de PARAMÈTRES : chaque section tient sur UN écran, avec son
  *  propre bouton « Enregistrer » — plus besoin de scroller jusqu'en bas —
  *  et chaque section a SON URL (#president/parametres/cotisations…). — */
@@ -90,7 +100,7 @@ const SOUS_PARAM_KEYS = SOUS_PARAMS.map((s) => s.key);
 /** Clés d'onglets autorisées dans l'URL — liens directs partageables :
  *  famille-mbeutetsa.pages.dev/#president/impayes, /prets, /parametres… */
 const TAB_KEYS: TabKey[] = [
-  "cockpit", "reunion", "impayes", "prets", "solidarite", "adhesions", "postes",
+  "cotisations", "cockpit", "reunion", "impayes", "prets", "solidarite", "adhesions", "postes",
   "journal", "parametres", "m-cotis", "m-epargne", "m-prets",
 ];
 
@@ -102,18 +112,25 @@ function tabFromHash(): { tab: TabKey; sous: SousParamKey | null } {
       const [seg1, seg2] = rest.split("/");
       if ((TAB_KEYS as string[]).includes(seg1)) {
         const tab = seg1 as TabKey;
+        /* onglets masqués (cockpit, journal, adhésions, réunion) → accueil */
+        const masque =
+          (!COCKPIT_ACTIVE && tab === "cockpit") ||
+          (!JOURNAL_ACTIVE && tab === "journal") ||
+          (!ADHESIONS_ACTIVE && tab === "adhesions") ||
+          (!SEANCE_ACTIVE && tab === "reunion");
+        if (masque) return { tab: "cotisations", sous: null };
         if (tab === "parametres" && seg2 && (SOUS_PARAM_KEYS as string[]).includes(seg2)) {
           return { tab, sous: seg2 as SousParamKey };
         }
         return { tab, sous: null };
       }
     } else if (h === "#president" || h === "#president/") {
-      return { tab: "cockpit", sous: null };
+      return { tab: "cotisations", sous: null };
     }
   } catch {
     /* rien */
   }
-  return { tab: "cockpit", sous: null };
+  return { tab: "cotisations", sous: null };
 }
 
 type Puce = { children: ReactNode; cls?: string };
@@ -177,10 +194,7 @@ type PretDemande = {
   moisIdx?: number;
 };
 /** Prêt PERSONNEL du président à un membre (hors caisse, inscrit au registre). */
-type PretPerso = {
-  id: string; membreId: string; montant: number; conditions: string;
-  echeance: string; le: string; statut: "en_cours" | "rembourse";
-};
+type MouvementCotisMois = { cotisation: boolean; collation: boolean };
 /** Mouvement d'épargne personnelle du président (démo). */
 type EpargneOp = { id: string; type: "depot" | "retrait"; montant: number; le: string; note: string; moisIdx: number };
 type VoteBureau = { vice: boolean | null; secretariat: boolean | null; tresorier: boolean | null; censeur: boolean | null };
@@ -194,7 +208,7 @@ type Candidat = {
   statut: "instruction" | "vote" | "admis";
 };
 type JournalEntry = { id: string; le: string; texte: string; acteur: string };
-type TabKey = "cockpit" | "reunion" | "impayes" | "prets" | "solidarite" | "adhesions" | "postes" | "journal"
+type TabKey = "cotisations" | "cockpit" | "reunion" | "impayes" | "prets" | "solidarite" | "adhesions" | "postes" | "journal"
   | "parametres" | "m-cotis" | "m-epargne" | "m-prets";
 
 const NIVEAUX = ["Relance amiable", "Mise en demeure", "Convocation par le bureau", "Garants & avalistes"] as const;
@@ -233,11 +247,22 @@ const initJournal = (): JournalEntry[] => [
   { id: nid(), le: "Hier", acteur: "Trésorier", texte: "Caisse de secours : 45 000 FCFA après l’aide décaissée en juin (naissance — famille Fotso)." },
 ];
 
+/** COTISATIONS & COLLATIONS DU MOIS, membre par membre — état de démonstration :
+ *  7 cotisations et 5 collations déjà encaissées par le trésorier (le président
+ *  n’a pas encore cotisé — cohérent avec le bandeau « cotisation à faire »). */
+const initCotisMois = (): Record<string, MouvementCotisMois> => {
+  const seed: Record<string, MouvementCotisMois> = {};
+  MEMBRES_FICTIFS.forEach((m) => { seed[m.id] = { cotisation: false, collation: false }; });
+  ["f02", "f03", "f04", "f05", "f06", "f07", "f08"].forEach((id) => { if (seed[id]) seed[id].cotisation = true; });
+  ["f02", "f03", "f04", "f05", "f06"].forEach((id) => { if (seed[id]) seed[id].collation = true; });
+  return seed;
+};
+
 /* ══════════════════════════ maquette ══════════════════════════ */
 
 export function MaquettePresident() {
   /* — état global de la maquette — */
-  const [tab, setTab] = useState<TabKey>("cockpit");
+  const [tab, setTab] = useState<TabKey>("cotisations");
   const [sousParam, setSousParam] = useState<SousParamKey>("cotisations");
   const [seance, setSeance] = useState<"fermee" | "ouverte" | "cloturee">("fermee");
   /* — RÈGLEMENT DE LA CANTINE : paramétrage complet du bureau (impayés,
@@ -289,7 +314,11 @@ export function MaquettePresident() {
    *    épargne, emprunte et prête exactement comme tout le monde. — */
   const [moisCourant, setMoisCourant] = useState<string | null>(null);
   const [cotisCeMois, setCotisCeMois] = useState(false);
-  const [cotisDeclarees, setCotisDeclarees] = useState(7);
+  /* — cotisations & collations DU MOIS, membre par membre — le président coche
+   *    ce que le trésorier a encaissé ; le nombre de cotisations déclarées est
+   *    DÉRIVÉ de cet état (source unique, cohérente partout). — */
+  const [cotisMois, setCotisMois] = useState<Record<string, MouvementCotisMois>>(initCotisMois);
+  const cotisDeclarees = Object.values(cotisMois).filter((x) => x.cotisation).length;
   const [historiqueCotis, setHistoriqueCotis] = useState<{ mois: string; paye: boolean }[]>([
     { mois: "Juillet", paye: true }, { mois: "Août", paye: true }, { mois: "Septembre", paye: true }, { mois: "Octobre", paye: true },
   ]);
@@ -306,10 +335,6 @@ export function MaquettePresident() {
   const [pretMoisChoisi, setPretMoisChoisi] = useState<number | null>(null);
   const [moisCourantIdx, setMoisCourantIdx] = useState<number | null>(null);
   const [mesPretsForm, setMesPretsForm] = useState({ montant: "", motif: "", garanties: "", avalisteId: "" });
-  const [pretsPersos, setPretsPersos] = useState<PretPerso[]>([
-    { id: "pp1", membreId: "f07", montant: 50_000, conditions: "Sans intérêt — coup de pouce entre membres", echeance: "Après la levée du membre", le: "02 oct.", statut: "en_cours" },
-  ]);
-  const [pretPersoForm, setPretPersoForm] = useState({ membreId: "", montant: "", conditions: "", echeance: "Prochaine réunion" });
 
   /* — dérivés — */
   const roster = MEMBRES_FICTIFS;
@@ -644,7 +669,7 @@ export function MaquettePresident() {
     const total = TONTINE.montantCotisation + TONTINE.montantCollation;
     setCotisCeMois(true);
     setHistoriqueCotis((prev) => [...prev, { mois: moisCourant ?? "ce mois", paye: true }]);
-    setCotisDeclarees((c) => Math.min(c + 1, roster.length));
+    setCotisMois((prev) => ({ ...prev, [MOI]: { cotisation: true, collation: true } }));
     toast.success("Votre cotisation est enregistrée", { description: `${fcfa(total)} (cotisation + collation) — reçu immédiat. Le total du mois monte à ${Math.min(cotisDeclarees + 1, roster.length)}/${roster.length} pour le trésorier.` });
     journalAdd(`Le président a cotisé comme membre : ${fcfa(total)} pour ${moisCourant ?? "ce mois"} — mêmes règles que tous, aucune exception.`, "Président (membre)");
   };
@@ -673,12 +698,13 @@ export function MaquettePresident() {
   const demanderPretMoi = () => {
     const montant = Number(mesPretsForm.montant);
     if (!montant || montant <= 0) { toast.error("Indiquez le montant souhaité"); return; }
-    if (!mesPretsForm.motif.trim()) { toast.error("Indiquez le motif — comme pour tout membre"); return; }
-    if (!mesPretsForm.garanties.trim()) { toast.error("Indiquez vos garanties"); return; }
     if (!mesPretsForm.avalisteId) { toast.error("Désignez un avaliste — règle identique pour tous"); return; }
     const moisIdx = pretMoisChoisi ?? moisCourantIdx ?? 0;
+    /* nature et garanties ne sont plus demandées dans le formulaire : la nature
+     * du règlement s’applique (motif), les garanties restent libres côté bureau. */
+    const motif = TYPES_PRET_CATALOGUE.find((t) => t.id === reglement.prets.typeChoisi)?.nom ?? "Prêt à la caisse de la cantine";
     setPrets((prev) => [{
-      id: nid(), membreId: MOI, montant, motif: mesPretsForm.motif.trim(), garanties: mesPretsForm.garanties.trim(),
+      id: nid(), membreId: MOI, montant, motif, garanties: "",
       avalisteId: mesPretsForm.avalisteId, cosignTresorier: false, statut: "en_attente" as const, motifRefus: "", president: true,
       moisIdx,
     }, ...prev]);
@@ -699,27 +725,35 @@ export function MaquettePresident() {
       return { ...x, votesBureau: votes };
     }));
   };
-  const preterPerso = () => {
-    const montant = Number(pretPersoForm.montant);
-    if (!pretPersoForm.membreId) { toast.error("Choisissez le membre à qui vous prêtez"); return; }
-    if (!montant || montant <= 0) { toast.error("Indiquez le montant prêté"); return; }
-    if (!pretPersoForm.conditions.trim()) { toast.error("Précisez les conditions (intérêt, échéance…)"); return; }
-    const m = parMembre.get(pretPersoForm.membreId);
-    setPretsPersos((prev) => [{ id: nid(), membreId: pretPersoForm.membreId, montant, conditions: pretPersoForm.conditions.trim(), echeance: pretPersoForm.echeance, le: heure(), statut: "en_cours" as const }, ...prev]);
-    setPretPersoForm({ membreId: "", montant: "", conditions: "", echeance: "Prochaine réunion" });
-    toast.success(`Prêt personnel enregistré — ${fcfa(montant)} à ${m?.name}`, { description: "Inscrit au registre (consultable par le censeur en cas de litige) — rappel automatique à l’échéance." });
-    journalAdd(`Prêt personnel du président : ${fcfa(montant)} à ${m?.name} (${pretPersoForm.conditions.trim()}), échéance ${pretPersoForm.echeance}.`, "Président (particulier)");
+  /* — cotisations & collations du mois : encaissement (cochage trésorier) — */
+  const encaisserCotis = (membreId: string, quoi: "cotisation" | "collation", recu: boolean) => {
+    setCotisMois((prev) => ({
+      ...prev,
+      [membreId]: { ...(prev[membreId] ?? { cotisation: false, collation: false }), [quoi]: recu },
+    }));
+    const m = parMembre.get(membreId);
+    if (recu) {
+      toast.success(`${quoi === "cotisation" ? "Cotisation" : "Collation"} encaissée — ${m?.name}`, { description: "Reçu immédiat, inscrit au journal de caisse du trésorier." });
+      journalAdd(`Trésorerie : ${quoi} de ${m?.name} encaissée pour ${moisCourant ?? "ce mois"}.`, "Président → Trésorier");
+    } else {
+      toast(`${m?.name} — ${quoi} remise en attente`);
+      journalAdd(`Trésorerie : ${quoi} de ${m?.name} repassée en attente (${moisCourant ?? "mois en cours"}).`, "Président → Trésorier");
+    }
   };
-  const solderPretPerso = (pp: PretPerso) => {
-    setPretsPersos((prev) => prev.map((x) => (x.id === pp.id ? { ...x, statut: "rembourse" as const } : x)));
-    const m = parMembre.get(pp.membreId);
-    toast.success(`${m?.name} a remboursé ${fcfa(pp.montant)}`, { description: "L’inscription passe au registre des prêts soldés." });
-    journalAdd(`Prêt personnel remboursé : ${m?.name} — ${fcfa(pp.montant)}.`, "Président (particulier)");
+  const toutEncaisser = () => {
+    setCotisMois((prev) => {
+      const next = { ...prev };
+      roster.forEach((m) => { next[m.id] = { cotisation: true, collation: true }; });
+      return next;
+    });
+    toast.success("Tout le mois est marqué encaissé", { description: `Cotisations et collations de ${moisCourant ?? "ce mois"} réglées pour les ${roster.length} membres — journal de caisse mis à jour.` });
+    journalAdd(`Trésorerie : cotisations et collations de ${moisCourant ?? "ce mois"} marquées encaissées pour tous les membres.`, "Président → Trésorier");
   };
 
   /* — badges des onglets — */
   const mesPrets = prets.filter((x) => x.president);
   const badges: Partial<Record<TabKey, number>> = {
+    cotisations: Math.max(0, roster.length - cotisDeclarees),
     reunion: parolesAttente + oj.filter((x) => x.statut === "en_cours").length,
     impayes: nbRetards,
     prets: pretsAttente,
@@ -731,6 +765,7 @@ export function MaquettePresident() {
   };
 
   const TABS: { key: TabKey; label: string; icon: ReactNode; membre?: boolean }[] = [
+    { key: "cotisations", label: "Cotisations & collations", icon: <Coins className="h-3.5 w-3.5" /> },
     { key: "cockpit", label: "Cockpit", icon: <Gavel className="h-3.5 w-3.5" /> },
     { key: "reunion", label: "Réunion en direct", icon: <Users className="h-3.5 w-3.5" /> },
     { key: "impayes", label: "Impayés & recouvrement", icon: <BellRing className="h-3.5 w-3.5" /> },
@@ -744,9 +779,15 @@ export function MaquettePresident() {
     { key: "m-epargne", label: "Mes épargnes", icon: <PiggyBank className="h-3.5 w-3.5" />, membre: true },
     { key: "m-prets", label: "Mes prêts", icon: <HandCoins className="h-3.5 w-3.5" />, membre: true },
   ];
-  /* La séance en direct est masquée (SEANCE_ACTIVE = false) — l'onglet
-   * « Réunion en direct » disparaît jusqu'à réactivation. */
-  const tabsVisibles = TABS.filter((t) => SEANCE_ACTIVE || t.key !== "reunion");
+  /* Onglets masqués à la demande de l’administrateur (novembre 2026) : séance
+   * en direct (SEANCE_ACTIVE=false) puis cockpit, journal et adhésions
+   * (COCKPIT_ACTIVE / JOURNAL_ACTIVE / ADHESIONS_ACTIVE = false). */
+  const tabsVisibles = TABS.filter((t) =>
+    (SEANCE_ACTIVE || t.key !== "reunion") &&
+    (COCKPIT_ACTIVE || t.key !== "cockpit") &&
+    (JOURNAL_ACTIVE || t.key !== "journal") &&
+    (ADHESIONS_ACTIVE || t.key !== "adhesions")
+  );
   const tabsGestion = tabsVisibles.filter((t) => !t.membre);
   const tabsMembre = tabsVisibles.filter((t) => t.membre);
   const renderTab = (t: (typeof TABS)[number]) => {
@@ -781,7 +822,7 @@ export function MaquettePresident() {
       <div className="mb-3 flex items-center gap-2 rounded-xl border border-[#C89F62]/50 bg-[#C89F62]/12 px-3 py-2">
         <Sparkles className="h-4 w-4 shrink-0 text-[#8A6420]" />
         <p className="flex-1 text-[11.5px] font-semibold leading-snug text-[#7A5B2E]">
-          MAQUETTE v4 — onglets grands et contrastés · Paramètres en 6 sections (une = un écran = un bouton Enregistrer) · types de cotisations mensuelles attribués aux membres (notification) · types de prêts, méthodes de solidarité, types d’épargne · tous les chiffres à 0 par défaut · données de démonstration, aucune action réelle.
+          MAQUETTE v5 — nouvelle page « Cotisations & collations » (tout le mois, membre par membre) · calendrier de remboursement EN DIRECT pour tous les prêts (espace membre ET dossiers des membres) · formulaire de prêt simplifié (montant, avaliste, mois) · onglets cockpit, journal et adhésions masqués · prêts personnels retirés · données de démonstration, aucune action réelle.
         </p>
       </div>
 
@@ -826,7 +867,7 @@ export function MaquettePresident() {
 
       {/* ── contenu ── */}
       <div className="mt-3 space-y-3.5">
-        {tab === "cockpit" && (
+        {COCKPIT_ACTIVE && tab === "cockpit" && (
           <CockpitSection
             aujourdhuiInfo={aujourdhuiInfo}
             cotisAttendues={roster.length}
@@ -846,6 +887,19 @@ export function MaquettePresident() {
             decisions={decisions}
             onGo={goTab}
             onOuvrir={ouvrirSeance}
+          />
+        )}
+        {tab === "cotisations" && (
+          <CotisationsCollationsSection
+            mois={moisCourant}
+            roster={roster}
+            parMembre={parMembre}
+            typesCotis={typesCotis}
+            montants={montants}
+            cotisMois={cotisMois}
+            onEncaisser={encaisserCotis}
+            onToutEncaisser={toutEncaisser}
+            onNotifierTresorier={notifierCollecte}
           />
         )}
         {SEANCE_ACTIVE && tab === "reunion" && (
@@ -894,6 +948,7 @@ export function MaquettePresident() {
             parMembre={parMembre}
             roster={roster}
             regl={reglement}
+            moisCourantIdx={moisCourantIdx}
             onMaj={majPret}
             onAccorder={accorderPret}
             onRefuser={refuserPret}
@@ -911,7 +966,7 @@ export function MaquettePresident() {
             onDecaisser={decaisser}
           />
         )}
-        {tab === "adhesions" && (
+        {ADHESIONS_ACTIVE && tab === "adhesions" && (
           <AdhesionsSection
             candidats={candidats}
             onCocher={cocherEtape}
@@ -921,7 +976,7 @@ export function MaquettePresident() {
           />
         )}
         {tab === "postes" && <PostesSection />}
-        {tab === "journal" && <JournalSection journal={journal} />}
+        {JOURNAL_ACTIVE && tab === "journal" && <JournalSection journal={journal} />}
         {tab === "parametres" && (
           <ParametresSection
             regl={reglement}
@@ -967,7 +1022,6 @@ export function MaquettePresident() {
         {tab === "m-prets" && (
           <MesPretsSection
             mesPrets={mesPrets}
-            pretsPersos={pretsPersos}
             parMembre={parMembre}
             roster={roster}
             regl={reglement}
@@ -977,16 +1031,14 @@ export function MaquettePresident() {
             setMoisChoisi={setPretMoisChoisi}
             moisCourantIdx={moisCourantIdx}
             onDemander={demanderPretMoi}
-            formPerso={pretPersoForm}
-            setFormPerso={setPretPersoForm}
-            onPretre={preterPerso}
-            onSolder={solderPretPerso}
           />
         )}
       </div>
 
       <p className="mt-6 text-center text-[11px] leading-relaxed text-[#8A9288]">
         Maquette interactive — les noms, montants et situations sont fictifs.
+        <br />
+        v5 : page « Cotisations & collations » (tout le mois, membre par membre, encaissement en un clic) · calendrier de remboursement EN DIRECT pour tous les prêts · formulaire de prêt simplifié (montant, avaliste, mois) · cockpit, journal et adhésions masqués.
         <br />
         v4 : Paramètres réorganisés en 6 sous-sections à URL propre (#president/parametres/…) avec « Enregistrer » par section — cotisations multiples par type de membre (notification sur la page du membre), 10 natures de prêts, 5 méthodes de solidarité, 7 types d’épargne avec leur type d’intérêt, tous les chiffres à 0 par défaut.
         <br />
@@ -1446,29 +1498,33 @@ function PretsSection(p: {
   prets: PretDemande[];
   parMembre: Map<string, (typeof MEMBRES_FICTIFS)[number]>;
   roster: typeof MEMBRES_FICTIFS;
-  taux: number;
+  regl: Reglement;
+  moisCourantIdx: number | null;
   onMaj: (id: string, patch: Partial<PretDemande>) => void;
   onAccorder: (x: PretDemande) => void; onRefuser: (x: PretDemande) => void;
   onVoterBureau: (id: string, qui: "vice" | "tresorier" | "censeur", pour: boolean) => void;
 }) {
+  const taux = p.regl.prets.tauxMensuel || TAUX_DEFAUT;
+  const duree = p.regl.prets.dureeMaxMois > 0 ? p.regl.prets.dureeMaxMois : 6;
   return (
     <>
       <FcCard className="p-4">
         <p className="text-[13px] leading-relaxed text-[#5C6B60]">
           <strong className="text-[#1E4D2B]">Supervision à deux :</strong> aucun prêt n’est décaissé sans votre validation <em>et</em> la co-signature du trésorier.
-          Un avaliste fiable est obligatoire. Taux en vigueur : {p.taux} %/mois (décision du bureau).
+          Un avaliste fiable est obligatoire. Taux en vigueur : {taux} %/mois (décision du bureau) — le calendrier d’évolution de CHAQUE prêt (intérêts, mensualité, reste dû) s’affiche sous le dossier, comme dans l’espace membre.
         </p>
       </FcCard>
 
       {p.prets.map((pr) => {
         const m = p.parMembre.get(pr.membreId);
         const av = pr.avalisteId ? p.parMembre.get(pr.avalisteId) : null;
+        const moisIdx = pr.moisIdx ?? p.moisCourantIdx ?? 0;
         return (
           <FcCard key={pr.id} className={`p-4 ${pr.statut === "refuse" ? "opacity-75" : ""}`}>
             <div className="flex items-start justify-between gap-2">
               <div>
                 <p className="text-[14px] font-bold text-[#2B3530]">{m?.name}{pr.president ? " (vous — récusé)" : ""} — {fcfa(pr.montant)}</p>
-                <p className="text-[12px] text-[#8A9288]">{pr.motif}</p>
+                {pr.motif && <p className="text-[12px] text-[#8A9288]">{pr.motif}</p>}
               </div>
               {pr.statut === "en_attente" ? (pr.president
                 ? <P cls={OR_CLS}><Vote className="h-3 w-3" /> Vote bureau 2/3</P>
@@ -1477,10 +1533,29 @@ function PretsSection(p: {
                   : <P cls={RJ_CLS}><XCircle className="h-3 w-3" /> Refusé</P>}
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5">
-              <P cls={TE_CLS}><Landmark className="h-3 w-3" /> Garantie : {pr.garanties}</P>
+              {pr.garanties && <P cls={TE_CLS}><Landmark className="h-3 w-3" /> Garantie : {pr.garanties}</P>}
               {av && <P cls={OK_CLS}><ShieldCheck className="h-3 w-3" /> Avaliste : {av.name}</P>}
               {pr.cosignTresorier && <P cls={OK_CLS}><Wallet className="h-3 w-3" /> Co-signé par le trésorier</P>}
             </div>
+
+            {/* — ÉVOLUTION DU PRÊT, mois par mois : intérêts produits,
+             *    mensualité, reste dû — exactement comme dans l’espace membre.
+             *    Visible dès la demande : on voit ce que le prêt coûtera AVANT
+             *    de l’accorder. — */}
+            {pr.statut !== "refuse" && (
+              <div className="mt-3 border-t border-[#E5DCC0] pt-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[11.5px] font-bold text-[#2B3530]">Calendrier de remboursement — évolution du prêt</p>
+                  <P cls={TE_CLS}><CalendarClock className="h-3 w-3" /> Rattaché à {MOIS_FR[Math.min(11, Math.max(0, moisIdx))]}</P>
+                </div>
+                <p className="mt-0.5 text-[10.5px] leading-snug text-[#8A9288]">
+                  {fcfa(pr.montant)} à {taux} %/mois sur {duree} mois — intérêts de {fcfa(Math.round(pr.montant * (taux / 100)))} par mois. S’il déborde sur l’année suivante, c’est marqué.
+                </p>
+                <div className="mt-2">
+                  <TableCalendrierPret lignes={lignesCalendrierPret(pr.montant, taux, duree, moisIdx)} montant={pr.montant} />
+                </div>
+              </div>
+            )}
 
             {pr.statut === "en_attente" && pr.president && (
               <div className="mt-3 space-y-2.5 border-t border-[#E5DCC0] pt-3">
@@ -2114,6 +2189,28 @@ function MesEpargnesSection(p: {
 
 /* ══════════════════════════ ESPACE MEMBRE — MES PRÊTS ══════════════════════════ */
 
+/** Échéancier d'un prêt : mois par mois à partir du mois auquel il est
+ *  rattaché — intérêts (montant × taux), mensualité (capital + intérêts
+ *  totaux / durée), reste dû (clampé à 0). Bascule {année+1} après décembre.
+ *  Utilisé par l'aperçu en direct de « Mes prêts » ET par chaque dossier de
+ *  l'onglet « Prêts & garanties ». */
+function lignesCalendrierPret(montant: number, taux: number, duree: number, moisIdx: number) {
+  const interetMois = Math.round(montant * (taux / 100));
+  const mensu = Math.round((montant + interetMois * duree) / duree);
+  const annee = new Date().getFullYear();
+  return Array.from({ length: duree }, (_, i) => {
+    const idx = moisIdx + i;
+    const reste = Math.max(0, montant + interetMois * duree - mensu * (i + 1));
+    return {
+      mois: MOIS_FR[idx % 12],
+      annee: idx >= 12 ? annee + 1 : annee,
+      interet: interetMois,
+      mensu,
+      reste,
+    };
+  });
+}
+
 /** Table du calendrier de remboursement — utilisée DEUX fois : pour l'aperçu
  *  EN DIRECT du formulaire (comme le tableau d'intérêts de l'épargne, les
  *  calculs apparaissent dès qu'on tape un montant) et sous chaque demande
@@ -2157,7 +2254,6 @@ function TableCalendrierPret(p: {
 
 function MesPretsSection(p: {
   mesPrets: PretDemande[];
-  pretsPersos: PretPerso[];
   parMembre: Map<string, (typeof MEMBRES_FICTIFS)[number]>;
   roster: typeof MEMBRES_FICTIFS;
   regl: Reglement;
@@ -2169,10 +2265,6 @@ function MesPretsSection(p: {
   setMoisChoisi: (m: number) => void;
   moisCourantIdx: number | null;
   onDemander: () => void;
-  formPerso: { membreId: string; montant: string; conditions: string; echeance: string };
-  setFormPerso: (f: { membreId: string; montant: string; conditions: string; echeance: string }) => void;
-  onPretre: () => void;
-  onSolder: (x: PretPerso) => void;
 }) {
   const taux = p.regl.prets.tauxMensuel || TAUX_DEFAUT;
   const duree = p.regl.prets.dureeMaxMois > 0 ? p.regl.prets.dureeMaxMois : 6;
@@ -2184,25 +2276,6 @@ function MesPretsSection(p: {
     ? Math.round((demandeMontant * (1 + (taux / 100) * duree)) / duree)
     : 0;
 
-  /* — Calendrier de remboursement d'un prêt : mois par mois, à partir du mois
-   *    auquel il est rattaché — intérêts, mensualité, reste dû. — */
-  const calendrier = (montant: number, moisIdx: number) => {
-    const interetMois = Math.round(montant * (taux / 100));
-    const mensu = Math.round((montant + interetMois * duree) / duree);
-    const annee = new Date().getFullYear();
-    return Array.from({ length: duree }, (_, i) => {
-      const idx = moisIdx + i;
-      const reste = Math.max(0, montant + interetMois * duree - mensu * (i + 1));
-      return {
-        mois: MOIS_FR[idx % 12],
-        annee: idx >= 12 ? annee + 1 : annee,
-        interet: interetMois,
-        mensu,
-        reste,
-      };
-    });
-  };
-
   return (
     <>
       <FcCard className="p-4">
@@ -2210,7 +2283,7 @@ function MesPretsSection(p: {
           <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#1E4D2B]/10 text-[#1E4D2B]"><Landmark className="h-4 w-4" /></span>
           <p className="text-[13px] leading-relaxed text-[#5C6B60]">
             <strong className="text-[#1E4D2B]">Emprunter à la caisse de la cantine — les mêmes règles pour vous.</strong>
-            Motif, garanties, avaliste, taux {taux} %/mois. Et parce que c’est votre caisse,
+            Choisissez un montant, un avaliste et le mois du prêt, taux {taux} %/mois. Et parce que c’est votre caisse,
             <strong className="text-[#1E4D2B]"> vous êtes récusé</strong> : le bureau statue sans votre voix (vote {MAJORITES_LABELS[p.regl.prets.majorityPresident]}).
           </p>
         </div>
@@ -2253,19 +2326,10 @@ function MesPretsSection(p: {
               Il démarre en {MOIS_FR[Math.min(11, Math.max(0, moisDepart))]} (le mois choisi ci-dessus) et court sur {duree} mois — intérêts de {fcfa(Math.round(demandeMontant * (taux / 100)))} par mois. S’il déborde sur l’année suivante, c’est marqué.
             </p>
             <div className="mt-2">
-              <TableCalendrierPret lignes={calendrier(demandeMontant, moisDepart)} montant={demandeMontant} />
+              <TableCalendrierPret lignes={lignesCalendrierPret(demandeMontant, taux, duree, moisDepart)} montant={demandeMontant} />
             </div>
           </div>
         )}
-        <select value={p.form.motif.startsWith("*") ? p.form.motif.slice(1) : ""}
-          onChange={(e) => p.setForm({ ...p.form, motif: e.target.value ? `*${e.target.value}` : p.form.motif.replace(/^\*/, "") })}
-          aria-label="Nature du prêt demandé"
-          className="mt-2 w-full rounded-lg border border-[#C9B98A] bg-[#FFFDF6] px-2.5 py-2 text-[12.5px] text-[#2B3530] focus:outline-none">
-          <option value="">Nature du prêt (celle du règlement : {TYPES_PRET_CATALOGUE.find((t) => t.id === p.regl.prets.typeChoisi)?.nom ?? "libre"})…</option>
-          {TYPES_PRET_CATALOGUE.map((t) => <option key={t.id} value={t.nom}>{t.nom}</option>)}
-        </select>
-        <input value={p.form.motif} onChange={(e) => p.setForm({ ...p.form, motif: e.target.value })} placeholder="Motif du prêt (comme pour tout membre)…" className="mt-2 w-full rounded-lg border border-[#C9B98A] bg-[#FFFDF6] px-3 py-2 text-[13px] placeholder:text-[#8A9288] focus:outline-none" />
-        <input value={p.form.garanties} onChange={(e) => p.setForm({ ...p.form, garanties: e.target.value })} placeholder="Garanties proposées (fond de commerce, salaire…)…" className="mt-2 w-full rounded-lg border border-[#C9B98A] bg-[#FFFDF6] px-3 py-2 text-[13px] placeholder:text-[#8A9288] focus:outline-none" />
         <div className="mt-2.5">
           <Btn onClick={p.onDemander}><Send className="h-4 w-4" /> Déposer ma demande de prêt</Btn>
         </div>
@@ -2278,14 +2342,14 @@ function MesPretsSection(p: {
             {p.mesPrets.map((pr) => {
               const av = pr.avalisteId ? p.parMembre.get(pr.avalisteId) : null;
               const moisIdx = pr.moisIdx ?? p.moisCourantIdx ?? 0;
-              const lignes = calendrier(pr.montant, moisIdx);
+              const lignes = lignesCalendrierPret(pr.montant, taux, duree, moisIdx);
               return (
                 <li key={pr.id} className="px-4 py-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="text-[13.5px] font-bold text-[#2B3530]">{fcfa(pr.montant)} — {pr.motif}</p>
+                      <p className="text-[13.5px] font-bold text-[#2B3530]">{fcfa(pr.montant)}{pr.motif ? ` — ${pr.motif}` : ""}</p>
                       <p className="text-[11.5px] text-[#8A9288]">
-                        Rattaché à {MOIS_FR[moisIdx]} · garanties : {pr.garanties}{av ? ` · avaliste : ${av.name}` : ""}
+                        Rattaché à {MOIS_FR[Math.min(11, Math.max(0, moisIdx))]}{pr.garanties ? ` · garanties : ${pr.garanties}` : ""}{av ? ` · avaliste : ${av.name}` : ""}
                       </p>
                     </div>
                     {pr.statut === "en_attente" ? <P cls={OR_CLS}><Vote className="h-3 w-3" /> Vote bureau</P>
@@ -2304,46 +2368,130 @@ function MesPretsSection(p: {
         </Block>
       )}
 
-      <Block title="Prêter mon argent personnel à un membre" icon={<HandCoins className="h-4.5 w-4.5" />}
-        note="Vos prêts personnels sont hors caisse de la cantine — mais le registre les connaît : en cas de litige, le censeur s’appuie sur ces inscriptions. Rappel automatique à l’échéance.">
-        <div className="grid grid-cols-1 gap-2 p-3.5 sm:grid-cols-2">
-          <select value={p.formPerso.membreId} onChange={(e) => p.setFormPerso({ ...p.formPerso, membreId: e.target.value })} className="rounded-lg border border-[#C9B98A] bg-[#FFFDF6] px-2.5 py-2 text-[12.5px] text-[#2B3530] focus:outline-none">
-            <option value="">Membre…</option>
-            {p.roster.filter((x) => x.id !== MOI).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-          </select>
-          <input value={p.formPerso.montant} onChange={(e) => p.setFormPerso({ ...p.formPerso, montant: e.target.value.replace(/[^\d]/g, "") })} inputMode="numeric" placeholder="Montant (FCFA)" className="rounded-lg border border-[#C9B98A] bg-[#FFFDF6] px-3 py-2 text-[13px] placeholder:text-[#8A9288] focus:outline-none" />
-          <input value={p.formPerso.conditions} onChange={(e) => p.setFormPerso({ ...p.formPerso, conditions: e.target.value })} placeholder="Conditions (sans intérêt, 2 %…)" className="rounded-lg border border-[#C9B98A] bg-[#FFFDF6] px-3 py-2 text-[13px] placeholder:text-[#8A9288] focus:outline-none" />
-          <select value={p.formPerso.echeance} onChange={(e) => p.setFormPerso({ ...p.formPerso, echeance: e.target.value })} className="rounded-lg border border-[#C9B98A] bg-[#FFFDF6] px-2.5 py-2 text-[12.5px] text-[#2B3530] focus:outline-none">
-            <option>Prochaine réunion</option>
-            <option>Sous 1 mois</option>
-            <option>Sous 3 mois</option>
-            <option>Après la levée du membre</option>
-          </select>
+    </>
+  );
+}
+
+/* ══════════════════════════ COTISATIONS & COLLATIONS DU MOIS ══════════════════════════
+ *
+ * La page demandée par l'administrateur (novembre 2026) : « Ajoutez plutôt une
+ * page appelée Cotisations et collations dans laquelle le président peut voir
+ * toutes les cotisations et collations du mois. » — remplace le cockpit comme
+ * page d'accueil du poste de commandement.
+ * ═════════════════════════════════════════════════════════════ */
+
+function CotisationsCollationsSection(p: {
+  mois: string | null;
+  roster: typeof MEMBRES_FICTIFS;
+  parMembre: Map<string, (typeof MEMBRES_FICTIFS)[number]>;
+  typesCotis: TypeCotisation[];
+  montants: ReglagesTontine;
+  cotisMois: Record<string, MouvementCotisMois>;
+  onEncaisser: (membreId: string, quoi: "cotisation" | "collation", recu: boolean) => void;
+  onToutEncaisser: () => void;
+  onNotifierTresorier: () => void;
+}) {
+  const cotisBase = p.montants.montantCotisation;
+  const collation = p.montants.montantCollation;
+  /* — par membre : sa cotisation attendue (type attribué par le bureau, sinon
+   *    le montant de base — 0 = « à fixer par le bureau ») + son état — */
+  const lignes = p.roster.map((m) => {
+    const t = typeDuMembre(m.id, p.typesCotis);
+    const attenduCotis = t ? t.montant : cotisBase;
+    const st = p.cotisMois[m.id] ?? { cotisation: false, collation: false };
+    return {
+      m,
+      typeNom: t?.nom ?? null,
+      attenduCotis,
+      st,
+      totalRecu: (st.cotisation ? attenduCotis : 0) + (st.collation ? collation : 0),
+    };
+  });
+  const totalCotisRecu = lignes.reduce((s, l) => s + (l.st.cotisation ? l.attenduCotis : 0), 0);
+  const totalCotisAttendu = lignes.reduce((s, l) => s + l.attenduCotis, 0);
+  const totalCollRecu = lignes.reduce((s, l) => s + (l.st.collation ? collation : 0), 0);
+  const nbCotis = lignes.filter((l) => l.st.cotisation).length;
+  const nbColl = lignes.filter((l) => l.st.collation).length;
+  const totalRecu = totalCotisRecu + totalCollRecu;
+
+  return (
+    <>
+      <FcCard className="p-4">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Collecte du mois{p.mois ? ` — ${p.mois}` : ""}</p>
+            <p className="text-[26px] font-black leading-none text-[#1E4D2B]">{fcfa(totalRecu)}</p>
+            <p className="mt-0.5 text-[11px] text-[#8A9288]">encaissés — cotisations {fcfa(totalCotisRecu)} · collations {fcfa(totalCollRecu)}</p>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <P cls={nbCotis >= p.roster.length ? OK_CLS : OR_CLS}><CheckCircle2 className="h-3 w-3" /> Cotisations {nbCotis}/{p.roster.length}</P>
+            <P cls={nbColl >= p.roster.length ? OK_CLS : TE_CLS}><ReceiptText className="h-3 w-3" /> Collations {nbColl}/{p.roster.length}</P>
+          </div>
         </div>
-        <div className="px-3.5 pb-3.5">
-          <Btn small tone="teal" onClick={p.onPretre}><HandCoins className="h-3.5 w-3.5" /> Enregistrer le prêt personnel</Btn>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <div className="rounded-2xl border border-[#E5DCC0] bg-white px-3.5 py-2.5">
+            <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Cotisations du mois</p>
+            <p className="text-[14px] font-black text-[#2B3530]">{fcfa(totalCotisRecu)} <span className="text-[11px] font-semibold text-[#8A9288]">encaissées</span></p>
+            <p className="text-[11px] text-[#8A9288]">attendu : {fcfa(totalCotisAttendu)} — montant fixé par le bureau pour chaque membre</p>
+          </div>
+          <div className="rounded-2xl border border-[#E5DCC0] bg-white px-3.5 py-2.5">
+            <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Collations du mois</p>
+            <p className="text-[14px] font-black text-[#2B3530]">{fcfa(totalCollRecu)} <span className="text-[11px] font-semibold text-[#8A9288]">encaissées</span></p>
+            <p className="text-[11px] text-[#8A9288]">{collation > 0 ? `${fcfa(collation)} par membre — ${p.roster.length} membres` : "à fixer par le bureau"}</p>
+          </div>
         </div>
-        {p.pretsPersos.length > 0 && (
-          <ul className="divide-y divide-[#E5DCC0] border-t border-[#E5DCC0]">
-            {p.pretsPersos.map((pp) => {
-              const m = p.parMembre.get(pp.membreId);
-              return (
-                <li key={pp.id} className="flex items-center gap-3 px-4 py-2.5">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#3D6B72]/12 text-[11px] font-black text-[#3D6B72]">
-                    {m?.name.split(" ").map((x) => x[0]).join("").slice(0, 2)}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[12.5px] font-bold text-[#2B3530]">{m?.name} — {fcfa(pp.montant)}</p>
-                    <p className="truncate text-[10.5px] text-[#8A9288]">{pp.conditions} · échéance {pp.echeance}</p>
-                  </div>
-                  {pp.statut === "en_cours"
-                    ? <Btn small tone="neutre" onClick={() => p.onSolder(pp)}><CheckCircle2 className="h-3.5 w-3.5" /> Remboursé</Btn>
-                    : <P cls={OK_CLS}><Check className="h-3 w-3" /> Remboursé</P>}
-                </li>
-              );
-            })}
-          </ul>
-        )}
+        <p className="mt-2.5 text-[12px] leading-relaxed text-[#5C6B60]">
+          Toutes les cotisations et toutes les collations du mois, membre par membre : cochez « Reçu » quand le trésorier encaisse — les totaux se mettent à jour aussitôt, et chaque action s’inscrit au journal.
+        </p>
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          <Btn small tone="or" onClick={p.onToutEncaisser}><CheckSquare className="h-3.5 w-3.5" /> Tout marquer encaissé</Btn>
+          <Btn small tone="teal" onClick={p.onNotifierTresorier}><Send className="h-3.5 w-3.5" /> Notifier le trésorier</Btn>
+        </div>
+      </FcCard>
+
+      <Block title={`Membre par membre — ${p.mois ?? "mois en cours"}`} icon={<Users className="h-4.5 w-4.5" />}
+        note="Cotisation = le montant fixé pour CE membre par le bureau (ou le montant de base). Collation = la part collation du mois. Cliquez à nouveau pour corriger une erreur de saisie.">
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-[12px]">
+            <thead>
+              <tr className="bg-[#1E4D2B] text-white">
+                <th className="px-2.5 py-2 text-left font-black">Membre</th>
+                <th className="px-2.5 py-2 text-center font-black">Cotisation</th>
+                <th className="px-2.5 py-2 text-center font-black">Collation</th>
+                <th className="px-2.5 py-2 text-right font-black">Reçu du membre</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lignes.map((l) => (
+                <tr key={l.m.id} className="border-b border-[#E5DCC0] bg-[#FFFDF6]">
+                  <td className="px-2.5 py-2">
+                    <p className="font-bold text-[#2B3530]">{l.m.name}{l.m.id === MOI ? " (vous)" : ""}</p>
+                    <p className="text-[10.5px] text-[#8A9288]">
+                      {ROLE_META[l.m.role]?.short ?? l.m.role}{l.typeNom ? ` · ${l.typeNom}` : l.attenduCotis > 0 ? " · montant de base" : " · à fixer par le bureau"}
+                    </p>
+                  </td>
+                  <td className="px-2.5 py-2 text-center">
+                    <p className="text-[11.5px] font-semibold text-[#2B3530]">{l.attenduCotis > 0 ? fmt(l.attenduCotis) : "—"}</p>
+                    <Btn small tone={l.st.cotisation ? "vert" : "neutre"} disabled={l.attenduCotis <= 0} onClick={() => p.onEncaisser(l.m.id, "cotisation", !l.st.cotisation)}>
+                      {l.st.cotisation ? <><CheckCircle2 className="h-3.5 w-3.5" /> Reçue</> : <><Hourglass className="h-3.5 w-3.5" /> En attente</>}
+                    </Btn>
+                  </td>
+                  <td className="px-2.5 py-2 text-center">
+                    <p className="text-[11.5px] font-semibold text-[#2B3530]">{collation > 0 ? fmt(collation) : "—"}</p>
+                    <Btn small tone={l.st.collation ? "or" : "neutre"} disabled={collation <= 0} onClick={() => p.onEncaisser(l.m.id, "collation", !l.st.collation)}>
+                      {l.st.collation ? <><CheckCircle2 className="h-3.5 w-3.5" /> Reçue</> : <><Hourglass className="h-3.5 w-3.5" /> En attente</>}
+                    </Btn>
+                  </td>
+                  <td className="px-2.5 py-2 text-right font-black text-[#1E4D2B]">{l.totalRecu > 0 ? fcfa(l.totalRecu) : "—"}</td>
+                </tr>
+              ))}
+              <tr className="bg-[#C89F62]/15">
+                <td className="px-2.5 py-2.5 font-black text-[#2B2416]" colSpan={3}>Total encaissé ce mois</td>
+                <td className="px-2.5 py-2.5 text-right font-black text-[#2B2416]">{fcfa(totalRecu)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </Block>
     </>
   );
