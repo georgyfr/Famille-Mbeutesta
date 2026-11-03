@@ -1306,3 +1306,11 @@ Stage Summary:
 - CHAQUE prêt — celui du président ET ceux des membres — affiche son calendrier d'évolution mois par mois avec les intérêts produits, la mensualité et le reste dû, dès la demande et après accord.
 - La section « Prêter mon argent personnel à un membre » est supprimée.
 - Les onglets Cockpit, Journal des décisions et Adhésions sont masqués (les anciens liens retombent sur l'accueil) — et la nouvelle page d'accueil du président est « Cotisations & collations » : toutes les cotisations et toutes les collations du mois, membre par membre, encaissement en un clic (boutons bloqués tant que les montants ne sont pas fixés).
+
+## Task 48-bis — Déploiement Cloudflare (token reçu) ✅ 2026-11-27
+Work Log:
+- TOKEN CLOUDFLARE REÇU de l'administrateur (cfut_…605de, expire 2027-10-27) → .env.cloudflare recréé (token + GITHUB_TOKEN ; jamais versionné). Vérification API : token « active » ✓.
+- Account ID clarifié DÉFINITIVEMENT : l'ID donné par l'admin (5ab8107e…) est l'ID UTILISATEUR ; GET /accounts sur le token renvoie UN seul compte : ead74f172a86c9debb937c356976260f « Famille mbeutetsa » — celui du worklog Task 43. .env.cloudflare corrigé en conséquence.
+- Build statique refait (scripts/build-cloudflare.sh → .next-demo, _worker.js 10.14 KB) avec le code v5 Task 48, puis déploiement : bunx wrangler@4 pages deploy .next-demo --project-name famille-mbeutetsa --branch main --commit-dirty=true → SUCCESS, déploiement https://99f84ac2.famille-mbeutetsa.pages.dev (prod famille-mbeutetsa.pages.dev).
+- VÉRIFICATION E2E EN PRODUCTION (agent-browser) : accueil = « Cotisations & collations » (tableau membre par membre de novembre, 0 onglet cockpit/journal/adhésions) ✓ ; #president/journal|cockpit|adhesions → contenu accueil, 0 « Procès-verbal » ✓ ; m-prets = formulaire 3 champs (Montant, Avaliste, Mois) ✓ ; 100 000 + mois novembre → bandeau « mensualité ≈ 19 667, intérêts totaux ≈ 18 000 » + calendrier mois par mois (cellules 19 667) ✓ ; ZÉRO erreur console ✓.
+- CI/CD GitHub : PAT fourni et stocké dans .env.cloudflare pour les prochains workflows (non testé cette session).
