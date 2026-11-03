@@ -1167,3 +1167,37 @@ Stage Summary:
 - Sa propre demande de prêt déclenche une récusation automatique : le bureau statue à 2/3 sans sa voix (transparence totale).
 - Maquette v2 en ligne sur famille-mbeutetsa.pages.dev (bascule maquette ⇄ app conservée) ; les consoles des autres acteurs (trésorier, secrétaire…) suivront le même schéma après validation.
 - Prochaines étapes possibles : intégrer les mêmes onglets « espace membre » dans la vraie fiche du rôle (tontine-page) une fois les consoles branchées aux registres réels.
+
+## Task 44 — Maquette v3 : onglets URL-partageables + PARAMÈTRES (tout le paramétrage de la cantine) + règlement visible par tous les membres + séance masquée [2026-11-03]
+
+Demande (retour UI de l'administrateur, capture d'écran à l'appui) :
+- « Les sous-onglets du président n'ont pas d'URL » → chaque onglet doit avoir sa propre adresse.
+- « Tous les onglets ne sont pas visibles (Solidarité coupé) » → tout voir ou coulisser.
+- « Au niveau du paramètres, le président puisse faire toutes les configurations concernant les impayés, les prêts, les solidarités… toutes les configurations possibles nécessaires pour une réunion… ce paramétrage devra être visible pour tous les membres. C'est lui qui va décider comment les recouvrements doivent se faire, comment les impayés doivent se faire, comment les prêts garantis doivent se faire. »
+- « Les éléments comme séance du jour, ouvrir la séance… pour l'instant ce n'est pas nécessaire, masquez-les. »
+
+Work Log:
+- ONGLETS = URL (maquette-president.tsx) : routage par hash `#president/<onglet>` — cockpit, impayes, prets, solidarite, adhesions, postes, journal, parametres, m-cotis, m-epargne, m-prets ; goTab() écrit l'URL (history.replaceState), listener hashchange → liens partageables/rafraîchissables/épinglables (ex. famille-mbeutetsa.pages.dev/#president/parametres).
+- ONGLETS TOUS VISIBLES : barre d'onglets passée en flex-wrap sur 2 groupes étiquetés (« Gestion de la cantine » / « Espace membre ») — plus AUCUNE coupure (Solidarité entière, testée 420 px et desktop), sticky top.
+- SÉANCE MASQUÉE : constante SEANCE_ACTIVE=false — l'onglet « Réunion en direct », le bloc « Séance du jour » du cockpit et la simulation de demandes de parole disparaissent (code conservé, réactivable en passant la constante à true).
+- PARAMÈTRES (nouveau centre de paramétrage du président, maquette-president.tsx 1 988 → ~2 460 lignes) :
+  · MONTANTS RÉELS (TONTINE/saveMontants) : cotisation, collation, adhésion, pénalité retard/absence — modifiés ici = modifiés pour TOUS les membres (NumField avec prévisualisation FCFA).
+  · IMPAYÉS & RECOUVREMENT : délai de grâce, relances avant escalade, délai entre étapes, impayés consécutifs avant sanction, 4 étapes activables (relance/mise en demeure/convocation/garants), pénalité automatique + échelon d'application, sanction (aucune/vote/prêts/exclusion), 5 moyens de paiement, qui encaisse (trésorier/président/à deux).
+  · PRÊTS & GARANTIES : taux mensuel, plafond, durée max, carence, avaliste obligatoire + nombre (1/2), co-signature trésorier, 5 garanties acceptables, majorité du vote des dossiers du président (récusation : 1/2, 2/3, unanimité).
+  · SOLIDARITÉ — CAISSE DE SECOURS : cotisation mensuelle, aide maximale, carence, délai de versement, 5 événements couverts (deuil/mariage/naissance/maladie/sinistre), majorité du bureau (1/2, 3/4, unanimité).
+  · ÉPARGNE : taux, préavis de retrait, dépôt minimum, retrait maximal (%/mois). · RÉUNION & QUORUM : quorum minimal, reports tolérés.
+  · PUBLICATION : brouillon (chip « Modifications non publiées ») → bouton « Publier la version N aux membres » (version+1, horodatée, journal) + « Réinitialiser ». Widgets : NumField / ToggleRow (role=switch) / Seg (contrôle segmenté).
+- RÈGLEMENT CÔTÉ MEMBRES (nouveau module reglement.ts + bloc dans tontine-page.tsx) : type Reglement complet persisté (fc_reglement_v1), défauts sensés, fusion tolérante à la lecture ; la PAGE TONTINE (réunions) affiche désormais le bloc « Règlement de la cantine — fixé par le bureau » en LECTURE SEULE : 5 sections à bandeaux (Réunion & quorum, Impayés & recouvrement, Prêts & garanties, Solidarité, Épargne), chip « Version N — en vigueur », « Dernière publication le … par … ». Chargé après peinture (hydratation sûre).
+- BUG CORRIGÉ au passage : maquette-gate.tsx bannière « Maquette v2 » → « Maquette v3 — Poste de commandement du Président (paramétrage + espace membre) » (alignement avec le bandeau de la console).
+- VÉRIFICATION E2E LOCALE (agent-browser, 420×900 + 1280×900) : #president/parametres s'ouvre en direct par URL ✓ ; les 6 groupes de réglages rendus (77 contrôles) ✓ ; plafond 300 000→400 000 → chip « Modifications non publiées » → Publier → version 2 ✓ ; bascule app → #tontine : « Règlement de la cantine — Version 2 — en vigueur », « Plafond d'un prêt 400 000 FCFA », « Dernière publication le 3 novembre 2026 par Président Joseph Mbeutetsa » ✓ ; séance masquée ✓ ; Solidarité entière ✓ ; zéro erreur console.
+- CLOUDFLARE — .env.cloudflare RECOURÉ (perdu à la restauration de l'environnement) : token vérifié par API — ORTHOGRAPHE EXACTE « cfut_ » (minuscule) ; « Ccfut_ » → Invalid API Token ; actif, expire 2027-10-27 ; scopé sur « Famille mbeutetsa » (ead74f17…), le 5ab8107e… fourni reste 9109 Unauthorized ; GLM_API_KEY/GLM_MODEL réinscrits + copie ~/.bashrc (fichier chmod 600, gitignored vérifié).
+- BUILD + DÉPLOIEMENT : build-cloudflare.sh OK (index.html « MAQUETTE v3 », chunk d1599d2d… contient Paramètres + Règlement) ; wrangler pages deploy → OK (déploiement 96ed3651).
+- VÉRIFICATIONS PRODUCTION : page 200 avec bandeau v3 ✓ ; #president/parametres en direct (hash conservé, PARAMETRES COMPLET OK — Montants/Impayés/Prêts/Solidarité/Épargne/Réunion&Publish) ✓ ; séance masquée ✓ ; POST /api/ai/guide → ai:true (GLM intact) ✓ ; E2E PRODUCTION complète : cotisation 10 000→12 000 + Publier v2 → nouveau compte membre « Blaise Test » (699001122) → page Tontine affiche « Règlement de la cantine — fixé par le bureau », « Version 2 — en vigueur », « Cotisation mensuelle 12 000 FCFA par membre et par réunion » ✓ (captures : prod-v3-parametres.png, prod-v3-reglement-membre.png).
+
+Stage Summary:
+- Chaque onglet du président a maintenant SON URL (#president/…) — partageables et rafraîchissables, plus aucune perte de contexte.
+- Tous les onglets sont visibles (flex-wrap, plus de Solidarité coupé) sur mobile comme desktop.
+- Le président paramètre TOUTE la cantine dans « Paramètres » : montants réels, impayés & recouvrements (grâce, étapes, sanctions, paiements, encaisseur), prêts garantis (taux, plafond, avalistes, garanties, vote de son propre dossier), solidarité (cotisation, plafond, événements, majorité), épargne, quorum — et PUBLIE.
+- Le règlement publié est visible par TOUS les membres, en lecture seule, dans la page Tontine (version horodatée) — le président décide, la cantine entière voit.
+- Séance du jour / ouvrir la séance : masqués (SEANCE_ACTIVE=false), réactivables en une constante.
+- En ligne sur famille-mbeutetsa.pages.dev (v3, ai:true, vérifié en production avec un compte membre réel).

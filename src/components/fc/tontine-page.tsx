@@ -69,6 +69,12 @@ import {
   soldeEpargneAuMois, statutMembreDuMois, uid,
   type Epargne, type Member, type Payes, type Pret, type ReglagesTontine, type RoleKey, type TourMois,
 } from "./tontine-data";
+import {
+  ECHELONS_LABELS, ENCAISSEUR_LABELS, EVENTS_SOLIDAIRES_LABELS, GARANTIES_LABELS,
+  MAJORITES_LABELS, PAIEMENTS_LABELS, REGLEMENT_DEFAUT, SANCTIONS_LABELS,
+  loadReglement,
+  type Reglement,
+} from "./reglement";
 
 /* ══════════════════════════ petits utilitaires ══════════════════════════ */
 
@@ -532,6 +538,154 @@ function OngletsBureau({ page, onGo, vousRole, nbSignalementsOuverts }: {
   );
 }
 
+/* ══════════════════════════ RÈGLEMENT DE LA CANTINE — visible par TOUS ══════════════════════════
+ *
+ * Le paramétrage complet décidé par le président (poste de commandement,
+ * onglet « Paramètres ») est affiché ICI, en lecture seule, pour TOUS les
+ * membres : impayés & recouvrements, prêts & garanties, solidarité (caisse de
+ * secours), épargne, quorum… C'est le président qui paramètre — la cantine
+ * entière voit les règles et leur version publiée.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+function ReglementCantine() {
+  /* Chargé après peinture (hydratation sûre) — mêmes valeurs que le bureau. */
+  const [reg, setReg] = useState<Reglement>(REGLEMENT_DEFAUT);
+  useEffect(() => {
+    const t = setTimeout(() => setReg(loadReglement()), 0);
+    return () => clearTimeout(t);
+  }, []);
+
+  const imp = reg.impayes;
+  const pre = reg.prets;
+  const sol = reg.solidarite;
+  const ep = reg.epargne;
+
+  const etapesActives = (Object.keys(ECHELONS_LABELS) as (keyof typeof ECHELONS_LABELS)[])
+    .filter((k) => imp.echelons[k])
+    .map((k) => ECHELONS_LABELS[k]);
+  const paiementsActifs = (Object.keys(PAIEMENTS_LABELS) as (keyof typeof PAIEMENTS_LABELS)[])
+    .filter((k) => imp.paiements[k])
+    .map((k) => PAIEMENTS_LABELS[k]);
+  const garantiesActives = (Object.keys(GARANTIES_LABELS) as (keyof typeof GARANTIES_LABELS)[])
+    .filter((k) => pre.garanties[k])
+    .map((k) => GARANTIES_LABELS[k]);
+  const eventsActifs = (Object.keys(EVENTS_SOLIDAIRES_LABELS) as (keyof typeof EVENTS_SOLIDAIRES_LABELS)[])
+    .filter((k) => sol.events[k])
+    .map((k) => EVENTS_SOLIDAIRES_LABELS[k]);
+
+  const publieLeFmt = reg.publieLe
+    ? (() => {
+        try {
+          return new Date(reg.publieLe).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+        } catch {
+          return null;
+        }
+      })()
+    : null;
+
+  /* Sections : un en-tête par domaine, puis réglage → valeur. */
+  const sections: { titre: string; lignes: [string, string][] }[] = [
+    {
+      titre: "Réunion & quorum",
+      lignes: [
+        ["Quorum des délibérations", `${reg.quorumMembres} membres présents au minimum`],
+        ["Reports de réunion", `${reg.reportsMax} reports consécutifs au maximum`],
+      ],
+    },
+    {
+      titre: "Impayés & recouvrement",
+      lignes: [
+        ["Délai de grâce", `${imp.delaiGraceJours} jour(s) avant la 1ʳᵉ relance`],
+        ["Relances amiables", `${imp.relancesAvantEscalade} relance(s) avant l'échelon suivant`],
+        ["Étapes décidées", etapesActives.length > 0 ? etapesActives.join(" → ") : "Aucune — sur décision du bureau"],
+        ["Rythme", `Une étape tous les ${imp.delaiEntreEtapesJours} jour(s)`],
+        ["Pénalité de retard", imp.amendeAuto ? `Automatique dès l'échelon n°${imp.niveauAmende} (${fmtN(TONTINE.penaliteRetard)} FCFA)` : `Sur décision du bureau (${fmtN(TONTINE.penaliteRetard)} FCFA)`],
+        ["Sanction après impayés répétés", `${imp.apresNImpayes} impayés consécutifs → ${SANCTIONS_LABELS[imp.sanction].toLowerCase()}`],
+        ["Moyens de paiement acceptés", paiementsActifs.length > 0 ? paiementsActifs.join(" · ") : "Précisés par le trésorier"],
+        ["Qui encaisse les recouvrements", ENCAISSEUR_LABELS[imp.encaisseur]],
+      ],
+    },
+    {
+      titre: "Prêts & garanties",
+      lignes: [
+        ["Taux des prêts", `${fmtTaux(pre.tauxMensuel)} par mois`],
+        ["Plafond d'un prêt", `${fmtN(pre.plafondFcfa)} FCFA`],
+        ["Durée de remboursement", `${pre.dureeMaxMois} mois au maximum`],
+        ["Avalistes", pre.avalisteObligatoire ? `${pre.nbAvalistes} avaliste(s) obligatoire(s)` : "Non exigés"],
+        ["Co-signature du trésorier", pre.cosignTresorier ? "Requise sur chaque accord" : "Non requise"],
+        ["Garanties acceptées", garantiesActives.length > 0 ? garantiesActives.join(" · ") : "Au cas par cas"],
+        ["Ancienneté requise", `${pre.carenceMois} mois de cotisation avant le 1ᵉʳ prêt`],
+        ["Dossier du président", `Décidé par le bureau sans sa voix — ${MAJORITES_LABELS[pre.majorityPresident].toLowerCase()}`],
+      ],
+    },
+    {
+      titre: "Solidarité — caisse de secours",
+      lignes: [
+        ["Cotisation de solidarité", `${fmtN(sol.cotisationMensuelle)} FCFA par membre et par mois`],
+        ["Aide maximale", `${fmtN(sol.plafondAideFcfa)} FCFA par événement`],
+        ["Événements couverts", eventsActifs.length > 0 ? eventsActifs.join(" · ") : "Décidés au cas par cas"],
+        ["Ancienneté requise", `${sol.carenceMois} mois avant droit à l'aide`],
+        ["Approbation d'une aide", `${MAJORITES_LABELS[sol.majority]} des votants du bureau`],
+        ["Versement", `Dans les ${sol.delaiVersementJours} jour(s) après accord`],
+      ],
+    },
+    {
+      titre: "Épargne",
+      lignes: [
+        ["Taux de l'épargne", `${fmtTaux(ep.tauxMensuel)} par mois`],
+        ["Préavis de retrait", `${ep.preavisJours} jour(s) avant tout retrait`],
+        ["Dépôt minimum", `${fmtN(ep.depotMinFcfa)} FCFA`],
+        ["Retrait mensuel", `${ep.retraitMaxMois} % du solde au maximum`],
+      ],
+    },
+  ];
+
+  return (
+    <Block
+      title="Règlement de la cantine — fixé par le bureau"
+      icon={<Stamp className="h-4.5 w-4.5" />}
+      chip={
+        <Chip cls={reg.publieLe ? CHIP_OK : CHIP_NEUTRE}>
+          {reg.publieLe ? `Version ${reg.version} — en vigueur` : "Version 1 — en vigueur"}
+        </Chip>
+      }
+      note="Le président paramètre la cantine dans son poste de commandement (onglet « Paramètres ») : impayés, recouvrements, prêts garantis, solidarité, épargne, quorum. Ce règlement est publié à tous — lecture seule : toute modification se décide en réunion puis est republiée ici."
+    >
+      <TableWrap label="Règlement de la cantine">
+        <tbody>
+          {sections.map((s) => (
+            <FragmentRow key={s.titre} titre={s.titre} lignes={s.lignes} />
+          ))}
+        </tbody>
+      </TableWrap>
+      <p className="mt-2 text-[10.5px] leading-relaxed text-[#8A9288]">
+        {publieLeFmt
+          ? `Dernière publication le ${publieLeFmt} par ${reg.publiePar}.`
+          : "Valeurs en vigueur fixées par le bureau — prochaine publication après la réunion."}
+      </p>
+    </Block>
+  );
+}
+
+/** Rangées d'une section du règlement : un bandeau de titre + lignes réglage/valeur. */
+function FragmentRow({ titre, lignes }: { titre: string; lignes: [string, string][] }) {
+  return (
+    <>
+      <tr>
+        <td colSpan={2} className="bg-[#1E4D2B] px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-white">
+          {titre}
+        </td>
+      </tr>
+      {lignes.map(([k, v], i) => (
+        <tr key={k} className={i % 2 === 0 ? "bg-[#FFFDF6]" : "bg-[#FBF7EA]"}>
+          <td className={`${TD} font-bold text-[#2B3530]`}>{k}</td>
+          <td className={`${TD} text-[#5C6B60]`}>{v}</td>
+        </tr>
+      ))}
+    </>
+  );
+}
+
 /* ══════════════════════════ page RÉUNIONS — calendrier de l'année ══════════════════════════ */
 
 function ReunionPage({ annee, roster, vousPhone }: { annee: TourMois[]; roster: Member[]; vousPhone?: string | null }) {
@@ -712,6 +866,12 @@ function ReunionPage({ annee, roster, vousPhone }: { annee: TourMois[]; roster: 
           </tbody>
         </TableWrap>
       </Block>
+
+      {/* Règlement de la cantine — le paramétrage complet du bureau (impayés,
+          recouvrements, prêts garantis, solidarité, épargne) VISIBLE PAR TOUS
+          les membres, en lecture seule. Le président le règle dans son poste
+          de commandement ; chaque publication est horodatée et versionnée. */}
+      <ReglementCantine />
 
       {/* Fiche réunion — modale ouverte au clic sur un mois du calendrier */}
       {fiche && <FicheReunion t={fiche} vousId={vousId} onFermer={() => setFiche(null)} />}
