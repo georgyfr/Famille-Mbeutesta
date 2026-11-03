@@ -30,7 +30,7 @@ export function MaquetteGate() {
         <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#C89F62]" />
         <p className="truncate text-[11px] font-semibold">
           {mode === "maquette"
-            ? "Maquette v2 — Poste de commandement du Président (espace membre inclus)"
+            ? "Maquette v3 — Poste de commandement du Président (paramétrage + espace membre)"
             : "Application actuelle — consultation"}
         </p>
         <button

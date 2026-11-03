@@ -322,12 +322,15 @@ export function MaquettePresident() {
 
   /* — règlement : chaque modification est enregistrée (brouillon du bureau) —
    *    la PUBLICATION aux membres est un geste séparé (onglet Paramètres). */
-  const majReglement = (patch: (r: Reglement) => Reglement) =>
+  const [reglSale, setReglSale] = useState(false);
+  const majReglement = (patch: (r: Reglement) => Reglement) => {
     setReglement((prev) => {
       const next = patch(prev);
       saveReglement(next);
       return next;
     });
+    setReglSale(true);
+  };
   const majMontants = (patch: Partial<ReglagesTontine>) => {
     saveMontants(patch); // applique aux règles réelles + persiste pour les membres
     setMontants({ ...TONTINE });
@@ -342,6 +345,7 @@ export function MaquettePresident() {
   const publierReglementAuxMembres = () => {
     const p = publierReglement(reglement, "Président Joseph Mbeutetsa");
     setReglement(p);
+    setReglSale(false);
     toast.success(`Règlement publié — version ${p.version}`, {
       description: "Tous les membres le voient désormais en lecture seule dans la page Tontine, bloc « Règlement de la cantine ».",
     });
@@ -351,6 +355,7 @@ export function MaquettePresident() {
     const r = { ...REGLEMENT_DEFAUT };
     saveReglement(r);
     setReglement(r);
+    setReglSale(false);
     toast("Paramètres réinitialisés sur les valeurs d'origine");
     journalAdd("Paramètres de la cantine réinitialisés sur les valeurs d'origine.", "Président (paramétrage)");
   };
@@ -835,6 +840,7 @@ export function MaquettePresident() {
         {tab === "parametres" && (
           <ParametresSection
             regl={reglement}
+            sale={reglSale}
             maj={majReglement}
             montants={montants}
             majMontants={majMontants}
@@ -1966,6 +1972,381 @@ function MesPretsSection(p: {
             })}
           </ul>
         )}
+      </Block>
+    </>
+  );
+}
+
+/* ══════════════════════════ PARAMÈTRES DE LA CANTINE ══════════════════════════
+ *
+ * Le centre de paramétrage du président — TOUT ce qui se règle pour une
+ * réunion : montants réels (visibles aussitôt par tous), impayés &
+ * recouvrements (grâce, échelons, sanctions, paiements, encaisseur), prêts &
+ * garanties (taux, plafond, avalistes, garanties acceptées, vote du dossier
+ * du président), solidarité — caisse de secours (cotisation, plafond,
+ * événements, majorité, versement), épargne (taux, préavis, minimums) et
+ * réunion (quorum, reports). Chaque règle modifiée devient un BROUILLON ;
+ * « Publier » la rend visible par TOUS les membres (lecture seule, page
+ * Tontine, bloc « Règlement de la cantine »).
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Champ numérique avec prévisualisation FCFA (les montants en FCFA s'y
+ *  prévisualisent en dessous ; les unités libres affichent leur unité). */
+function NumField({ label, note, value, onChange, min = 0, step = 1, unite, fcfaPreview }: {
+  label: string; note?: string; value: number;
+  onChange: (n: number) => void;
+  min?: number; step?: number; unite?: string; fcfaPreview?: boolean;
+}) {
+  return (
+    <label className="block rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] px-3 py-2.5">
+      <span className="block text-[11.5px] font-bold text-[#2B3530]">{label}</span>
+      {note && <span className="mt-0.5 block text-[10.5px] leading-snug text-[#8A9288]">{note}</span>}
+      <span className="mt-1.5 flex items-center gap-1.5">
+        <input
+          type="number"
+          inputMode="numeric"
+          min={min}
+          step={step}
+          value={value}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            if (Number.isFinite(n) && n >= min) onChange(n);
+          }}
+          className="min-w-0 flex-1 rounded-lg border border-[#E5DCC0] bg-white px-2.5 py-1.5 text-[13px] font-bold text-[#2B3530] outline-none focus:border-[#1F5B3F] focus:ring-2 focus:ring-[#1F5B3F]/20"
+        />
+        {unite && <span className="shrink-0 text-[11px] font-bold text-[#8A9288]">{unite}</span>}
+      </span>
+      {fcfaPreview && <span className="mt-1 block text-[10.5px] font-semibold text-[#8A6420]">{fcfa(value)}</span>}
+    </label>
+  );
+}
+
+/** Ligne à bascule — une règle activée / désactivée par le bureau. */
+function ToggleRow({ label, note, actif, onToggle }: { label: string; note?: string; actif: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      role="switch"
+      aria-checked={actif}
+      className={`flex w-full items-center justify-between gap-2 rounded-2xl border px-3 py-2.5 text-left transition-all ${
+        actif ? "border-[#2F6B45]/35 bg-[#2F6B45]/8" : "border-[#E5DCC0] bg-[#FBF7EA]"
+      }`}
+    >
+      <span className="min-w-0">
+        <span className={`block text-[11.5px] font-bold ${actif ? "text-[#2F6B45]" : "text-[#5C6B60]"}`}>{label}</span>
+        {note && <span className="mt-0.5 block text-[10.5px] leading-snug text-[#8A9288]">{note}</span>}
+      </span>
+      <span className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${actif ? "bg-[#2F6B45]" : "bg-[#C9D2CB]"}`}>
+        <span className={`absolute h-5 w-5 rounded-full bg-white shadow transition-all ${actif ? "left-[22px]" : "left-0.5"}`} />
+      </span>
+    </button>
+  );
+}
+
+/** Contrôle segmenté — choix parmi des options fermées (majorité, encaisseur…). */
+function Seg({ options, value, onChange, legende }: {
+  options: { v: string; label: string }[]; value: string; onChange: (v: string) => void; legende?: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] px-3 py-2.5">
+      {legende && <p className="text-[11.5px] font-bold text-[#2B3530]">{legende}</p>}
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        {options.map((o) => {
+          const actif = o.v === value;
+          return (
+            <button
+              key={o.v}
+              type="button"
+              onClick={() => onChange(o.v)}
+              aria-pressed={actif}
+              className={`rounded-full border px-2.5 py-1.5 text-[11px] font-bold transition-all ${
+                actif ? "border-transparent bg-[#1E4D2B] text-white shadow" : "border-[#E5DCC0] bg-white text-[#5C6B60] hover:border-[#C89F62]/60"
+              }`}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ParametresSection(p: {
+  regl: Reglement;
+  /** Brouillon modifié mais pas encore publié aux membres. */
+  sale: boolean;
+  maj: (patch: (r: Reglement) => Reglement) => void;
+  montants: ReglagesTontine;
+  majMontants: (patch: Partial<ReglagesTontine>) => void;
+  onPublier: () => void;
+  onReinitialiser: () => void;
+}) {
+  const r = p.regl;
+  const majImp = (patch: Partial<Reglement["impayes"]>) => p.maj((x) => ({ ...x, impayes: { ...x.impayes, ...patch } }));
+  const majEchelon = (cle: keyof Reglement["impayes"]["echelons"]) =>
+    p.maj((x) => ({ ...x, impayes: { ...x.impayes, echelons: { ...x.impayes.echelons, [cle]: !x.impayes.echelons[cle] } } }));
+  const majPaiement = (cle: keyof Reglement["impayes"]["paiements"]) =>
+    p.maj((x) => ({ ...x, impayes: { ...x.impayes, paiements: { ...x.impayes.paiements, [cle]: !x.impayes.paiements[cle] } } }));
+  const majPrets = (patch: Partial<Reglement["prets"]>) => p.maj((x) => ({ ...x, prets: { ...x.prets, ...patch } }));
+  const majGarantie = (cle: keyof Reglement["prets"]["garanties"]) =>
+    p.maj((x) => ({ ...x, prets: { ...x.prets, garanties: { ...x.prets.garanties, [cle]: !x.prets.garanties[cle] } } }));
+  const majSol = (patch: Partial<Reglement["solidarite"]>) => p.maj((x) => ({ ...x, solidarite: { ...x.solidarite, ...patch } }));
+  const majEvent = (cle: keyof Reglement["solidarite"]["events"]) =>
+    p.maj((x) => ({ ...x, solidarite: { ...x.solidarite, events: { ...x.solidarite.events, [cle]: !x.solidarite.events[cle] } } }));
+  const majEp = (patch: Partial<Reglement["epargne"]>) => p.maj((x) => ({ ...x, epargne: { ...x.epargne, ...patch } }));
+
+  const publieLe = r.publieLe
+    ? (() => { try { return new Date(r.publieLe).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }); } catch { return null; } })()
+    : null;
+
+  return (
+    <>
+      {/* — bandeau du centre de paramétrage — */}
+      <FcCard className="overflow-hidden">
+        <div className="flex items-start gap-3 bg-gradient-to-br from-[#1E4D2B] to-[#2F6B45] px-4 py-3.5 text-white">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/15"><SlidersHorizontal className="h-4.5 w-4.5" /></span>
+          <div>
+            <p className="fc-serif text-[15px] font-bold">Paramètres de la cantine — c&apos;est vous qui paramétrez</p>
+            <p className="mt-0.5 text-[12px] leading-relaxed text-white/85">
+              Impayés &amp; recouvrements, prêts garantis, solidarité, épargne, quorum… Chaque règle se règle ici.
+              Le bouton « Publier » rend le règlement visible par TOUS les membres (lecture seule, page Tontine).
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <P cls="border-white/25 bg-white/10 text-white"><ScrollText className="h-3 w-3" /> Version {r.version}</P>
+              {publieLe && <P cls="border-white/25 bg-white/10 text-white"><CheckCircle2 className="h-3 w-3" /> Publiée le {publieLe}</P>}
+              {p.sale
+                ? <P cls="border-[#C89F62] bg-[#C89F62]/25 text-[#FFEBD2]"><AlertTriangle className="h-3 w-3" /> Modifications non publiées</P>
+                : <P cls="border-white/25 bg-white/10 text-white"><CheckCircle2 className="h-3 w-3" /> Règlement publié à jour</P>}
+            </div>
+          </div>
+        </div>
+      </FcCard>
+
+      {/* — montants réels : modifiés ici = modifiés pour tous les membres — */}
+      <Block
+        title="Montants de la cantine"
+        icon={<Coins className="h-4 w-4" />}
+        note="Ces montants sont ceux de la vraie cantine : chaque membre les voit aussitôt dans sa page Tontine (cotisations, pénalités, adhésion)."
+      >
+        <div className="grid gap-2 p-4 sm:grid-cols-2">
+          <NumField label="Cotisation mensuelle" note="Par membre et par réunion" value={p.montants.montantCotisation} fcfaPreview
+            onChange={(n) => p.majMontants({ montantCotisation: n })} step={500} />
+          <NumField label="Collation" note="Par personne et par réunion" value={p.montants.montantCollation} fcfaPreview
+            onChange={(n) => p.majMontants({ montantCollation: n })} step={250} />
+          <NumField label="Frais d'adhésion" note="Une seule fois — caisse sociale" value={p.montants.fraisAdhesion} fcfaPreview
+            onChange={(n) => p.majMontants({ fraisAdhesion: n })} step={500} />
+          <NumField label="Pénalité de retard" note="Versée à la caisse sociale" value={p.montants.penaliteRetard} fcfaPreview
+            onChange={(n) => p.majMontants({ penaliteRetard: n })} step={100} />
+          <NumField label="Pénalité d'absence non excusée" note="Versée à la caisse sociale" value={p.montants.penaliteAbsence} fcfaPreview
+            onChange={(n) => p.majMontants({ penaliteAbsence: n })} step={250} />
+        </div>
+      </Block>
+
+      {/* — impayés & recouvrement — */}
+      <Block
+        title="Impayés & recouvrement"
+        icon={<BellRing className="h-4 w-4" />}
+        note="Comment les impayés sont traités : délai de grâce, relances, escalade, sanctions, moyens de paiement et qui encaisse."
+      >
+        <div className="space-y-2 p-4">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <NumField label="Délai de grâce" note="Jours avant la 1ʳᵉ relance" unite="jours" value={r.impayes.delaiGraceJours}
+              onChange={(n) => majImp({ delaiGraceJours: n })} />
+            <NumField label="Relances avant escalade" note="Relances amiables avant l'échelon suivant" unite="relance(s)" value={r.impayes.relancesAvantEscalade}
+              onChange={(n) => majImp({ relancesAvantEscalade: n })} />
+            <NumField label="Délai entre deux étapes" note="Rythme de l'escalade" unite="jours" value={r.impayes.delaiEntreEtapesJours}
+              onChange={(n) => majImp({ delaiEntreEtapesJours: n })} />
+            <NumField label="Impayés consécutifs avant sanction" note="Nombre toléré avant la sanction choisie ci-dessous" unite="impayé(s)" value={r.impayes.apresNImpayes}
+              onChange={(n) => majImp({ apresNImpayes: n })} />
+          </div>
+
+          <div className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3">
+            <p className="text-[11.5px] font-bold text-[#2B3530]">Étapes de recouvrement décidées par le bureau</p>
+            <p className="mt-0.5 text-[10.5px] text-[#8A9288]">Dans l'ordre : désactivez une étape pour la retirer de la procédure.</p>
+            <div className="mt-2 space-y-1.5">
+              {(Object.keys(ECHELONS_LABELS) as (keyof Reglement["impayes"]["echelons"])[]).map((k) => (
+                <ToggleRow key={k} label={ECHELONS_LABELS[k]} actif={r.impayes.echelons[k]} onToggle={() => majEchelon(k)} />
+              ))}
+            </div>
+          </div>
+
+          <ToggleRow
+            label="Pénalité de retard automatique"
+            note={`${fcfa(p.montants.penaliteRetard)} appliquées d'office dès l'échelon choisi, sans nouveau vote`}
+            actif={r.impayes.amendeAuto}
+            onToggle={() => majImp({ amendeAuto: !r.impayes.amendeAuto })}
+          />
+          {r.impayes.amendeAuto && (
+            <Seg
+              legende="La pénalité automatique s'applique dès…"
+              value={String(r.impayes.niveauAmende)}
+              onChange={(v) => majImp({ niveauAmende: Number(v) as 1 | 2 | 3 })}
+              options={[{ v: "1", label: "N°1 — relance" }, { v: "2", label: "N°2 — mise en demeure" }, { v: "3", label: "N°3 — convocation" }]}
+            />
+          )}
+          <Seg
+            legende="Sanction après impayés répétés"
+            value={r.impayes.sanction}
+            onChange={(v) => majImp({ sanction: v as Reglement["impayes"]["sanction"] })}
+            options={(Object.keys(SANCTIONS_LABELS) as (keyof Reglement["impayes"]["sanction"])[]).map((k) => ({ v: k, label: SANCTIONS_LABELS[k] }))}
+          />
+          <div className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3">
+            <p className="text-[11.5px] font-bold text-[#2B3530]">Moyens de paiement acceptés pour les recouvrements</p>
+            <div className="mt-2 space-y-1.5">
+              {(Object.keys(PAIEMENTS_LABELS) as (keyof Reglement["impayes"]["paiements"])[]).map((k) => (
+                <ToggleRow key={k} label={PAIEMENTS_LABELS[k]} actif={r.impayes.paiements[k]} onToggle={() => majPaiement(k)} />
+              ))}
+            </div>
+          </div>
+          <Seg
+            legende="Qui encaisse les recouvrements"
+            value={r.impayes.encaisseur}
+            onChange={(v) => majImp({ encaisseur: v as Reglement["impayes"]["encaisseur"] })}
+            options={(Object.keys(ENCAISSEUR_LABELS) as Reglement["impayes"]["encaisseur"][]).map((k) => ({ v: k, label: ENCAISSEUR_LABELS[k] }))}
+          />
+        </div>
+      </Block>
+
+      {/* — prêts & garanties — */}
+      <Block
+        title="Prêts & garanties"
+        icon={<ShieldCheck className="h-4 w-4" />}
+        note="Comment les prêts garantis fonctionnent : taux, plafond, durée, avalistes, garanties acceptées et vote du dossier du président lui-même."
+      >
+        <div className="space-y-2 p-4">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <NumField label="Taux mensuel des prêts" note="Intérêts simples par mois" unite="% / mois" step={0.5} value={r.prets.tauxMensuel}
+              onChange={(n) => majPrets({ tauxMensuel: n })} />
+            <NumField label="Plafond d'un prêt" note="Somme maximale pouvant être accordée" value={r.prets.plafondFcfa} fcfaPreview step={25_000}
+              onChange={(n) => majPrets({ plafondFcfa: n })} />
+            <NumField label="Durée maximale de remboursement" unite="mois" value={r.prets.dureeMaxMois}
+              onChange={(n) => majPrets({ dureeMaxMois: n })} />
+            <NumField label="Ancienneté requise (carence)" note="Mois de cotisation avant le 1ᵉʳ prêt" unite="mois" value={r.prets.carenceMois}
+              onChange={(n) => majPrets({ carenceMois: n })} />
+          </div>
+          <ToggleRow
+            label="Avaliste obligatoire"
+            note="Un membre fiable se porte garant du remboursement"
+            actif={r.prets.avalisteObligatoire}
+            onToggle={() => majPrets({ avalisteObligatoire: !r.prets.avalisteObligatoire })}
+          />
+          {r.prets.avalisteObligatoire && (
+            <Seg
+              legende="Nombre d'avalistes exigés"
+              value={String(r.prets.nbAvalistes)}
+              onChange={(v) => majPrets({ nbAvalistes: Number(v) as 1 | 2 })}
+              options={[{ v: "1", label: "1 avaliste" }, { v: "2", label: "2 avalistes" }]}
+            />
+          )}
+          <ToggleRow
+            label="Co-signature du trésorier"
+            note="Aucun prêt décaissé sans le visa du trésorier — supervision à deux"
+            actif={r.prets.cosignTresorier}
+            onToggle={() => majPrets({ cosignTresorier: !r.prets.cosignTresorier })}
+          />
+          <div className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3">
+            <p className="text-[11.5px] font-bold text-[#2B3530]">Garanties acceptées pour un prêt</p>
+            <div className="mt-2 space-y-1.5">
+              {(Object.keys(GARANTIES_LABELS) as (keyof Reglement["prets"]["garanties"])[]).map((k) => (
+                <ToggleRow key={k} label={GARANTIES_LABELS[k]} actif={r.prets.garanties[k]} onToggle={() => majGarantie(k)} />
+              ))}
+            </div>
+          </div>
+          <Seg
+            legende="Vote des dossiers du président (récusation — il ne vote pas)"
+            value={r.prets.majorityPresident}
+            onChange={(v) => majPrets({ majorityPresident: v as Reglement["prets"]["majorityPresident"] })}
+            options={[
+              { v: "tiers", label: MAJORITES_LABELS.tiers },
+              { v: "deuxtiers", label: MAJORITES_LABELS.deuxtiers },
+              { v: "unanime", label: MAJORITES_LABELS.unanime },
+            ]}
+          />
+        </div>
+      </Block>
+
+      {/* — solidarité — caisse de secours — */}
+      <Block
+        title="Solidarité — caisse de secours"
+        icon={<HandHeart className="h-4 w-4" />}
+        note="Comment la solidarité fonctionne : cotisation d'alimentation, aide maximale, événements couverts, majorité du bureau et délai de versement."
+      >
+        <div className="space-y-2 p-4">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <NumField label="Cotisation de solidarité" note="Par membre et par mois — alimente la caisse" value={r.solidarite.cotisationMensuelle} fcfaPreview step={250}
+              onChange={(n) => majSol({ cotisationMensuelle: n })} />
+            <NumField label="Aide maximale par événement" note="Plafond décaissable du bureau" value={r.solidarite.plafondAideFcfa} fcfaPreview step={5_000}
+              onChange={(n) => majSol({ plafondAideFcfa: n })} />
+            <NumField label="Ancienneté requise" note="Mois avant droit à l'aide" unite="mois" value={r.solidarite.carenceMois}
+              onChange={(n) => majSol({ carenceMois: n })} />
+            <NumField label="Délai de versement" note="Après l'accord du bureau" unite="jours" value={r.solidarite.delaiVersementJours}
+              onChange={(n) => majSol({ delaiVersementJours: n })} />
+          </div>
+          <div className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3">
+            <p className="text-[11.5px] font-bold text-[#2B3530]">Événements couverts par la solidarité</p>
+            <div className="mt-2 space-y-1.5">
+              {(Object.keys(EVENTS_SOLIDAIRES_LABELS) as (keyof Reglement["solidarite"]["events"])[]).map((k) => (
+                <ToggleRow key={k} label={EVENTS_SOLIDAIRES_LABELS[k]} actif={r.solidarite.events[k]} onToggle={() => majEvent(k)} />
+              ))}
+            </div>
+          </div>
+          <Seg
+            legende="Majorité du bureau pour approuver une aide"
+            value={r.solidarite.majority}
+            onChange={(v) => majSol({ majority: v as Reglement["solidarite"]["majority"] })}
+            options={[
+              { v: "moitie", label: MAJORITES_LABELS.moitie },
+              { v: "troisquarts", label: MAJORITES_LABELS.troisquarts },
+              { v: "unanime", label: MAJORITES_LABELS.unanime },
+            ]}
+          />
+        </div>
+      </Block>
+
+      {/* — épargne — */}
+      <Block
+        title="Épargne"
+        icon={<PiggyBank className="h-4 w-4" />}
+        note="La caisse d'épargne : taux, préavis de retrait, dépôt minimum et retrait maximal."
+      >
+        <div className="grid gap-2 p-4 sm:grid-cols-2">
+          <NumField label="Taux mensuel de l'épargne" note="Intérêts crédités chaque mois" unite="% / mois" step={0.5} value={r.epargne.tauxMensuel}
+            onChange={(n) => majEp({ tauxMensuel: n })} />
+          <NumField label="Préavis de retrait" note="Jours de préavis avant tout retrait" unite="jours" value={r.epargne.preavisJours}
+            onChange={(n) => majEp({ preavisJours: n })} />
+          <NumField label="Dépôt minimum" value={r.epargne.depotMinFcfa} fcfaPreview step={1_000}
+            onChange={(n) => majEp({ depotMinFcfa: n })} />
+          <NumField label="Retrait maximal par mois" note="En pourcentage du solde" unite="% du solde" value={r.epargne.retraitMaxMois}
+            onChange={(n) => majEp({ retraitMaxMois: n })} />
+        </div>
+      </Block>
+
+      {/* — réunion & quorum — */}
+      <Block
+        title="Réunion & quorum"
+        icon={<Users className="h-4 w-4" />}
+        note="Les conditions de délibération : quorum minimal et reports tolérés."
+      >
+        <div className="grid gap-2 p-4 sm:grid-cols-2">
+          <NumField label="Quorum des délibérations" note="Membres présents minimum pour statuer" unite="membres" value={r.quorumMembres}
+            onChange={(n) => p.maj((x) => ({ ...x, quorumMembres: n }))} />
+          <NumField label="Reports consécutifs tolérés" note="Avant de devoir statuer quand même" unite="report(s)" value={r.reportsMax}
+            onChange={(n) => p.maj((x) => ({ ...x, reportsMax: n }))} />
+        </div>
+      </Block>
+
+      {/* — publication — */}
+      <Block
+        title="Publier le règlement aux membres"
+        icon={<Send className="h-4 w-4" />}
+        note={`Le règlement est en version ${r.version}. ${p.sale ? "Vos dernières modifications attendent la publication." : "Tout ce que vous avez réglé est déjà visible par les membres."} Une fois publié, le bloc « Règlement de la cantine » de la page Tontine affiche ces règles à tous — lecture seule.`}
+      >
+        <div className="flex flex-col gap-2 p-4 sm:flex-row">
+          <Btn onClick={p.onPublier} tone="vert"><Send className="h-4 w-4" /> Publier la version {p.sale ? r.version + 1 : r.version} aux membres</Btn>
+          <Btn onClick={p.onReinitialiser} tone="neutre"><RotateCcw className="h-4 w-4" /> Réinitialiser</Btn>
+        </div>
       </Block>
     </>
   );
