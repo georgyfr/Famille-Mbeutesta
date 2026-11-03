@@ -23,13 +23,16 @@ export type ReglagesTontine = {
 
 /** Règles de la tontine — modifiables par le bureau (président & secrétaire,
  *  voir saveMontants) : toutes les sommes affichées dans l'application en
- *  DÉRIVENT, jamais codées en dur dans l'interface. */
+ *  DÉRIVENT, jamais codées en dur dans l'interface.
+ *  DEMANDE DE L'ADMINISTRATEUR (novembre 2026) : TOUS les chiffres démarrent
+ *  à 0 — c'est le président qui fixe chaque montant dans l'onglet Paramètres
+ *  (bouton « Enregistrer »), et les membres le voient aussitôt. */
 export const TONTINE: ReglagesTontine = {
-  montantCotisation: 10_000,
-  montantCollation: 2_000,
-  fraisAdhesion: 5_000,
-  penaliteRetard: 500,
-  penaliteAbsence: 1_000,
+  montantCotisation: 0,
+  montantCollation: 0,
+  fraisAdhesion: 0,
+  penaliteRetard: 0,
+  penaliteAbsence: 0,
   jourLabel: "2ᵉ dimanche du mois",
 };
 
@@ -39,11 +42,14 @@ export const TONTINE: ReglagesTontine = {
    en lecture seule et peut les signaler. Persistés localement — le téléphone
    de la famille parle à lui-même, gratuit et hors ligne. */
 
-const MONTANTS_KEY = "fc_tontine_montants_v1";
+/* Clé v2 — réinitialise les anciens montants (10 000…) sur les nouveaux
+ * défauts à 0 : « Tous les chiffres qui se trouvent à paramètres, mets-les
+ * par défaut à zéro. C'est le président qui devra décider du chiffre. » */
+const MONTANTS_KEY = "fc_tontine_montants_v2";
 
 /** Bornes de validation — évite les fautes de frappe catastrophiques. */
 const MONTANTS_BORNES: Record<Exclude<keyof ReglagesTontine, "jourLabel">, [number, number]> = {
-  montantCotisation: [500, 500_000],
+  montantCotisation: [0, 500_000],
   montantCollation: [0, 100_000],
   fraisAdhesion: [0, 500_000],
   penaliteRetard: [0, 50_000],

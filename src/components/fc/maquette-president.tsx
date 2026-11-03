@@ -15,30 +15,37 @@
 // actuelle dans le projet Cloudflare.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 import {
   AlertTriangle, ArrowDownToLine, ArrowRight, ArrowUpFromLine, BadgeCheck, Ban,
-  BellRing, CalendarCheck, CalendarClock, Check, CheckCircle2, ChevronRight,
+  BellRing, CalendarCheck, CalendarClock, Check, CheckCircle2, CheckSquare, ChevronRight,
   ClipboardList, Coins, FileText, Gavel, Hand, HandCoins, HandHeart,
-  HeartHandshake, Hourglass, Landmark, Lock, MessageSquarePlus,
-  Mic, Pause, Phone, PiggyBank, Play, ReceiptText, RotateCcw, Scale, ScrollText, Send,
-  ShieldCheck, SlidersHorizontal, Sparkles, ThumbsDown, ThumbsUp, Timer, UserCheck, UserPlus,
-  Users, Vote, Wallet, XCircle,
+  HeartHandshake, Hourglass, Landmark, Layers, ListChecks, Lock, MessageSquarePlus,
+  Mic, Pause, Phone, PiggyBank, Play, Plus, ReceiptText, RotateCcw, Scale, ScrollText, Send,
+  ShieldCheck, SlidersHorizontal, Sparkles, Square, Tag, ThumbsDown, ThumbsUp, Timer,
+  Trash2, UserCheck, UserPlus, Users, Vote, Wallet, XCircle,
 } from "lucide-react";
 import { FcCard } from "./ui";
 import {
-  MEMBRES_FICTIFS, MOIS_FR, TONTINE, saveMontants,
+  MEMBRES_FICTIFS, MOIS_FR, TONTINE, saveMontants, TAUX_DEFAUT,
   detteParPersonne, potMensuel, secondSunday,
   type ReglagesTontine,
 } from "./tontine-data";
 import {
   ECHELONS_LABELS, ENCAISSEUR_LABELS, EVENTS_SOLIDAIRES_LABELS, GARANTIES_LABELS,
-  MAJORITES_LABELS, PAIEMENTS_LABELS, REGLEMENT_DEFAUT, SANCTIONS_LABELS,
+  INTERETS_EPARGNE_LABELS, INTERETS_PRET_LABELS, MAJORITES_LABELS, METHODES_SOLIDARITE,
+  PAIEMENTS_LABELS, REGLEMENT_DEFAUT, SANCTIONS_LABELS, TYPES_EPARGNE_CATALOGUE,
+  TYPES_PRET_CATALOGUE,
   loadReglement, publierReglement, saveReglement,
-  type Reglement,
+  type Reglement, type TypeEpargneConfig, type TypePretConfig,
 } from "./reglement";
+import {
+  loadTypesCotisation, nouveauTypeCotisation, saveTypesCotisation,
+  typeDuMembre, cotisationDuMembre, fmtMontant,
+  type TypeCotisation,
+} from "./cotisations-types";
 
 /* ══════════════════════════ aides ══════════════════════════ */
 
@@ -60,6 +67,26 @@ const nid = () => `mk-${Date.now().toString(36)}-${seq++}`;
  *  direct, bloc Séance du jour du cockpit, file de parole, simulation). */
 const SEANCE_ACTIVE = false;
 
+/** RÉUNION & QUORUM — masqué à la demande de l'administrateur (novembre 2026) :
+ *  « Au niveau des réunions et quorum, honnêtement, je ne sais pas ce que
+ *  c'est. » → le bloc est caché dans Paramètres ; passer à true pour le
+ *  réafficher (quorum des délibérations, reports tolérés). */
+const QUORUM_ACTIVE = false;
+
+/* — sous-onglets de PARAMÈTRES : chaque section tient sur UN écran, avec son
+ *  propre bouton « Enregistrer » — plus besoin de scroller jusqu'en bas —
+ *  et chaque section a SON URL (#president/parametres/cotisations…). — */
+type SousParamKey = "cotisations" | "impayes" | "prets" | "solidarite" | "epargne" | "publication";
+const SOUS_PARAMS: { key: SousParamKey; label: string; icon: ReactNode }[] = [
+  { key: "cotisations", label: "Cotisations", icon: <Coins className="h-3.5 w-3.5" /> },
+  { key: "impayes", label: "Impayés & recouvrement", icon: <BellRing className="h-3.5 w-3.5" /> },
+  { key: "prets", label: "Prêts", icon: <ShieldCheck className="h-3.5 w-3.5" /> },
+  { key: "solidarite", label: "Solidarité", icon: <HandHeart className="h-3.5 w-3.5" /> },
+  { key: "epargne", label: "Épargne", icon: <PiggyBank className="h-3.5 w-3.5" /> },
+  { key: "publication", label: "Publication", icon: <Send className="h-3.5 w-3.5" /> },
+];
+const SOUS_PARAM_KEYS = SOUS_PARAMS.map((s) => s.key);
+
 /** Clés d'onglets autorisées dans l'URL — liens directs partageables :
  *  famille-mbeutetsa.pages.dev/#president/impayes, /prets, /parametres… */
 const TAB_KEYS: TabKey[] = [
@@ -67,19 +94,26 @@ const TAB_KEYS: TabKey[] = [
   "journal", "parametres", "m-cotis", "m-epargne", "m-prets",
 ];
 
-function tabFromHash(): TabKey {
+function tabFromHash(): { tab: TabKey; sous: SousParamKey | null } {
   try {
     const h = (window.location.hash || "").toLowerCase();
     if (h.startsWith("#president/")) {
-      const sub = h.slice("#president/".length).replace(/\/+$/, "");
-      if ((TAB_KEYS as string[]).includes(sub)) return sub as TabKey;
+      const rest = h.slice("#president/".length).replace(/\/+$/, "");
+      const [seg1, seg2] = rest.split("/");
+      if ((TAB_KEYS as string[]).includes(seg1)) {
+        const tab = seg1 as TabKey;
+        if (tab === "parametres" && seg2 && (SOUS_PARAM_KEYS as string[]).includes(seg2)) {
+          return { tab, sous: seg2 as SousParamKey };
+        }
+        return { tab, sous: null };
+      }
     } else if (h === "#president" || h === "#president/") {
-      return "cockpit";
+      return { tab: "cockpit", sous: null };
     }
   } catch {
     /* rien */
   }
-  return "cockpit";
+  return { tab: "cockpit", sous: null };
 }
 
 type Puce = { children: ReactNode; cls?: string };
@@ -202,12 +236,17 @@ const initJournal = (): JournalEntry[] => [
 export function MaquettePresident() {
   /* — état global de la maquette — */
   const [tab, setTab] = useState<TabKey>("cockpit");
+  const [sousParam, setSousParam] = useState<SousParamKey>("cotisations");
   const [seance, setSeance] = useState<"fermee" | "ouverte" | "cloturee">("fermee");
   /* — RÈGLEMENT DE LA CANTINE : paramétrage complet du bureau (impayés,
    *    recouvrements, prêts, solidarité, épargne) — publié et visible par
    *    tous les membres. Initialisé sur les défauts (hydratation sûre), puis
    *    chargé du stockage local après peinture. — */
   const [reglement, setReglement] = useState<Reglement>(REGLEMENT_DEFAUT);
+  /* — TYPES DE COTISATIONS MENSUELLES : sommes créées par le président et
+   *    attribuées aux membres ; chaque membre sélectionné voit CE montant sur
+   *    sa page, avec une notification. — */
+  const [typesCotis, setTypesCotis] = useState<TypeCotisation[]>([]);
   /* — montants réels (TONTINE) : modifiés ici = modifiés pour TOUS les membres
    *    de la page Tontine (même moteur, saveMontants). — */
   const [montants, setMontants] = useState<ReglagesTontine>({ ...TONTINE });
@@ -282,6 +321,7 @@ export function MaquettePresident() {
   useEffect(() => {
     const t = setTimeout(() => {
       setReglement(loadReglement());
+      setTypesCotis(loadTypesCotisation());
       setMontants({ ...TONTINE });
       const n = new Date();
       let y = n.getFullYear();
@@ -300,9 +340,14 @@ export function MaquettePresident() {
   }, []);
 
   /* — onglets = URL partageable : #president/<onglet> — chaque sous-onglet du
-   *    président a sa propre adresse (collable, rafraîchissable, partageable). */
+   *    président a sa propre adresse (collable, rafraîchissable, partageable),
+   *    y compris les sections de Paramètres : #president/parametres/prets. */
   useEffect(() => {
-    const sync = () => setTab(tabFromHash());
+    const sync = () => {
+      const x = tabFromHash();
+      setTab(x.tab);
+      if (x.tab === "parametres" && x.sous) setSousParam(x.sous);
+    };
     const t0 = setTimeout(sync, 0);
     window.addEventListener("hashchange", sync);
     return () => {
@@ -313,7 +358,16 @@ export function MaquettePresident() {
   const goTab = (t: TabKey) => {
     setTab(t);
     try {
-      const h = `#president/${t}`;
+      const h = t === "parametres" ? `#president/parametres/${sousParam}` : `#president/${t}`;
+      if (window.location.hash !== h) window.history.replaceState(null, "", h);
+    } catch {
+      /* rien */
+    }
+  };
+  const goSousParam = (s: SousParamKey) => {
+    setSousParam(s);
+    try {
+      const h = `#president/parametres/${s}`;
       if (window.location.hash !== h) window.history.replaceState(null, "", h);
     } catch {
       /* rien */
@@ -358,6 +412,17 @@ export function MaquettePresident() {
     setReglSale(false);
     toast("Paramètres réinitialisés sur les valeurs d'origine");
     journalAdd("Paramètres de la cantine réinitialisés sur les valeurs d'origine.", "Président (paramétrage)");
+  };
+
+  /* — types de cotisations : toute validation d'attribution est enregistrée
+   *    aussitôt — les membres sélectionnés voient le montant sur leur page. — */
+  const majTypesCotis = (next: TypeCotisation[], message?: string) => {
+    setTypesCotis(next);
+    saveTypesCotisation(next);
+    if (message) {
+      toast.success("Attribution validée", { description: message });
+      journalAdd(message, "Président (paramétrage)");
+    }
   };
 
   /* — simulation : les membres demandent la parole pendant la séance —
@@ -509,7 +574,7 @@ export function MaquettePresident() {
     const m = parMembre.get(p.membreId);
     const av = parMembre.get(p.avalisteId);
     toast.success("Prêt accordé", { description: `${fcfa(p.montant)} à ${m?.name} — avaliste : ${av?.name}. Décaissement par le trésorier, au taux de ${TAUX_DEFAUT} %/mois.` });
-    journalAdd(`Prêt de ${fcfa(p.montant)} accordé à ${m?.name} — avaliste ${av?.name}, co-signé par le trésorier, taux ${TAUX_DEFAUT} %/mois.`, "Président + Trésorier");
+    journalAdd(`Prêt de ${fcfa(p.montant)} accordé à ${m?.name} — avaliste ${av?.name}, co-signé par le trésorier, taux ${reglement.prets.tauxMensuel || TAUX_DEFAUT} %/mois.`, "Président + Trésorier");
   };
   const refuserPret = (p: PretDemande) => {
     if (!p.motifRefus.trim()) { toast.error("Indiquez le motif du refus (transparence envers le membre)"); return; }
@@ -674,16 +739,16 @@ export function MaquettePresident() {
         type="button"
         onClick={() => goTab(t.key)}
         aria-current={actif ? "page" : undefined}
-        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-[12px] font-bold transition-all ${
+        className={`inline-flex min-h-[46px] items-center gap-2 rounded-xl border-2 px-3.5 py-2.5 text-[13px] font-bold transition-all sm:min-h-[48px] sm:text-[14px] ${
           actif
-            ? t.membre ? "border-transparent bg-[#3D6B72] text-white shadow-md" : "border-transparent bg-[#1E4D2B] text-white shadow-md"
-            : t.membre ? "border-[#C9D6CE] bg-[#F2F6F1] text-[#5C6B60] hover:border-[#3D6B72]/50" : "border-[#E5DCC0] bg-[#FBF7EA] text-[#5C6B60] hover:border-[#C89F62]/50"
+            ? t.membre ? "border-[#31565C] bg-[#3D6B72] text-white shadow-[0_6px_18px_rgba(61,107,114,0.45)]" : "border-[#153D22] bg-[#1E4D2B] text-white shadow-[0_6px_18px_rgba(30,77,43,0.45)]"
+            : t.membre ? "border-[#9DB8A9] bg-white text-[#2E4237] hover:border-[#3D6B72] hover:bg-[#EAF2ED]" : "border-[#C4AE85] bg-white text-[#463C28] hover:border-[#C89F62] hover:bg-[#F7EFDB]"
         }`}
       >
         {t.icon}
         {t.label}
         {badge > 0 && (
-          <span className={`inline-flex h-4.5 min-w-4.5 items-center justify-center rounded-full px-1 text-[10px] font-black ${actif ? "bg-[#C89F62] text-[#2B2416]" : "bg-[#A5473D] text-white"}`}>
+          <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-black ${actif ? "bg-[#C89F62] text-[#2B2416]" : "bg-[#A5473D] text-white"}`}>
             {badge}
           </span>
         )}
@@ -697,7 +762,7 @@ export function MaquettePresident() {
       <div className="mb-3 flex items-center gap-2 rounded-xl border border-[#C89F62]/50 bg-[#C89F62]/12 px-3 py-2">
         <Sparkles className="h-4 w-4 shrink-0 text-[#8A6420]" />
         <p className="flex-1 text-[11.5px] font-semibold leading-snug text-[#7A5B2E]">
-          MAQUETTE v3 — paramétrage complet de la cantine (impayés, recouvrements, prêts, solidarité, épargne) · chaque onglet a son URL (#president/…) · données de démonstration, aucune action réelle.
+          MAQUETTE v4 — onglets grands et contrastés · Paramètres en 6 sections (une = un écran = un bouton Enregistrer) · types de cotisations mensuelles attribués aux membres (notification) · types de prêts, méthodes de solidarité, types d’épargne · tous les chiffres à 0 par défaut · données de démonstration, aucune action réelle.
         </p>
       </div>
 
@@ -726,16 +791,17 @@ export function MaquettePresident() {
         </div>
       </FcCard>
 
-      {/* ── onglets — TOUS visibles (pas de coupure) ; chaque onglet a son URL :
-              #president/<onglet> — partageable, rafraîchissable, épinglable ── */}
+      {/* ── onglets — TOUS visibles (pas de coupure), GRANDS et CONTRASTÉS :
+              arrière-plan blanc, bordure épaisse, texte 14px — chaque onglet a
+              son URL : #president/<onglet> — partageable, rafraîchissable ── */}
       <nav aria-label="Sections du poste de commandement" className="sticky top-0 z-20 -mx-3 mt-3 bg-[#F6EFE2]/95 px-3 py-2 backdrop-blur sm:-mx-4 sm:px-4">
-        <div className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-2 shadow-sm">
-          <p className="px-1 pb-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-[#8A9288]">Gestion de la cantine</p>
-          <div className="flex flex-wrap gap-1.5">{tabsGestion.map(renderTab)}</div>
-          <p className="px-1 pb-1.5 pt-2.5 text-[9px] font-black uppercase tracking-[0.16em] text-[#3D6B72]">
+        <div className="rounded-2xl border-2 border-[#B8A87E] bg-white p-2.5 shadow-[0_10px_30px_rgba(42,74,58,0.14)]">
+          <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#6E7A70]">Gestion de la cantine</p>
+          <div className="flex flex-wrap gap-2">{tabsGestion.map(renderTab)}</div>
+          <p className="px-1 pb-2 pt-3 text-[10px] font-black uppercase tracking-[0.16em] text-[#3D6B72]">
             Espace membre — le président cotise, épargne et emprunte comme tous
           </p>
-          <div className="flex flex-wrap gap-1.5">{tabsMembre.map(renderTab)}</div>
+          <div className="flex flex-wrap gap-2">{tabsMembre.map(renderTab)}</div>
         </div>
       </nav>
 
@@ -844,6 +910,11 @@ export function MaquettePresident() {
             maj={majReglement}
             montants={montants}
             majMontants={majMontants}
+            typesCotis={typesCotis}
+            majTypesCotis={majTypesCotis}
+            roster={roster}
+            sous={sousParam}
+            goSous={goSousParam}
             onPublier={publierReglementAuxMembres}
             onReinitialiser={reinitialiserReglement}
           />
@@ -855,6 +926,8 @@ export function MaquettePresident() {
             historique={historiqueCotis}
             declarees={cotisDeclarees}
             attendues={roster.length}
+            typesCotis={typesCotis}
+            penRetard={TONTINE.penaliteRetard}
             onCotiser={cotiserMoi}
           />
         )}
@@ -862,8 +935,9 @@ export function MaquettePresident() {
           <MesEpargnesSection
             solde={epargneSolde}
             ops={epargneOps}
-            taux={reglement.epargne.tauxMensuel}
+            taux={reglement.epargne.tauxMensuel || TAUX_DEFAUT}
             preavisJours={reglement.epargne.preavisJours}
+            typeEpargneNom={reglement.epargne.typeChoisi ? TYPES_EPARGNE_CATALOGUE.find((t) => t.id === reglement.epargne.typeChoisi)?.nom ?? null : null}
             onDepot={epargnerMoi}
             onRetrait={retirerEpargneMoi}
           />
@@ -888,6 +962,8 @@ export function MaquettePresident() {
 
       <p className="mt-6 text-center text-[11px] leading-relaxed text-[#8A9288]">
         Maquette interactive — les noms, montants et situations sont fictifs.
+        <br />
+        v4 : Paramètres réorganisés en 6 sous-sections à URL propre (#president/parametres/…) avec « Enregistrer » par section — cotisations multiples par type de membre (notification sur la page du membre), 10 natures de prêts, 5 méthodes de solidarité, 7 types d’épargne avec leur type d’intérêt, tous les chiffres à 0 par défaut.
         <br />
         v3 : le président paramètre la cantine (impayés, recouvrements, prêts, solidarité, épargne) et publie le règlement — visible par tous les membres.
         <br />
@@ -1752,9 +1828,18 @@ function MesCotisationsSection(p: {
   cotisCeMois: boolean;
   historique: { mois: string; paye: boolean }[];
   declarees: number; attendues: number;
+  /** Types de cotisations mensuelles fixés par le président — le président
+   *  membre est traité EXACTEMENT comme un membre : s'il est sélectionné dans
+   *  un type, c'est CETTE somme qu'il doit verser. */
+  typesCotis: TypeCotisation[];
+  penRetard: number;
   onCotiser: () => void;
 }) {
-  const total = TONTINE.montantCotisation + TONTINE.montantCollation;
+  /* Ma cotisation : celle fixée par le bureau pour MOI (type attribué), sinon
+   * la cotisation de base — comme pour chaque membre de la cantine. */
+  const monType = typeDuMembre(MOI, p.typesCotis);
+  const maCotis = cotisationDuMembre(MOI, p.typesCotis, TONTINE.montantCotisation);
+  const total = maCotis + TONTINE.montantCollation;
   return (
     <>
       <FcCard className="overflow-hidden">
@@ -1772,11 +1857,36 @@ function MesCotisationsSection(p: {
           <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] px-4 py-3.5">
             <div>
               <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Ma cotisation {p.moisCourant ? `— ${p.moisCourant}` : "du mois"}</p>
-              <p className="text-[19px] font-black text-[#2B3530]">{fcfa(TONTINE.montantCotisation)} <span className="text-[12px] font-semibold text-[#8A9288]">+ {fcfa(TONTINE.montantCollation)} de collation</span></p>
+              <p className="text-[19px] font-black text-[#2B3530]">{fcfa(maCotis)} <span className="text-[12px] font-semibold text-[#8A9288]">+ {fcfa(TONTINE.montantCollation)} de collation</span></p>
+              <p className="mt-0.5 text-[11px] font-semibold text-[#8A6420]">
+                {monType ? `Type attribué par le bureau : ${monType.nom}` : "Cotisation de base de la cantine"}
+              </p>
             </div>
             {p.cotisCeMois
               ? <P cls={OK_CLS}><CheckCircle2 className="h-3.5 w-3.5" /> Cotisation à jour</P>
               : <Btn onClick={p.onCotiser}><Wallet className="h-4 w-4" /> Cotiser {fcfa(total)}</Btn>}
+          </div>
+          {/* Notification — le bureau a fixé MA cotisation : je le vois comme un membre quelconque */}
+          {monType && (
+            <div className="mt-2.5 flex items-start gap-2.5 rounded-2xl border-2 border-[#C89F62]/60 bg-[#C89F62]/12 px-3.5 py-3">
+              <BellRing className="mt-0.5 h-4.5 w-4.5 shrink-0 text-[#8A6420]" />
+              <p className="text-[12px] leading-relaxed text-[#7A5B2E]">
+                <strong>Notification du bureau — votre cotisation a été fixée à {fmtMontant(monType.montant)} par mois</strong> (« {monType.nom} »).
+                Comme chaque membre sélectionné dans ce type, vous devez désormais verser cette somme — la collation reste à part.
+              </p>
+            </div>
+          )}
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <div className="rounded-2xl border border-[#E5DCC0] bg-white px-3.5 py-3">
+              <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Pénalités éventuelles</p>
+              <p className="text-[13.5px] font-black text-[#2B3530]">{fcfa(0)} <span className="text-[11px] font-semibold text-[#8A9288]">— aucun retard enregistré à mon nom</span></p>
+              <p className="mt-0.5 text-[10.5px] text-[#8A9288]">En cas de retard : {fcfa(p.penRetard)} par incidence (même règle que pour tous).</p>
+            </div>
+            <div className="rounded-2xl border border-[#E5DCC0] bg-white px-3.5 py-3">
+              <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Reçu de cotisation</p>
+              <p className="flex items-center gap-1.5 text-[13.5px] font-black text-[#2F6B45]"><ReceiptText className="h-4 w-4" /> Reçu remis par le trésorier</p>
+              <p className="mt-0.5 text-[10.5px] text-[#8A9288]">Chaque versement est encaissé et inscrit au journal de caisse — comme pour tous les membres.</p>
+            </div>
           </div>
           <div className="mt-3">
             <div className="flex items-center justify-between text-[11.5px] font-semibold text-[#5C6B60]">
@@ -1808,7 +1918,9 @@ function MesCotisationsSection(p: {
 /* ══════════════════════════ ESPACE MEMBRE — MES ÉPARGNES ══════════════════════════ */
 
 function MesEpargnesSection(p: {
-  solde: number; ops: EpargneOp[]; taux: number;
+  solde: number; ops: EpargneOp[]; taux: number; preavisJours: number;
+  /** Nom du type d'épargne choisi par le bureau (null = aucun). */
+  typeEpargneNom: string | null;
   onDepot: (montant: number) => void; onRetrait: (montant: number) => void;
 }) {
   const [montant, setMontant] = useState("");
@@ -1822,6 +1934,17 @@ function MesEpargnesSection(p: {
             <p className="text-[26px] font-black leading-none text-[#1E4D2B]">{fcfa(p.solde)}</p>
           </div>
           <P cls={TE_CLS}><Coins className="h-3 w-3" /> Rémunérée à {p.taux} %/mois — comme chaque membre</P>
+        </div>
+        <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
+          <div className="rounded-2xl border border-[#E5DCC0] bg-white px-3.5 py-2.5">
+            <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Type d’épargne fixé par le bureau</p>
+            <p className="text-[13px] font-black text-[#2B3530]">{p.typeEpargneNom ?? "Aucun type défini — à fixer par le bureau"}</p>
+          </div>
+          <div className="rounded-2xl border border-[#E5DCC0] bg-white px-3.5 py-2.5">
+            <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Intérêts cumulés &amp; préavis</p>
+            <p className="text-[13px] font-black text-[#2F6B45]">≈ {fcfa(Math.round(p.solde * p.taux / 100))} / mois</p>
+            <p className="mt-0.5 text-[10.5px] text-[#8A9288]">Préavis de retrait : {p.preavisJours} jour(s)</p>
+          </div>
         </div>
         <p className="mt-2.5 text-[12px] leading-relaxed text-[#5C6B60]">
           Le taux est le même pour tous : c’est le bureau qui le fixe (vous et le secrétariat, à deux). Les intérêts sont crédités en fin de mois par le trésorier et visibles au journal de caisse.
@@ -1874,7 +1997,7 @@ function MesPretsSection(p: {
   pretsPersos: PretPerso[];
   parMembre: Map<string, (typeof MEMBRES_FICTIFS)[number]>;
   roster: typeof MEMBRES_FICTIFS;
-  taux: number;
+  regl: Reglement;
   form: { montant: string; motif: string; garanties: string; avalisteId: string };
   setForm: (f: { montant: string; motif: string; garanties: string; avalisteId: string }) => void;
   onDemander: () => void;
@@ -1883,6 +2006,11 @@ function MesPretsSection(p: {
   onPretre: () => void;
   onSolder: (x: PretPerso) => void;
 }) {
+  const taux = p.regl.prets.tauxMensuel || TAUX_DEFAUT;
+  const demandeMontant = Number(p.form.montant) || 0;
+  const mensualite = demandeMontant > 0 && p.regl.prets.dureeMaxMois > 0
+    ? Math.round((demandeMontant * (1 + (taux / 100) * p.regl.prets.dureeMaxMois)) / p.regl.prets.dureeMaxMois)
+    : 0;
   return (
     <>
       <FcCard className="p-4">
@@ -1890,10 +2018,15 @@ function MesPretsSection(p: {
           <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#1E4D2B]/10 text-[#1E4D2B]"><Landmark className="h-4 w-4" /></span>
           <p className="text-[13px] leading-relaxed text-[#5C6B60]">
             <strong className="text-[#1E4D2B]">Emprunter à la caisse de la cantine — les mêmes règles pour vous.</strong>
-            Motif, garanties, avaliste obligatoire, taux {p.taux} %/mois. Et parce que c’est votre caisse,
-            <strong className="text-[#1E4D2B]"> vous êtes récusé</strong> : le bureau statue sans votre voix (majorité 2/3).
+            Motif, garanties, avaliste, taux {taux} %/mois. Et parce que c’est votre caisse,
+            <strong className="text-[#1E4D2B]"> vous êtes récusé</strong> : le bureau statue sans votre voix (vote {MAJORITES_LABELS[p.regl.prets.majorityPresident]}).
           </p>
         </div>
+        {mensualite > 0 && (
+          <p className="mt-2 rounded-2xl border border-[#C89F62]/50 bg-[#C89F62]/10 px-3 py-2 text-[11.5px] font-semibold text-[#8A6420]">
+            Estimation — {fcfa(demandeMontant)} sur {p.regl.prets.dureeMaxMois} mois à {taux} %/mois : environ {fcfa(mensualite)} par mois.
+          </p>
+        )}
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
           <input value={p.form.montant} onChange={(e) => p.setForm({ ...p.form, montant: e.target.value.replace(/[^\d]/g, "") })} inputMode="numeric" placeholder="Montant (FCFA)" className="rounded-lg border border-[#C9B98A] bg-[#FFFDF6] px-3 py-2 text-[13px] placeholder:text-[#8A9288] focus:outline-none" />
           <select value={p.form.avalisteId} onChange={(e) => p.setForm({ ...p.form, avalisteId: e.target.value })} className="rounded-lg border border-[#C9B98A] bg-[#FFFDF6] px-2.5 py-2 text-[12.5px] text-[#2B3530] focus:outline-none">
@@ -1901,6 +2034,13 @@ function MesPretsSection(p: {
             {p.roster.filter((x) => x.id !== MOI).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
           </select>
         </div>
+        <select value={p.form.motif.startsWith("*") ? p.form.motif.slice(1) : ""}
+          onChange={(e) => p.setForm({ ...p.form, motif: e.target.value ? `*${e.target.value}` : p.form.motif.replace(/^\*/, "") })}
+          aria-label="Nature du prêt demandé"
+          className="mt-2 w-full rounded-lg border border-[#C9B98A] bg-[#FFFDF6] px-2.5 py-2 text-[12.5px] text-[#2B3530] focus:outline-none">
+          <option value="">Nature du prêt (celle du règlement : {TYPES_PRET_CATALOGUE.find((t) => t.id === p.regl.prets.typeChoisi)?.nom ?? "libre"})…</option>
+          {TYPES_PRET_CATALOGUE.map((t) => <option key={t.id} value={t.nom}>{t.nom}</option>)}
+        </select>
         <input value={p.form.motif} onChange={(e) => p.setForm({ ...p.form, motif: e.target.value })} placeholder="Motif du prêt (comme pour tout membre)…" className="mt-2 w-full rounded-lg border border-[#C9B98A] bg-[#FFFDF6] px-3 py-2 text-[13px] placeholder:text-[#8A9288] focus:outline-none" />
         <input value={p.form.garanties} onChange={(e) => p.setForm({ ...p.form, garanties: e.target.value })} placeholder="Garanties proposées (fond de commerce, salaire…)…" className="mt-2 w-full rounded-lg border border-[#C9B98A] bg-[#FFFDF6] px-3 py-2 text-[13px] placeholder:text-[#8A9288] focus:outline-none" />
         <div className="mt-2.5">
@@ -2080,26 +2220,118 @@ function ParametresSection(p: {
   maj: (patch: (r: Reglement) => Reglement) => void;
   montants: ReglagesTontine;
   majMontants: (patch: Partial<ReglagesTontine>) => void;
+  typesCotis: TypeCotisation[];
+  majTypesCotis: (next: TypeCotisation[], message?: string) => void;
+  roster: typeof MEMBRES_FICTIFS;
+  sous: SousParamKey;
+  goSous: (s: SousParamKey) => void;
   onPublier: () => void;
   onReinitialiser: () => void;
 }) {
-  const r = p.regl;
-  const majImp = (patch: Partial<Reglement["impayes"]>) => p.maj((x) => ({ ...x, impayes: { ...x.impayes, ...patch } }));
-  const majEchelon = (cle: keyof Reglement["impayes"]["echelons"]) =>
-    p.maj((x) => ({ ...x, impayes: { ...x.impayes, echelons: { ...x.impayes.echelons, [cle]: !x.impayes.echelons[cle] } } }));
-  const majPaiement = (cle: keyof Reglement["impayes"]["paiements"]) =>
-    p.maj((x) => ({ ...x, impayes: { ...x.impayes, paiements: { ...x.impayes.paiements, [cle]: !x.impayes.paiements[cle] } } }));
-  const majPrets = (patch: Partial<Reglement["prets"]>) => p.maj((x) => ({ ...x, prets: { ...x.prets, ...patch } }));
-  const majGarantie = (cle: keyof Reglement["prets"]["garanties"]) =>
-    p.maj((x) => ({ ...x, prets: { ...x.prets, garanties: { ...x.prets.garanties, [cle]: !x.prets.garanties[cle] } } }));
-  const majSol = (patch: Partial<Reglement["solidarite"]>) => p.maj((x) => ({ ...x, solidarite: { ...x.solidarite, ...patch } }));
-  const majEvent = (cle: keyof Reglement["solidarite"]["events"]) =>
-    p.maj((x) => ({ ...x, solidarite: { ...x.solidarite, events: { ...x.solidarite.events, [cle]: !x.solidarite.events[cle] } } }));
-  const majEp = (patch: Partial<Reglement["epargne"]>) => p.maj((x) => ({ ...x, epargne: { ...x.epargne, ...patch } }));
+  /* — BROUILLON LOCAL — chaque section tient sur UN écran et s'enregistre par
+   *    son propre bouton « Enregistrer » ; si vous quittez l'onglet sans
+   *    enregistrer, rien n'est perdu (voir l'effet de sécurité plus bas). — */
+  const [brouillon, setBrouillon] = useState<Reglement>(p.regl);
+  const [brouillonM, setBrouillonM] = useState<ReglagesTontine>({ ...p.montants });
+  const [typesLocaux, setTypesLocaux] = useState<TypeCotisation[]>(p.typesCotis);
+  const [sales, setSales] = useState<Record<string, boolean>>({});
+  const marquerSale = (s: string) => setSales((x) => ({ ...x, [s]: true }));
+
+  /* Resynchronisation quand le règlement change ailleurs (publication,
+   * réinitialisation, enregistrement d'une autre section…) — pattern React
+   * « ajuster l'état pendant le rendu quand une prop change ». */
+  const [dernierRegl, setDernierRegl] = useState(p.regl);
+  const [dernierMontants, setDernierMontants] = useState(p.montants);
+  const [derniersTypes, setDerniersTypes] = useState(p.typesCotis);
+  if (dernierRegl !== p.regl || dernierMontants !== p.montants || derniersTypes !== p.typesCotis) {
+    setDernierRegl(p.regl);
+    setDernierMontants(p.montants);
+    setDerniersTypes(p.typesCotis);
+    setBrouillon(p.regl);
+    setBrouillonM({ ...p.montants });
+    setTypesLocaux(p.typesCotis);
+  }
+
+  /* — sécurité : en quittant l'onglet Paramètres, ce qui n'a pas été
+   *    enregistré par bouton est conservé comme brouillon du bureau (sans
+   *    notification — la publication reste un geste séparé). — */
+  const refs = useRef({ brouillon, brouillonM, typesLocaux, sales, maj: p.maj, majMontants: p.majMontants, majTypes: p.majTypesCotis });
+  useEffect(() => {
+    refs.current = { brouillon, brouillonM, typesLocaux, sales, maj: p.maj, majMontants: p.majMontants, majTypes: p.majTypesCotis };
+  });
+  useEffect(() => () => {
+    const s = refs.current.sales;
+    if (s.impayes || s.prets || s.solidarite || s.epargne) refs.current.maj(() => ({ ...refs.current.brouillon }));
+    if (s.cotisations) {
+      refs.current.majMontants({ ...refs.current.brouillonM });
+      refs.current.majTypes(refs.current.typesLocaux);
+    }
+  }, []);
+
+  const r = brouillon;
+  const majImp = (patch: Partial<Reglement["impayes"]>) => { setBrouillon((x) => ({ ...x, impayes: { ...x.impayes, ...patch } })); marquerSale("impayes"); };
+  const majEchelon = (cle: keyof Reglement["impayes"]["echelons"]) => { setBrouillon((x) => ({ ...x, impayes: { ...x.impayes, echelons: { ...x.impayes.echelons, [cle]: !x.impayes.echelons[cle] } } })); marquerSale("impayes"); };
+  const majPaiement = (cle: keyof Reglement["impayes"]["paiements"]) => { setBrouillon((x) => ({ ...x, impayes: { ...x.impayes, paiements: { ...x.impayes.paiements, [cle]: !x.impayes.paiements[cle] } } })); marquerSale("impayes"); };
+  const majPrets = (patch: Partial<Reglement["prets"]>) => { setBrouillon((x) => ({ ...x, prets: { ...x.prets, ...patch } })); marquerSale("prets"); };
+  const majGarantie = (cle: keyof Reglement["prets"]["garanties"]) => { setBrouillon((x) => ({ ...x, prets: { ...x.prets, garanties: { ...x.prets.garanties, [cle]: !x.prets.garanties[cle] } } })); marquerSale("prets"); };
+  const majTypePret = (id: string, patch: Partial<TypePretConfig>) => { setBrouillon((x) => ({ ...x, prets: { ...x.prets, types: { ...x.prets.types, [id]: { ...x.prets.types[id], ...patch } } } })); marquerSale("prets"); };
+  const majSol = (patch: Partial<Reglement["solidarite"]>) => { setBrouillon((x) => ({ ...x, solidarite: { ...x.solidarite, ...patch } })); marquerSale("solidarite"); };
+  const majEvent = (cle: keyof Reglement["solidarite"]["events"]) => { setBrouillon((x) => ({ ...x, solidarite: { ...x.solidarite, events: { ...x.solidarite.events, [cle]: !x.solidarite.events[cle] } } })); marquerSale("solidarite"); };
+  const majEp = (patch: Partial<Reglement["epargne"]>) => { setBrouillon((x) => ({ ...x, epargne: { ...x.epargne, ...patch } })); marquerSale("epargne"); };
+  const majTypeEpargne = (id: string, patch: Partial<TypeEpargneConfig>) => { setBrouillon((x) => ({ ...x, epargne: { ...x.epargne, types: { ...x.epargne.types, [id]: { ...x.epargne.types[id], ...patch } } } })); marquerSale("epargne"); };
+
+  /* — Enregistrer : la section devient le brouillon du bureau — la
+   *    publication aux membres reste un geste séparé (section Publication). — */
+  const enregistrer = (s: SousParamKey, label: string) => {
+    p.maj(() => ({ ...brouillon }));
+    setSales((x) => ({ ...x, [s]: false }));
+    toast.success(`« ${label} » enregistré`, { description: "Réglage conservé par le bureau — publiez-le pour que les membres le voient." });
+  };
+  const enregistrerMontants = () => {
+    p.majMontants({ ...brouillonM });
+    setSales((x) => ({ ...x, cotisations: false }));
+    toast.success("Montants enregistrés", { description: "Ces montants sont aussitôt visibles par tous les membres dans la page Tontine." });
+  };
+  const enregistrerTypes = () => {
+    p.majTypesCotis(typesLocaux);
+    setSales((x) => ({ ...x, cotisations: false }));
+    toast.success("Types de cotisations enregistrés", { description: "Validez l'attribution d'un type pour notifier les membres concernés." });
+  };
+
+  /* — types de cotisations : ajouter une somme, fixer le montant, sélectionner
+   *    les membres, valider — les membres notifiés le voient aussitôt sur leur
+   *    page avec une notification. — */
+  const ajouterTypeCotis = () => {
+    const t = nouveauTypeCotisation(`Cotisation ${typesLocaux.length + 1}`);
+    setTypesLocaux((x) => [...x, t]);
+    marquerSale("cotisations");
+    toast("Somme de cotisation ajoutée", { description: "Fixez le montant (aujourd'hui à 0), sélectionnez les membres concernés, puis validez l'attribution." });
+  };
+  const validerTypeCotis = (t: TypeCotisation) => {
+    if (t.montant <= 0) { toast.error("Fixez d'abord la somme de ce type (aujourd'hui à 0)"); return; }
+    if (t.membreIds.length === 0) { toast.error("Sélectionnez au moins un membre qui doit cotiser cette somme"); return; }
+    const next = typesLocaux.map((x) => {
+      if (x.id === t.id) return { ...x, valideLe: new Date().toISOString() };
+      /* un membre ne cotise qu'UNE somme : on le retire des autres types */
+      return { ...x, membreIds: x.membreIds.filter((id) => !t.membreIds.includes(id)) };
+    });
+    setTypesLocaux(next);
+    p.majTypesCotis(next, `${fmtMontant(t.montant)} par mois (« ${t.nom} ») attribués à ${t.membreIds.length} membre(s) — ils voient cette somme sur leur page avec une notification.`);
+  };
+  const supprimerTypeCotis = (t: TypeCotisation) => {
+    const next = typesLocaux.filter((x) => x.id !== t.id);
+    setTypesLocaux(next);
+    p.majTypesCotis(next);
+    marquerSale("cotisations");
+    toast(`Type « ${t.nom} » supprimé`, { description: "Les membres concernés repassent à la cotisation de base." });
+  };
 
   const publieLe = r.publieLe
     ? (() => { try { return new Date(r.publieLe).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }); } catch { return null; } })()
     : null;
+
+  const typePret = r.prets.typeChoisi ? TYPES_PRET_CATALOGUE.find((t) => t.id === r.prets.typeChoisi) ?? null : null;
+  const typeEpargne = r.epargne.typeChoisi ? TYPES_EPARGNE_CATALOGUE.find((t) => t.id === r.epargne.typeChoisi) ?? null : null;
 
   return (
     <>
@@ -2110,8 +2342,7 @@ function ParametresSection(p: {
           <div>
             <p className="fc-serif text-[15px] font-bold">Paramètres de la cantine — c&apos;est vous qui paramétrez</p>
             <p className="mt-0.5 text-[12px] leading-relaxed text-white/85">
-              Impayés &amp; recouvrements, prêts garantis, solidarité, épargne, quorum… Chaque règle se règle ici.
-              Le bouton « Publier » rend le règlement visible par TOUS les membres (lecture seule, page Tontine).
+              Une section = un écran = un bouton « Enregistrer ». Tous les chiffres démarrent à 0 et toutes les options à désactivées : c&apos;est VOUS qui décidez de chaque valeur.
             </p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               <P cls="border-white/25 bg-white/10 text-white"><ScrollText className="h-3 w-3" /> Version {r.version}</P>
@@ -2124,231 +2355,495 @@ function ParametresSection(p: {
         </div>
       </FcCard>
 
-      {/* — montants réels : modifiés ici = modifiés pour tous les membres — */}
-      <Block
-        title="Montants de la cantine"
-        icon={<Coins className="h-4 w-4" />}
-        note="Ces montants sont ceux de la vraie cantine : chaque membre les voit aussitôt dans sa page Tontine (cotisations, pénalités, adhésion)."
-      >
-        <div className="grid gap-2 p-4 sm:grid-cols-2">
-          <NumField label="Cotisation mensuelle" note="Par membre et par réunion" value={p.montants.montantCotisation} fcfaPreview
-            onChange={(n) => p.majMontants({ montantCotisation: n })} step={500} />
-          <NumField label="Collation" note="Par personne et par réunion" value={p.montants.montantCollation} fcfaPreview
-            onChange={(n) => p.majMontants({ montantCollation: n })} step={250} />
-          <NumField label="Frais d'adhésion" note="Une seule fois — caisse sociale" value={p.montants.fraisAdhesion} fcfaPreview
-            onChange={(n) => p.majMontants({ fraisAdhesion: n })} step={500} />
-          <NumField label="Pénalité de retard" note="Versée à la caisse sociale" value={p.montants.penaliteRetard} fcfaPreview
-            onChange={(n) => p.majMontants({ penaliteRetard: n })} step={100} />
-          <NumField label="Pénalité d'absence non excusée" note="Versée à la caisse sociale" value={p.montants.penaliteAbsence} fcfaPreview
-            onChange={(n) => p.majMontants({ penaliteAbsence: n })} step={250} />
+      {/* — sous-onglets de paramétrage : une section par écran, chaque section
+       *    a SON URL (#president/parametres/<section>) et SON bouton
+       *    « Enregistrer » — plus besoin de scroller jusqu'en bas. — */}
+      <div className="rounded-2xl border-2 border-[#B8A87E] bg-white p-2.5 shadow-[0_10px_30px_rgba(42,74,58,0.12)]">
+        <p className="px-1 pb-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#6E7A70]">Sections du paramétrage — cliquez, réglez, enregistrez</p>
+        <div className="flex flex-wrap gap-2">
+          {SOUS_PARAMS.map((s) => {
+            const actif = p.sous === s.key;
+            return (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => p.goSous(s.key)}
+                aria-current={actif ? "page" : undefined}
+                className={`inline-flex min-h-[44px] items-center gap-2 rounded-xl border-2 px-3 py-2 text-[12.5px] font-bold transition-all sm:text-[13px] ${
+                  actif ? "border-[#153D22] bg-[#1E4D2B] text-white shadow-lg" : "border-[#C4AE85] bg-white text-[#463C28] hover:border-[#C89F62] hover:bg-[#F7EFDB]"
+                }`}
+              >
+                {s.icon}{s.label}
+                {sales[s.key] && <span className="h-2 w-2 shrink-0 rounded-full bg-[#C89F62]" aria-label="modifications non enregistrées" />}
+              </button>
+            );
+          })}
         </div>
-      </Block>
+      </div>
 
-      {/* — impayés & recouvrement — */}
-      <Block
-        title="Impayés & recouvrement"
-        icon={<BellRing className="h-4 w-4" />}
-        note="Comment les impayés sont traités : délai de grâce, relances, escalade, sanctions, moyens de paiement et qui encaisse."
-      >
-        <div className="space-y-2 p-4">
-          <div className="grid gap-2 sm:grid-cols-2">
-            <NumField label="Délai de grâce" note="Jours avant la 1ʳᵉ relance" unite="jours" value={r.impayes.delaiGraceJours}
-              onChange={(n) => majImp({ delaiGraceJours: n })} />
-            <NumField label="Relances avant escalade" note="Relances amiables avant l'échelon suivant" unite="relance(s)" value={r.impayes.relancesAvantEscalade}
-              onChange={(n) => majImp({ relancesAvantEscalade: n })} />
-            <NumField label="Délai entre deux étapes" note="Rythme de l'escalade" unite="jours" value={r.impayes.delaiEntreEtapesJours}
-              onChange={(n) => majImp({ delaiEntreEtapesJours: n })} />
-            <NumField label="Impayés consécutifs avant sanction" note="Nombre toléré avant la sanction choisie ci-dessous" unite="impayé(s)" value={r.impayes.apresNImpayes}
-              onChange={(n) => majImp({ apresNImpayes: n })} />
-          </div>
-
-          <div className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3">
-            <p className="text-[11.5px] font-bold text-[#2B3530]">Étapes de recouvrement décidées par le bureau</p>
-            <p className="mt-0.5 text-[10.5px] text-[#8A9288]">Dans l'ordre : désactivez une étape pour la retirer de la procédure.</p>
-            <div className="mt-2 space-y-1.5">
-              {(Object.keys(ECHELONS_LABELS) as (keyof Reglement["impayes"]["echelons"])[]).map((k) => (
-                <ToggleRow key={k} label={ECHELONS_LABELS[k]} actif={r.impayes.echelons[k]} onToggle={() => majEchelon(k)} />
-              ))}
+      {/* ══════════════════ SECTION COTISATIONS ══════════════════ */}
+      {p.sous === "cotisations" && (
+        <>
+          <Block
+            title="Montants de la cantine"
+            icon={<Coins className="h-4 w-4" />}
+            note="Tous les montants démarrent à 0 : c'est vous qui fixez chaque chiffre. Ces montants sont ceux de toute la cantine — chaque membre les voit dans sa page Tontine."
+          >
+            <div className="grid gap-2 p-4 sm:grid-cols-2">
+              <NumField label="Cotisation mensuelle de base" note="Pour les membres sans type particulier" value={brouillonM.montantCotisation} fcfaPreview
+                onChange={(n) => { setBrouillonM({ ...brouillonM, montantCotisation: n }); marquerSale("cotisations"); }} step={500} />
+              <NumField label="Collation" note="Par personne et par réunion" value={brouillonM.montantCollation} fcfaPreview
+                onChange={(n) => { setBrouillonM({ ...brouillonM, montantCollation: n }); marquerSale("cotisations"); }} step={250} />
+              <NumField label="Frais d'adhésion" note="Une seule fois — caisse sociale" value={brouillonM.fraisAdhesion} fcfaPreview
+                onChange={(n) => { setBrouillonM({ ...brouillonM, fraisAdhesion: n }); marquerSale("cotisations"); }} step={500} />
+              <NumField label="Pénalité de retard" note="Versée à la caisse sociale" value={brouillonM.penaliteRetard} fcfaPreview
+                onChange={(n) => { setBrouillonM({ ...brouillonM, penaliteRetard: n }); marquerSale("cotisations"); }} step={100} />
+              <NumField label="Pénalité d'absence non excusée" note="Versée à la caisse sociale" value={brouillonM.penaliteAbsence} fcfaPreview
+                onChange={(n) => { setBrouillonM({ ...brouillonM, penaliteAbsence: n }); marquerSale("cotisations"); }} step={250} />
             </div>
-          </div>
+            <PiedSection sale={!!sales.cotisations} onClick={enregistrerMontants} label="Enregistrer les montants" />
+          </Block>
 
-          <ToggleRow
-            label="Pénalité de retard automatique"
-            note={`${fcfa(p.montants.penaliteRetard)} appliquées d'office dès l'échelon choisi, sans nouveau vote`}
-            actif={r.impayes.amendeAuto}
-            onToggle={() => majImp({ amendeAuto: !r.impayes.amendeAuto })}
-          />
-          {r.impayes.amendeAuto && (
-            <Seg
-              legende="La pénalité automatique s'applique dès…"
-              value={String(r.impayes.niveauAmende)}
-              onChange={(v) => majImp({ niveauAmende: Number(v) as 1 | 2 | 3 })}
-              options={[{ v: "1", label: "N°1 — relance" }, { v: "2", label: "N°2 — mise en demeure" }, { v: "3", label: "N°3 — convocation" }]}
+          <Block
+            title="Types de cotisations mensuelles"
+            icon={<Layers className="h-4 w-4" />}
+            note="Tout le monde ne cotise pas la même somme. Ajoutez une somme (ex. 50 000 FCFA), sélectionnez les membres qui doivent cotiser cette somme, validez — ils la verront sur leur page avec une notification. Un membre non choisi reste sur la cotisation de base."
+          >
+            <div className="space-y-3 p-4">
+              <Btn tone="or" onClick={ajouterTypeCotis}><Plus className="h-4 w-4" /> Ajouter une somme de cotisation mensuelle</Btn>
+              {typesLocaux.length === 0 && (
+                <p className="rounded-2xl border border-dashed border-[#C9B98A] bg-[#FBF7EA] px-3 py-2.5 text-[11.5px] leading-relaxed text-[#8A9288]">
+                  Aucun type créé pour l&apos;instant — tout le monde cotise la cotisation de base. Créez un premier type pour les membres qui cotisent une autre somme.
+                </p>
+              )}
+              {typesLocaux.map((t) => (
+                <div key={t.id} className="rounded-2xl border-2 border-[#C9B98A] bg-[#FFFDF6] p-3">
+                  <div className="flex items-center gap-2">
+                    <Tag className="h-4 w-4 shrink-0 text-[#8A6420]" />
+                    <input
+                      value={t.nom}
+                      onChange={(e) => { setTypesLocaux((x) => x.map((y) => (y.id === t.id ? { ...y, nom: e.target.value } : y))); marquerSale("cotisations"); }}
+                      aria-label="Nom du type de cotisation"
+                      className="min-w-0 flex-1 rounded-lg border border-[#E5DCC0] bg-white px-2.5 py-1.5 text-[12.5px] font-bold text-[#2B3530] outline-none focus:border-[#1F5B3F]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => supprimerTypeCotis(t)}
+                      aria-label={`Supprimer ${t.nom}`}
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[#A5473D]/30 bg-[#A5473D]/8 text-[#A5473D] transition hover:bg-[#A5473D]/18"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="mt-2">
+                    <NumField label="Somme que ces membres devront verser" note="Le montant démarre à 0 — c'est vous qui décidez" value={t.montant} fcfaPreview step={5_000}
+                      onChange={(n) => { setTypesLocaux((x) => x.map((y) => (y.id === t.id ? { ...y, montant: n } : y))); marquerSale("cotisations"); }} />
+                  </div>
+                  <div className="mt-2 rounded-2xl border border-[#E5DCC0] bg-white p-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="flex items-center gap-1.5 text-[11.5px] font-bold text-[#2B3530]">
+                        <ListChecks className="h-3.5 w-3.5 text-[#1E4D2B]" /> {t.membreIds.length} membre(s) doit(vent) cotiser {fmtMontant(t.montant)}
+                      </p>
+                      <div className="flex gap-1.5">
+                        <Btn small tone="neutre" onClick={() => { setTypesLocaux((x) => x.map((y) => (y.id === t.id ? { ...y, membreIds: p.roster.map((m) => m.id) } : y))); marquerSale("cotisations"); }}>Tout cocher</Btn>
+                        <Btn small tone="neutre" onClick={() => { setTypesLocaux((x) => x.map((y) => (y.id === t.id ? { ...y, membreIds: [] } : y))); marquerSale("cotisations"); }}>Tout décocher</Btn>
+                      </div>
+                    </div>
+                    <div className="mt-2 max-h-52 space-y-1 overflow-y-auto rounded-xl bg-[#FBF7EA] p-2">
+                      {p.roster.map((m) => {
+                        const coche = t.membreIds.includes(m.id);
+                        return (
+                          <label key={m.id} className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 transition-colors ${coche ? "bg-[#1E4D2B]/8" : "hover:bg-white"}`}>
+                            {coche ? <CheckSquare className="h-4 w-4 shrink-0 text-[#1E4D2B]" /> : <Square className="h-4 w-4 shrink-0 text-[#8A9288]" />}
+                            <input
+                              type="checkbox"
+                              className="sr-only"
+                              checked={coche}
+                              onChange={() => { setTypesLocaux((x) => x.map((y) => (y.id === t.id ? { ...y, membreIds: coche ? y.membreIds.filter((id) => id !== m.id) : [...y.membreIds, m.id] } : y))); marquerSale("cotisations"); }}
+                            />
+                            <span className={`text-[12px] font-semibold ${coche ? "text-[#1E4D2B]" : "text-[#2B3530]"}`}>{m.name}{m.role !== "membre" ? " — bureau" : ""}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                    <Btn small onClick={() => validerTypeCotis(t)}><CheckCircle2 className="h-3.5 w-3.5" /> Valider l&apos;attribution</Btn>
+                    {t.valideLe && <P cls={OK_CLS}><Check className="h-3 w-3" /> Attribution validée — les membres sont notifiés</P>}
+                  </div>
+                </div>
+              ))}
+              <PiedSection sale={!!sales.cotisations} onClick={enregistrerTypes} label="Enregistrer les types de cotisations" />
+            </div>
+          </Block>
+        </>
+      )}
+
+      {/* ══════════════════ SECTION IMPAYÉS & RECOUVREMENT ══════════════════ */}
+      {p.sous === "impayes" && (
+        <Block
+          title="Impayés & recouvrement"
+          icon={<BellRing className="h-4 w-4" />}
+          note="Tout démarre désactivé et à 0 : c'est le bureau qui décide comment les impayés sont traités, comment les recouvrements se font et qui encaisse."
+        >
+          <div className="space-y-2 p-4">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <NumField label="Délai de grâce" note="Jours avant la 1ʳᵉ relance (0 = à décider)" unite="jours" value={r.impayes.delaiGraceJours}
+                onChange={(n) => majImp({ delaiGraceJours: n })} />
+              <NumField label="Relances avant escalade" unite="relance(s)" value={r.impayes.relancesAvantEscalade}
+                onChange={(n) => majImp({ relancesAvantEscalade: n })} />
+              <NumField label="Délai entre deux étapes" note="Rythme de l'escalade" unite="jours" value={r.impayes.delaiEntreEtapesJours}
+                onChange={(n) => majImp({ delaiEntreEtapesJours: n })} />
+              <NumField label="Impayés consécutifs avant sanction" unite="impayé(s)" value={r.impayes.apresNImpayes}
+                onChange={(n) => majImp({ apresNImpayes: n })} />
+            </div>
+            <div className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3">
+              <p className="text-[11.5px] font-bold text-[#2B3530]">Étapes de recouvrement décidées par le bureau</p>
+              <p className="mt-0.5 text-[10.5px] text-[#8A9288]">Toutes désactivées par défaut — activez celles que le bureau a décidées, dans l&apos;ordre.</p>
+              <div className="mt-2 space-y-1.5">
+                {(Object.keys(ECHELONS_LABELS) as (keyof Reglement["impayes"]["echelons"])[]).map((k) => (
+                  <ToggleRow key={k} label={ECHELONS_LABELS[k]} actif={r.impayes.echelons[k]} onToggle={() => majEchelon(k)} />
+                ))}
+              </div>
+            </div>
+            <ToggleRow
+              label="Pénalité de retard automatique"
+              note="Désactivée par défaut : le bureau décide si la pénalité s'applique d'office dès l'échelon choisi"
+              actif={r.impayes.amendeAuto}
+              onToggle={() => majImp({ amendeAuto: !r.impayes.amendeAuto })}
             />
-          )}
-          <Seg
-            legende="Sanction après impayés répétés"
-            value={r.impayes.sanction}
-            onChange={(v) => majImp({ sanction: v as Reglement["impayes"]["sanction"] })}
-            options={(Object.keys(SANCTIONS_LABELS) as (keyof Reglement["impayes"]["sanction"])[]).map((k) => ({ v: k, label: SANCTIONS_LABELS[k] }))}
-          />
-          <div className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3">
-            <p className="text-[11.5px] font-bold text-[#2B3530]">Moyens de paiement acceptés pour les recouvrements</p>
-            <div className="mt-2 space-y-1.5">
-              {(Object.keys(PAIEMENTS_LABELS) as (keyof Reglement["impayes"]["paiements"])[]).map((k) => (
-                <ToggleRow key={k} label={PAIEMENTS_LABELS[k]} actif={r.impayes.paiements[k]} onToggle={() => majPaiement(k)} />
-              ))}
-            </div>
-          </div>
-          <Seg
-            legende="Qui encaisse les recouvrements"
-            value={r.impayes.encaisseur}
-            onChange={(v) => majImp({ encaisseur: v as Reglement["impayes"]["encaisseur"] })}
-            options={(Object.keys(ENCAISSEUR_LABELS) as Reglement["impayes"]["encaisseur"][]).map((k) => ({ v: k, label: ENCAISSEUR_LABELS[k] }))}
-          />
-        </div>
-      </Block>
-
-      {/* — prêts & garanties — */}
-      <Block
-        title="Prêts & garanties"
-        icon={<ShieldCheck className="h-4 w-4" />}
-        note="Comment les prêts garantis fonctionnent : taux, plafond, durée, avalistes, garanties acceptées et vote du dossier du président lui-même."
-      >
-        <div className="space-y-2 p-4">
-          <div className="grid gap-2 sm:grid-cols-2">
-            <NumField label="Taux mensuel des prêts" note="Intérêts simples par mois" unite="% / mois" step={0.5} value={r.prets.tauxMensuel}
-              onChange={(n) => majPrets({ tauxMensuel: n })} />
-            <NumField label="Plafond d'un prêt" note="Somme maximale pouvant être accordée" value={r.prets.plafondFcfa} fcfaPreview step={25_000}
-              onChange={(n) => majPrets({ plafondFcfa: n })} />
-            <NumField label="Durée maximale de remboursement" unite="mois" value={r.prets.dureeMaxMois}
-              onChange={(n) => majPrets({ dureeMaxMois: n })} />
-            <NumField label="Ancienneté requise (carence)" note="Mois de cotisation avant le 1ᵉʳ prêt" unite="mois" value={r.prets.carenceMois}
-              onChange={(n) => majPrets({ carenceMois: n })} />
-          </div>
-          <ToggleRow
-            label="Avaliste obligatoire"
-            note="Un membre fiable se porte garant du remboursement"
-            actif={r.prets.avalisteObligatoire}
-            onToggle={() => majPrets({ avalisteObligatoire: !r.prets.avalisteObligatoire })}
-          />
-          {r.prets.avalisteObligatoire && (
+            {r.impayes.amendeAuto && (
+              <Seg
+                legende="La pénalité automatique s'applique dès…"
+                value={String(r.impayes.niveauAmende)}
+                onChange={(v) => majImp({ niveauAmende: Number(v) as 1 | 2 | 3 })}
+                options={[{ v: "1", label: "N°1 — relance" }, { v: "2", label: "N°2 — mise en demeure" }, { v: "3", label: "N°3 — convocation" }]}
+              />
+            )}
             <Seg
-              legende="Nombre d'avalistes exigés"
-              value={String(r.prets.nbAvalistes)}
-              onChange={(v) => majPrets({ nbAvalistes: Number(v) as 1 | 2 })}
-              options={[{ v: "1", label: "1 avaliste" }, { v: "2", label: "2 avalistes" }]}
+              legende="Sanction après les impayés (aucune par défaut)"
+              value={r.impayes.sanction}
+              onChange={(v) => majImp({ sanction: v as Reglement["impayes"]["sanction"] })}
+              options={(Object.keys(SANCTIONS_LABELS) as Reglement["impayes"]["sanction"][]).map((k) => ({ v: k, label: SANCTIONS_LABELS[k] }))}
             />
-          )}
-          <ToggleRow
-            label="Co-signature du trésorier"
-            note="Aucun prêt décaissé sans le visa du trésorier — supervision à deux"
-            actif={r.prets.cosignTresorier}
-            onToggle={() => majPrets({ cosignTresorier: !r.prets.cosignTresorier })}
-          />
-          <div className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3">
-            <p className="text-[11.5px] font-bold text-[#2B3530]">Garanties acceptées pour un prêt</p>
-            <div className="mt-2 space-y-1.5">
-              {(Object.keys(GARANTIES_LABELS) as (keyof Reglement["prets"]["garanties"])[]).map((k) => (
-                <ToggleRow key={k} label={GARANTIES_LABELS[k]} actif={r.prets.garanties[k]} onToggle={() => majGarantie(k)} />
-              ))}
+            <div className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3">
+              <p className="text-[11.5px] font-bold text-[#2B3530]">Moyens de paiement acceptés pour les recouvrements</p>
+              <p className="mt-0.5 text-[10.5px] text-[#8A9288]">Seules les espèces sont actives par défaut — activez les autres si la cantine les accepte.</p>
+              <div className="mt-2 space-y-1.5">
+                {(Object.keys(PAIEMENTS_LABELS) as (keyof Reglement["impayes"]["paiements"])[]).map((k) => (
+                  <ToggleRow key={k} label={PAIEMENTS_LABELS[k]} actif={r.impayes.paiements[k]} onToggle={() => majPaiement(k)} />
+                ))}
+              </div>
             </div>
+            <Seg
+              legende="Qui encaisse les recouvrements (le trésorier par défaut)"
+              value={r.impayes.encaisseur}
+              onChange={(v) => majImp({ encaisseur: v as Reglement["impayes"]["encaisseur"] })}
+              options={(Object.keys(ENCAISSEUR_LABELS) as Reglement["impayes"]["encaisseur"][]).map((k) => ({ v: k, label: ENCAISSEUR_LABELS[k] }))}
+            />
           </div>
-          <Seg
-            legende="Vote des dossiers du président (récusation — il ne vote pas)"
-            value={r.prets.majorityPresident}
-            onChange={(v) => majPrets({ majorityPresident: v as Reglement["prets"]["majorityPresident"] })}
-            options={[
-              { v: "tiers", label: MAJORITES_LABELS.tiers },
-              { v: "deuxtiers", label: MAJORITES_LABELS.deuxtiers },
-              { v: "unanime", label: MAJORITES_LABELS.unanime },
-            ]}
-          />
-        </div>
-      </Block>
+          <PiedSection sale={!!sales.impayes} onClick={() => enregistrer("impayes", "Impayés & recouvrement")} label="Enregistrer impayés & recouvrements" />
+        </Block>
+      )}
 
-      {/* — solidarité — caisse de secours — */}
-      <Block
-        title="Solidarité — caisse de secours"
-        icon={<HandHeart className="h-4 w-4" />}
-        note="Comment la solidarité fonctionne : cotisation d'alimentation, aide maximale, événements couverts, majorité du bureau et délai de versement."
-      >
-        <div className="space-y-2 p-4">
-          <div className="grid gap-2 sm:grid-cols-2">
-            <NumField label="Cotisation de solidarité" note="Par membre et par mois — alimente la caisse" value={r.solidarite.cotisationMensuelle} fcfaPreview step={250}
-              onChange={(n) => majSol({ cotisationMensuelle: n })} />
-            <NumField label="Aide maximale par événement" note="Plafond décaissable du bureau" value={r.solidarite.plafondAideFcfa} fcfaPreview step={5_000}
-              onChange={(n) => majSol({ plafondAideFcfa: n })} />
-            <NumField label="Ancienneté requise" note="Mois avant droit à l'aide" unite="mois" value={r.solidarite.carenceMois}
-              onChange={(n) => majSol({ carenceMois: n })} />
-            <NumField label="Délai de versement" note="Après l'accord du bureau" unite="jours" value={r.solidarite.delaiVersementJours}
-              onChange={(n) => majSol({ delaiVersementJours: n })} />
-          </div>
-          <div className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3">
-            <p className="text-[11.5px] font-bold text-[#2B3530]">Événements couverts par la solidarité</p>
-            <div className="mt-2 space-y-1.5">
-              {(Object.keys(EVENTS_SOLIDAIRES_LABELS) as (keyof Reglement["solidarite"]["events"])[]).map((k) => (
-                <ToggleRow key={k} label={EVENTS_SOLIDAIRES_LABELS[k]} actif={r.solidarite.events[k]} onToggle={() => majEvent(k)} />
-              ))}
+      {/* ══════════════════ SECTION PRÊTS & GARANTIES ══════════════════ */}
+      {p.sous === "prets" && (
+        <Block
+          title="Prêts & garanties"
+          icon={<ShieldCheck className="h-4 w-4" />}
+          note="Les règles communes d'abord, puis la NATURE du prêt qui correspond à votre association : choisissez un type, ses champs propres apparaissent mis en valeur. Chaque chiffre démarre à 0."
+        >
+          <div className="space-y-2 p-4">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <NumField label="Taux mensuel des prêts" note="Règle commune (0 = à décider)" unite="% / mois" step={0.5} value={r.prets.tauxMensuel}
+                onChange={(n) => majPrets({ tauxMensuel: n })} />
+              <NumField label="Plafond d'un prêt" note="Somme maximale pouvant être accordée" value={r.prets.plafondFcfa} fcfaPreview step={25_000}
+                onChange={(n) => majPrets({ plafondFcfa: n })} />
+              <NumField label="Durée maximale de remboursement" unite="mois" value={r.prets.dureeMaxMois}
+                onChange={(n) => majPrets({ dureeMaxMois: n })} />
+              <NumField label="Ancienneté requise (carence)" note="Mois de cotisation avant le 1ᵉʳ prêt" unite="mois" value={r.prets.carenceMois}
+                onChange={(n) => majPrets({ carenceMois: n })} />
             </div>
+            <ToggleRow
+              label="Avaliste obligatoire"
+              note="Désactivé par défaut : activez si un membre fiable doit se porter garant"
+              actif={r.prets.avalisteObligatoire}
+              onToggle={() => majPrets({ avalisteObligatoire: !r.prets.avalisteObligatoire })}
+            />
+            {r.prets.avalisteObligatoire && (
+              <Seg
+                legende="Nombre d'avalistes exigés"
+                value={String(r.prets.nbAvalistes)}
+                onChange={(v) => majPrets({ nbAvalistes: Number(v) as 1 | 2 })}
+                options={[{ v: "1", label: "1 avaliste" }, { v: "2", label: "2 avalistes" }]}
+              />
+            )}
+            <ToggleRow
+              label="Co-signature du trésorier"
+              note="Désactivée par défaut : activez pour exiger le visa du trésorier sur chaque accord"
+              actif={r.prets.cosignTresorier}
+              onToggle={() => majPrets({ cosignTresorier: !r.prets.cosignTresorier })}
+            />
+            <div className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3">
+              <p className="text-[11.5px] font-bold text-[#2B3530]">Garanties acceptées pour un prêt</p>
+              <p className="mt-0.5 text-[10.5px] text-[#8A9288]">Toutes désactivées par défaut — activez celles que la caisse accepte.</p>
+              <div className="mt-2 space-y-1.5">
+                {(Object.keys(GARANTIES_LABELS) as (keyof Reglement["prets"]["garanties"])[]).map((k) => (
+                  <ToggleRow key={k} label={GARANTIES_LABELS[k]} actif={r.prets.garanties[k]} onToggle={() => majGarantie(k)} />
+                ))}
+              </div>
+            </div>
+            <Seg
+              legende="Vote des dossiers du président (récusation — il ne vote pas)"
+              value={r.prets.majorityPresident}
+              onChange={(v) => majPrets({ majorityPresident: v as Reglement["prets"]["majorityPresident"] })}
+              options={[
+                { v: "ok", label: "OK" },
+                { v: "tiers", label: MAJORITES_LABELS.tiers },
+                { v: "deuxtiers", label: MAJORITES_LABELS.deuxtiers },
+                { v: "unanime", label: MAJORITES_LABELS.unanime },
+              ]}
+            />
+            {/* — nature du prêt : le type choisi dévoile ses champs mis en valeur — */}
+            <label className="block rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] px-3 py-2.5">
+              <span className="block text-[11.5px] font-bold text-[#2B3530]">Nature du prêt — le type qui correspond à votre association</span>
+              <span className="mt-0.5 block text-[10.5px] text-[#8A9288]">Choisissez dans la liste : les champs propres à ce type apparaissent ensuite, mis en valeur.</span>
+              <select
+                value={r.prets.typeChoisi ?? ""}
+                onChange={(e) => majPrets({ typeChoisi: e.target.value || null })}
+                className="mt-1.5 w-full rounded-lg border-2 border-[#E5DCC0] bg-white px-2.5 py-2 text-[13px] font-bold text-[#2B3530] outline-none focus:border-[#1F5B3F]"
+              >
+                <option value="">— Aucun type choisi pour l&apos;instant —</option>
+                {TYPES_PRET_CATALOGUE.map((t) => <option key={t.id} value={t.id}>{t.nom}</option>)}
+              </select>
+            </label>
+            {typePret && r.prets.types[typePret.id] && (
+              <div className="rounded-2xl border-2 border-[#C89F62] bg-[#C89F62]/10 p-3 shadow-sm">
+                <p className="flex items-center gap-1.5 text-[12px] font-black text-[#8A6420]"><Sparkles className="h-3.5 w-3.5" /> Prêt choisi : {typePret.nom}</p>
+                <p className="mt-0.5 text-[10.5px] leading-snug text-[#8A6420]/85">{typePret.description}</p>
+                <div className="mt-2 space-y-2">
+                  <Seg
+                    legende="Type d'intérêt de ce prêt"
+                    value={r.prets.types[typePret.id].interet}
+                    onChange={(v) => majTypePret(typePret.id, { interet: v as TypePretConfig["interet"] })}
+                    options={(Object.keys(INTERETS_PRET_LABELS) as TypePretConfig["interet"][]).map((k) => ({ v: k, label: INTERETS_PRET_LABELS[k] }))}
+                  />
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <NumField label="Taux de ce prêt" unite="% / mois" step={0.5} value={r.prets.types[typePret.id].tauxMensuel}
+                      onChange={(n) => majTypePret(typePret.id, { tauxMensuel: n })} />
+                    <NumField label="Plafond de ce prêt" value={r.prets.types[typePret.id].plafondFcfa} fcfaPreview step={25_000}
+                      onChange={(n) => majTypePret(typePret.id, { plafondFcfa: n })} />
+                    <NumField label="Durée maximale de ce prêt" unite="mois" value={r.prets.types[typePret.id].dureeMaxMois}
+                      onChange={(n) => majTypePret(typePret.id, { dureeMaxMois: n })} />
+                  </div>
+                  <Seg
+                    legende="Avalistes exigés pour ce prêt"
+                    value={String(r.prets.types[typePret.id].avalistes)}
+                    onChange={(v) => majTypePret(typePret.id, { avalistes: Number(v) as 0 | 1 | 2 })}
+                    options={[{ v: "0", label: "Aucun avaliste" }, { v: "1", label: "1 avaliste" }, { v: "2", label: "2 avalistes" }]}
+                  />
+                  <div className="rounded-2xl border border-[#C89F62]/40 bg-white p-3">
+                    <p className="text-[11.5px] font-bold text-[#2B3530]">Garanties exigées pour ce prêt</p>
+                    <div className="mt-2 space-y-1.5">
+                      {(Object.keys(GARANTIES_LABELS) as (keyof Reglement["prets"]["garanties"])[]).map((k) => {
+                        const actif = r.prets.types[typePret.id].garantiesExigees.includes(k);
+                        return (
+                          <ToggleRow key={k} label={GARANTIES_LABELS[k]} actif={actif}
+                            onToggle={() => majTypePret(typePret.id, { garantiesExigees: actif ? r.prets.types[typePret.id].garantiesExigees.filter((g) => g !== k) : [...r.prets.types[typePret.id].garantiesExigees, k] })} />
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-          <Seg
-            legende="Majorité du bureau pour approuver une aide"
-            value={r.solidarite.majority}
-            onChange={(v) => majSol({ majority: v as Reglement["solidarite"]["majority"] })}
-            options={[
-              { v: "moitie", label: MAJORITES_LABELS.moitie },
-              { v: "troisquarts", label: MAJORITES_LABELS.troisquarts },
-              { v: "unanime", label: MAJORITES_LABELS.unanime },
-            ]}
-          />
-        </div>
-      </Block>
+          <PiedSection sale={!!sales.prets} onClick={() => enregistrer("prets", "Prêts & garanties")} label="Enregistrer les prêts" />
+        </Block>
+      )}
 
-      {/* — épargne — */}
-      <Block
-        title="Épargne"
-        icon={<PiggyBank className="h-4 w-4" />}
-        note="La caisse d'épargne : taux, préavis de retrait, dépôt minimum et retrait maximal."
-      >
-        <div className="grid gap-2 p-4 sm:grid-cols-2">
-          <NumField label="Taux mensuel de l'épargne" note="Intérêts crédités chaque mois" unite="% / mois" step={0.5} value={r.epargne.tauxMensuel}
-            onChange={(n) => majEp({ tauxMensuel: n })} />
-          <NumField label="Préavis de retrait" note="Jours de préavis avant tout retrait" unite="jours" value={r.epargne.preavisJours}
-            onChange={(n) => majEp({ preavisJours: n })} />
-          <NumField label="Dépôt minimum" value={r.epargne.depotMinFcfa} fcfaPreview step={1_000}
-            onChange={(n) => majEp({ depotMinFcfa: n })} />
-          <NumField label="Retrait maximal par mois" note="En pourcentage du solde" unite="% du solde" value={r.epargne.retraitMaxMois}
-            onChange={(n) => majEp({ retraitMaxMois: n })} />
-        </div>
-      </Block>
+      {/* ══════════════════ SECTION SOLIDARITÉ ══════════════════ */}
+      {p.sous === "solidarite" && (
+        <Block
+          title="Solidarité"
+          icon={<HandHeart className="h-4 w-4" />}
+          note="Choisissez d'abord la MÉTHODE de solidarité qui arrange la cantine — les champs propres à la méthode choisie apparaissent ensuite. Chaque chiffre démarre à 0."
+        >
+          <div className="space-y-2 p-4">
+            <div className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3">
+              <p className="text-[11.5px] font-bold text-[#2B3530]">Méthode de solidarité — plusieurs méthodes possibles, choisissez celle qui arrange la cantine</p>
+              <div role="radiogroup" aria-label="Méthode de solidarité" className="mt-2 space-y-1.5">
+                {METHODES_SOLIDARITE.map((m) => {
+                  const actif = r.solidarite.methode === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={actif}
+                      onClick={() => majSol({ methode: m.id })}
+                      className={`w-full rounded-2xl border-2 px-3 py-2.5 text-left transition-all ${actif ? "border-[#1E4D2B] bg-[#1E4D2B]/8" : "border-[#E5DCC0] bg-white hover:border-[#C89F62]/60"}`}
+                    >
+                      <span className="flex items-center justify-between gap-2">
+                        <span className={`text-[12px] font-bold ${actif ? "text-[#1E4D2B]" : "text-[#2B3530]"}`}>{m.nom}</span>
+                        {actif && <Check className="h-4 w-4 shrink-0 text-[#1E4D2B]" />}
+                      </span>
+                      <span className="mt-0.5 block text-[10.5px] leading-snug text-[#8A9288]">{m.description}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {r.solidarite.methode === "caisse" && (
+              <div className="grid gap-2 sm:grid-cols-2">
+                <NumField label="Cotisation de solidarité" note="Par membre et par mois — alimente la caisse" value={r.solidarite.cotisationMensuelle} fcfaPreview step={250}
+                  onChange={(n) => majSol({ cotisationMensuelle: n })} />
+                <NumField label="Aide maximale par événement" note="Plafond décaissable du bureau" value={r.solidarite.plafondAideFcfa} fcfaPreview step={5_000}
+                  onChange={(n) => majSol({ plafondAideFcfa: n })} />
+                <NumField label="Ancienneté requise" note="Mois avant droit à l'aide" unite="mois" value={r.solidarite.carenceMois}
+                  onChange={(n) => majSol({ carenceMois: n })} />
+                <NumField label="Délai de versement" note="Après l'accord du bureau" unite="jours" value={r.solidarite.delaiVersementJours}
+                  onChange={(n) => majSol({ delaiVersementJours: n })} />
+              </div>
+            )}
+            {r.solidarite.methode === "speciale" && (
+              <div className="grid gap-2 sm:grid-cols-2">
+                <NumField label="Somme suggérée à chacun" note="Appel à contribution ponctuel" value={r.solidarite.montantSuggere} fcfaPreview step={1_000}
+                  onChange={(n) => majSol({ montantSuggere: n })} />
+                <NumField label="Délai de collecte" note="Après l'annonce de l'événement" unite="jours" value={r.solidarite.delaiCollecteJours}
+                  onChange={(n) => majSol({ delaiCollecteJours: n })} />
+              </div>
+            )}
+            {r.solidarite.methode === "mutualisation" && (
+              <div className="grid gap-2 sm:grid-cols-2">
+                <NumField label="Part de chaque membre" note="Versée directement à la famille" value={r.solidarite.montantParMembre} fcfaPreview step={1_000}
+                  onChange={(n) => majSol({ montantParMembre: n })} />
+                <NumField label="Délai de collecte" note="Pour que chacun verse sa part" unite="jours" value={r.solidarite.delaiCollecteJours}
+                  onChange={(n) => majSol({ delaiCollecteJours: n })} />
+              </div>
+            )}
+            {r.solidarite.methode === "assurance" && (
+              <div className="grid gap-2 sm:grid-cols-2">
+                <NumField label="Montant du fonds bloqué" note="Réservé aux sinistres" value={r.solidarite.montantFonds} fcfaPreview step={5_000}
+                  onChange={(n) => majSol({ montantFonds: n })} />
+                <NumField label="Cotisation d'entretien du fonds" note="Par membre et par mois" value={r.solidarite.cotisationEntretien} fcfaPreview step={250}
+                  onChange={(n) => majSol({ cotisationEntretien: n })} />
+              </div>
+            )}
+            {r.solidarite.methode === "nature" && (
+              <p className="rounded-2xl border border-[#3D6B72]/30 bg-[#3D6B72]/8 px-3 py-2.5 text-[11.5px] leading-relaxed text-[#3D6B72]">
+                Aide en nature : aucune somme n&apos;est décaissée — le bureau organise la présence, la corvée, la main-d&apos;œuvre ou le transport. Aucun champ chiffré pour cette méthode.
+              </p>
+            )}
+            <div className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3">
+              <p className="text-[11.5px] font-bold text-[#2B3530]">Événements couverts par la solidarité</p>
+              <p className="mt-0.5 text-[10.5px] text-[#8A9288]">Tous désactivés par défaut — cochez ceux que la solidarité couvre.</p>
+              <div className="mt-2 space-y-1.5">
+                {(Object.keys(EVENTS_SOLIDAIRES_LABELS) as (keyof Reglement["solidarite"]["events"])[]).map((k) => (
+                  <ToggleRow key={k} label={EVENTS_SOLIDAIRES_LABELS[k]} actif={r.solidarite.events[k]} onToggle={() => majEvent(k)} />
+                ))}
+              </div>
+            </div>
+            <Seg
+              legende="Majorité du bureau pour approuver une aide (aucune par défaut)"
+              value={r.solidarite.majority}
+              onChange={(v) => majSol({ majority: v as Reglement["solidarite"]["majority"] })}
+              options={[
+                { v: "aucun", label: "Aucune" },
+                { v: "moitie", label: MAJORITES_LABELS.moitie },
+                { v: "troisquarts", label: MAJORITES_LABELS.troisquarts },
+                { v: "unanime", label: MAJORITES_LABELS.unanime },
+              ]}
+            />
+          </div>
+          <PiedSection sale={!!sales.solidarite} onClick={() => enregistrer("solidarite", "Solidarité")} label="Enregistrer la solidarité" />
+        </Block>
+      )}
 
-      {/* — réunion & quorum — */}
-      <Block
-        title="Réunion & quorum"
-        icon={<Users className="h-4 w-4" />}
-        note="Les conditions de délibération : quorum minimal et reports tolérés."
-      >
-        <div className="grid gap-2 p-4 sm:grid-cols-2">
-          <NumField label="Quorum des délibérations" note="Membres présents minimum pour statuer" unite="membres" value={r.quorumMembres}
-            onChange={(n) => p.maj((x) => ({ ...x, quorumMembres: n }))} />
-          <NumField label="Reports consécutifs tolérés" note="Avant de devoir statuer quand même" unite="report(s)" value={r.reportsMax}
-            onChange={(n) => p.maj((x) => ({ ...x, reportsMax: n }))} />
-        </div>
-      </Block>
+      {/* ══════════════════ SECTION ÉPARGNE ══════════════════ */}
+      {p.sous === "epargne" && (
+        <Block
+          title="Épargne"
+          icon={<PiggyBank className="h-4 w-4" />}
+          note="Les règles communes d'abord, puis le TYPE d'épargne : choisissez-le, et son type d'intérêt ainsi que ses propres champs apparaissent. Chaque chiffre démarre à 0."
+        >
+          <div className="space-y-2 p-4">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <NumField label="Taux mensuel de l'épargne" note="Intérêts crédités chaque mois (0 = à décider)" unite="% / mois" step={0.5} value={r.epargne.tauxMensuel}
+                onChange={(n) => majEp({ tauxMensuel: n })} />
+              <NumField label="Préavis de retrait" note="Jours de préavis avant tout retrait" unite="jours" value={r.epargne.preavisJours}
+                onChange={(n) => majEp({ preavisJours: n })} />
+              <NumField label="Dépôt minimum" value={r.epargne.depotMinFcfa} fcfaPreview step={1_000}
+                onChange={(n) => majEp({ depotMinFcfa: n })} />
+              <NumField label="Retrait maximal par mois" note="En pourcentage du solde" unite="% du solde" value={r.epargne.retraitMaxMois}
+                onChange={(n) => majEp({ retraitMaxMois: n })} />
+            </div>
+            <label className="block rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] px-3 py-2.5">
+              <span className="block text-[11.5px] font-bold text-[#2B3530]">Type d'épargne proposé par la cantine</span>
+              <span className="mt-0.5 block text-[10.5px] text-[#8A9288]">Choisissez dans la liste : le type d&apos;intérêt et les champs propres à ce type apparaissent ensuite.</span>
+              <select
+                value={r.epargne.typeChoisi ?? ""}
+                onChange={(e) => majEp({ typeChoisi: e.target.value || null })}
+                className="mt-1.5 w-full rounded-lg border-2 border-[#E5DCC0] bg-white px-2.5 py-2 text-[13px] font-bold text-[#2B3530] outline-none focus:border-[#1F5B3F]"
+              >
+                <option value="">— Aucun type choisi pour l&apos;instant —</option>
+                {TYPES_EPARGNE_CATALOGUE.map((t) => <option key={t.id} value={t.id}>{t.nom}</option>)}
+              </select>
+            </label>
+            {typeEpargne && r.epargne.types[typeEpargne.id] && (
+              <div className="rounded-2xl border-2 border-[#C89F62] bg-[#C89F62]/10 p-3 shadow-sm">
+                <p className="flex items-center gap-1.5 text-[12px] font-black text-[#8A6420]"><Sparkles className="h-3.5 w-3.5" /> Épargne choisie : {typeEpargne.nom}</p>
+                <p className="mt-0.5 text-[10.5px] leading-snug text-[#8A6420]/85">{typeEpargne.description}</p>
+                <div className="mt-2 space-y-2">
+                  <Seg
+                    legende="Type d'intérêt de cette épargne"
+                    value={r.epargne.types[typeEpargne.id].interet}
+                    onChange={(v) => majTypeEpargne(typeEpargne.id, { interet: v as TypeEpargneConfig["interet"] })}
+                    options={(Object.keys(INTERETS_EPARGNE_LABELS) as TypeEpargneConfig["interet"][]).map((k) => ({ v: k, label: INTERETS_EPARGNE_LABELS[k] }))}
+                  />
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <NumField label="Taux de cette épargne" unite="% / mois" step={0.5} value={r.epargne.types[typeEpargne.id].tauxMensuel}
+                      onChange={(n) => majTypeEpargne(typeEpargne.id, { tauxMensuel: n })} />
+                    <NumField label="Durée de blocage" note="0 = pas de blocage" unite="mois" value={r.epargne.types[typeEpargne.id].blocageMois}
+                      onChange={(n) => majTypeEpargne(typeEpargne.id, { blocageMois: n })} />
+                    <NumField label="Dépôt minimum de cette épargne" value={r.epargne.types[typeEpargne.id].depotMinFcfa} fcfaPreview step={1_000}
+                      onChange={(n) => majTypeEpargne(typeEpargne.id, { depotMinFcfa: n })} />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          <PiedSection sale={!!sales.epargne} onClick={() => enregistrer("epargne", "Épargne")} label="Enregistrer l'épargne" />
+        </Block>
+      )}
 
-      {/* — publication — */}
-      <Block
-        title="Publier le règlement aux membres"
-        icon={<Send className="h-4 w-4" />}
-        note={`Le règlement est en version ${r.version}. ${p.sale ? "Vos dernières modifications attendent la publication." : "Tout ce que vous avez réglé est déjà visible par les membres."} Une fois publié, le bloc « Règlement de la cantine » de la page Tontine affiche ces règles à tous — lecture seule.`}
-      >
-        <div className="flex flex-col gap-2 p-4 sm:flex-row">
-          <Btn onClick={p.onPublier} tone="vert"><Send className="h-4 w-4" /> Publier la version {p.sale ? r.version + 1 : r.version} aux membres</Btn>
-          <Btn onClick={p.onReinitialiser} tone="neutre"><RotateCcw className="h-4 w-4" /> Réinitialiser</Btn>
-        </div>
-      </Block>
+      {/* ══════════════════ SECTION PUBLICATION ══════════════════ */}
+      {p.sous === "publication" && (
+        <Block
+          title="Publier le règlement aux membres"
+          icon={<Send className="h-4 w-4" />}
+          note={`Le règlement est en version ${r.version}. ${p.sale ? "Vos dernières modifications attendent la publication." : "Tout ce que vous avez réglé est déjà visible par les membres."} Une fois publié, le bloc « Règlement de la cantine » de la page Tontine affiche ces règles à tous — lecture seule.`}
+        >
+          <div className="flex flex-col gap-2 p-4 sm:flex-row">
+            <Btn onClick={p.onPublier} tone="vert"><Send className="h-4 w-4" /> Publier la version {p.sale ? r.version + 1 : r.version} aux membres</Btn>
+            <Btn onClick={p.onReinitialiser} tone="neutre"><RotateCcw className="h-4 w-4" /> Réinitialiser</Btn>
+          </div>
+        </Block>
+      )}
     </>
+  );
+}
+
+/** Pied de section : le bouton « Enregistrer » propre à CHAQUE section du
+ *  paramétrage — plus besoin de scroller jusqu'en bas pour trouver le geste. */
+function PiedSection({ onClick, label, sale }: { onClick: () => void; label: string; sale: boolean }) {
+  return (
+    <div className="flex flex-col gap-2 border-t border-[#E5DCC0] bg-[#FBF7EA] p-3.5 sm:flex-row sm:items-center sm:justify-between">
+      <Btn onClick={onClick}><CheckCircle2 className="h-4 w-4" /> {label}</Btn>
+      <p className="text-[10.5px] font-semibold leading-snug text-[#8A6420] sm:max-w-[55%] sm:text-right">
+        {sale ? "Modifications en attente — cliquez sur « Enregistrer »." : "Section à jour — la « Publication » la rend visible aux membres."}
+      </p>
+    </div>
   );
 }
 

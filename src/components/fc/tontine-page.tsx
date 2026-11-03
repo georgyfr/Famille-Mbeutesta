@@ -40,7 +40,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
-  AlertTriangle, ArrowLeft, AudioLines, BarChart3, CalendarDays, Check, ChevronRight, Coins, Coffee, Crown, Eye,
+  AlertTriangle, ArrowLeft, AudioLines, BarChart3, BellRing, CalendarDays, Check, ChevronRight, Coins, Coffee, Crown, Eye,
   ClipboardList, FileSearch, FileText, Flag, Gift, HandCoins, Hourglass, Info, Lock, MapPin, MessageCircle, Mic, Navigation, PencilLine, Percent, Phone, PiggyBank, Plus,
   ScrollText, ShieldAlert, Square, Stamp, Trash2, TrendingUp, UserCheck, Users, Wallet, X,
 } from "lucide-react";
@@ -61,7 +61,7 @@ import {
   type DecisionTaux, type MotifSignalement, type Signalement,
 } from "./tontine-bureau";
 import {
-  ANOMALIES, MOIS_FR_SHORT, MISSIONS, ROLE_META, SUPPLEANCES, TAUX_DEFAUT, TONTINE,
+  ANOMALIES, MEMBRES_FICTIFS, MOIS_FR_SHORT, MISSIONS, ROLE_META, SUPPLEANCES, TAUX_DEFAUT, TONTINE,
   buildAnnee, buildRoster, caissesDuMoment, classementCotisants, collationMensuelle,
   detteParPersonne, dettePretAuMois, etatReunion, interetEpargneMois, isoDate,
   journalDeCaisse, joursAvant, loadEpargnes, loadMontants, loadPayes, loadPrets, loadTaux, moisDuTour,
@@ -71,10 +71,12 @@ import {
 } from "./tontine-data";
 import {
   ECHELONS_LABELS, ENCAISSEUR_LABELS, EVENTS_SOLIDAIRES_LABELS, GARANTIES_LABELS,
-  MAJORITES_LABELS, PAIEMENTS_LABELS, REGLEMENT_DEFAUT, SANCTIONS_LABELS,
+  MAJORITES_LABELS, METHODES_SOLIDARITE, PAIEMENTS_LABELS, REGLEMENT_DEFAUT, SANCTIONS_LABELS,
+  TYPES_EPARGNE_CATALOGUE, TYPES_PRET_CATALOGUE,
   loadReglement,
   type Reglement,
 } from "./reglement";
+import { loadTypesCotisation, type TypeCotisation } from "./cotisations-types";
 
 /* ══════════════════════════ petits utilitaires ══════════════════════════ */
 
@@ -83,6 +85,19 @@ const fmtN = (n: number) => n.toLocaleString("fr-FR");
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const prenom = (m: Member) => m.name.split(" ")[0];
 const fmtTaux = (t: number) => `${String(t).replace(".", ",")} %`;
+
+/** Type de cotisation d'un membre (fixé par le président) — pour « vous », le
+ *  double du registre fictif (même rôle du bureau) est utilisé : le président
+ *  attribue les sommes aux noms du registre, et CHACUN les voit sur sa page. */
+function typeDeMembreAffiche(m: { id: string; role: string }, types: TypeCotisation[]): TypeCotisation | null {
+  const direct = types.find((t) => t.membreIds.includes(m.id));
+  if (direct) return direct;
+  if (m.id === "vous") {
+    const alterEgo = MEMBRES_FICTIFS.find((x) => x.role === m.role);
+    if (alterEgo) return types.find((t) => t.membreIds.includes(alterEgo.id)) ?? null;
+  }
+  return null;
+}
 
 function fmtDateLong(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
@@ -243,6 +258,9 @@ export function TontinePage({ onBack, vousName, vousPhone }: { onBack: () => voi
   // Montants de la tontine — version incrémentée quand le bureau les règle :
   // tout le calendrier (sommes, collations, totaux) est recalculé aussitôt.
   const [montVersion, setMontVersion] = useState(0);
+  // Types de cotisations mensuelles fixés par le président (sommes attribuées
+  // aux membres) — chaque membre sélectionné voit SA somme sur sa page.
+  const [typesCotis, setTypesCotis] = useState<TypeCotisation[]>([]);
 
   useEffect(() => {
     const sync = () => setPage(routeFromHash());
@@ -256,6 +274,8 @@ export function TontinePage({ onBack, vousName, vousPhone }: { onBack: () => voi
       loadMontants();
       const role = loadVousRole() ?? "membre";
       setVousRole(role);
+      // Types de cotisations mensuelles fixés par le bureau (président).
+      setTypesCotis(loadTypesCotisation());
       // Rappels de signalements — TOUS LES 3 JOURS la notification réapparaît
       // tant que le bureau n'a pas traité le problème signalé.
       const dus = collecterRappels(loadSignalements());
@@ -339,10 +359,10 @@ export function TontinePage({ onBack, vousName, vousPhone }: { onBack: () => voi
         </div>
       )}
 
-      {page === "reunion" && <ReunionPage annee={annee} roster={roster} vousPhone={vousPhone} />}
+      {page === "reunion" && <ReunionPage annee={annee} roster={roster} vousPhone={vousPhone} typesCotis={typesCotis} vousRole={roleActif} />}
       {page === "membres" && (
         <MembresPage
-          annee={annee} roster={roster} payes={payes}
+          annee={annee} roster={roster} payes={payes} typesCotis={typesCotis}
           selected={selectedMember} onSelect={setSelectedMember} onGoRole={goPage}
         />
       )}
@@ -583,24 +603,36 @@ function ReglementCantine() {
       })()
     : null;
 
-  /* Sections : un en-tête par domaine, puis réglage → valeur. */
+  /* Valeur réglée par le bureau, ou « à fixer » tant que le président n'a pas
+   * enregistré une valeur (tous les chiffres démarrent à 0). */
+  const aFixer = (v: number, texte: string) => (v > 0 ? texte : "À fixer par le bureau");
+  /* La nature du prêt / méthode de solidarité / type d'épargne choisis par le bureau. */
+  const typePretChoisi = pre.typeChoisi ? TYPES_PRET_CATALOGUE.find((t) => t.id === pre.typeChoisi) ?? null : null;
+  const methodeChoisie = METHODES_SOLIDARITE.find((m) => m.id === sol.methode) ?? null;
+  const typeEpargneChoisi = ep.typeChoisi ? TYPES_EPARGNE_CATALOGUE.find((t) => t.id === ep.typeChoisi) ?? null : null;
+
+  /* Sections : un en-tête par domaine, puis réglage → valeur. La section
+   * « Réunion & quorum » n'apparaît que si le bureau l'a réglée (masquée par
+   * défaut à la demande de l'administrateur). */
   const sections: { titre: string; lignes: [string, string][] }[] = [
-    {
-      titre: "Réunion & quorum",
-      lignes: [
-        ["Quorum des délibérations", `${reg.quorumMembres} membres présents au minimum`],
-        ["Reports de réunion", `${reg.reportsMax} reports consécutifs au maximum`],
-      ],
-    },
+    ...(reg.quorumMembres > 0 || reg.reportsMax > 0
+      ? [{
+          titre: "Réunion & quorum",
+          lignes: [
+            ["Quorum des délibérations", `${reg.quorumMembres} membres présents au minimum`],
+            ["Reports de réunion", `${reg.reportsMax} reports consécutifs au maximum`],
+          ] as [string, string][],
+        }]
+      : []),
     {
       titre: "Impayés & recouvrement",
       lignes: [
-        ["Délai de grâce", `${imp.delaiGraceJours} jour(s) avant la 1ʳᵉ relance`],
-        ["Relances amiables", `${imp.relancesAvantEscalade} relance(s) avant l'échelon suivant`],
-        ["Étapes décidées", etapesActives.length > 0 ? etapesActives.join(" → ") : "Aucune — sur décision du bureau"],
-        ["Rythme", `Une étape tous les ${imp.delaiEntreEtapesJours} jour(s)`],
+        ["Délai de grâce", aFixer(imp.delaiGraceJours, `${imp.delaiGraceJours} jour(s) avant la 1ʳᵉ relance`)],
+        ["Relances amiables", aFixer(imp.relancesAvantEscalade, `${imp.relancesAvantEscalade} relance(s) avant l'échelon suivant`)],
+        ["Étapes décidées", etapesActives.length > 0 ? etapesActives.join(" → ") : "À décider par le bureau"],
+        ["Rythme", aFixer(imp.delaiEntreEtapesJours, `Une étape tous les ${imp.delaiEntreEtapesJours} jour(s)`)],
         ["Pénalité de retard", imp.amendeAuto ? `Automatique dès l'échelon n°${imp.niveauAmende} (${fmtN(TONTINE.penaliteRetard)} FCFA)` : `Sur décision du bureau (${fmtN(TONTINE.penaliteRetard)} FCFA)`],
-        ["Sanction après impayés répétés", `${imp.apresNImpayes} impayés consécutifs → ${SANCTIONS_LABELS[imp.sanction].toLowerCase()}`],
+        ["Sanction après impayés répétés", imp.apresNImpayes > 0 ? `${imp.apresNImpayes} impayés consécutifs → ${SANCTIONS_LABELS[imp.sanction].toLowerCase()}` : "Aucune sanction automatique (à décider par le bureau)"],
         ["Moyens de paiement acceptés", paiementsActifs.length > 0 ? paiementsActifs.join(" · ") : "Précisés par le trésorier"],
         ["Qui encaisse les recouvrements", ENCAISSEUR_LABELS[imp.encaisseur]],
       ],
@@ -608,34 +640,37 @@ function ReglementCantine() {
     {
       titre: "Prêts & garanties",
       lignes: [
-        ["Taux des prêts", `${fmtTaux(pre.tauxMensuel)} par mois`],
-        ["Plafond d'un prêt", `${fmtN(pre.plafondFcfa)} FCFA`],
-        ["Durée de remboursement", `${pre.dureeMaxMois} mois au maximum`],
-        ["Avalistes", pre.avalisteObligatoire ? `${pre.nbAvalistes} avaliste(s) obligatoire(s)` : "Non exigés"],
-        ["Co-signature du trésorier", pre.cosignTresorier ? "Requise sur chaque accord" : "Non requise"],
-        ["Garanties acceptées", garantiesActives.length > 0 ? garantiesActives.join(" · ") : "Au cas par cas"],
-        ["Ancienneté requise", `${pre.carenceMois} mois de cotisation avant le 1ᵉʳ prêt`],
+        ...(typePretChoisi ? [["Nature des prêts", `${typePretChoisi.nom} — ${typePretChoisi.description}`] as [string, string]] : []),
+        ["Taux des prêts", aFixer(pre.tauxMensuel, `${fmtTaux(pre.tauxMensuel)} par mois`)],
+        ["Plafond d'un prêt", aFixer(pre.plafondFcfa, `${fmtN(pre.plafondFcfa)} FCFA`)],
+        ["Durée de remboursement", aFixer(pre.dureeMaxMois, `${pre.dureeMaxMois} mois au maximum`)],
+        ["Avalistes", pre.avalisteObligatoire ? `${pre.nbAvalistes} avaliste(s) obligatoire(s)` : "Non exigés (réglé par le bureau)"],
+        ["Co-signature du trésorier", pre.cosignTresorier ? "Requise sur chaque accord" : "Non requise (réglé par le bureau)"],
+        ["Garanties acceptées", garantiesActives.length > 0 ? garantiesActives.join(" · ") : "Au cas par cas (à décider par le bureau)"],
+        ["Ancienneté requise", aFixer(pre.carenceMois, `${pre.carenceMois} mois de cotisation avant le 1ᵉʳ prêt`)],
         ["Dossier du président", `Décidé par le bureau sans sa voix — ${MAJORITES_LABELS[pre.majorityPresident].toLowerCase()}`],
       ],
     },
     {
-      titre: "Solidarité — caisse de secours",
+      titre: "Solidarité",
       lignes: [
-        ["Cotisation de solidarité", `${fmtN(sol.cotisationMensuelle)} FCFA par membre et par mois`],
-        ["Aide maximale", `${fmtN(sol.plafondAideFcfa)} FCFA par événement`],
-        ["Événements couverts", eventsActifs.length > 0 ? eventsActifs.join(" · ") : "Décidés au cas par cas"],
-        ["Ancienneté requise", `${sol.carenceMois} mois avant droit à l'aide`],
-        ["Approbation d'une aide", `${MAJORITES_LABELS[sol.majority]} des votants du bureau`],
-        ["Versement", `Dans les ${sol.delaiVersementJours} jour(s) après accord`],
+        ...(methodeChoisie ? [["Méthode de solidarité", `${methodeChoisie.nom} — ${methodeChoisie.description}`] as [string, string]] : []),
+        ["Cotisation de solidarité", aFixer(sol.cotisationMensuelle, `${fmtN(sol.cotisationMensuelle)} FCFA par membre et par mois`)],
+        ["Aide maximale", aFixer(sol.plafondAideFcfa, `${fmtN(sol.plafondAideFcfa)} FCFA par événement`)],
+        ["Événements couverts", eventsActifs.length > 0 ? eventsActifs.join(" · ") : "Décidés au cas par cas par le bureau"],
+        ["Ancienneté requise", aFixer(sol.carenceMois, `${sol.carenceMois} mois avant droit à l'aide`)],
+        ["Approbation d'une aide", MAJORITES_LABELS[sol.majority]],
+        ["Versement", aFixer(sol.delaiVersementJours, `Dans les ${sol.delaiVersementJours} jour(s) après accord`)],
       ],
     },
     {
       titre: "Épargne",
       lignes: [
-        ["Taux de l'épargne", `${fmtTaux(ep.tauxMensuel)} par mois`],
-        ["Préavis de retrait", `${ep.preavisJours} jour(s) avant tout retrait`],
-        ["Dépôt minimum", `${fmtN(ep.depotMinFcfa)} FCFA`],
-        ["Retrait mensuel", `${ep.retraitMaxMois} % du solde au maximum`],
+        ...(typeEpargneChoisi ? [["Type d'épargne", `${typeEpargneChoisi.nom} — ${typeEpargneChoisi.description}`] as [string, string]] : []),
+        ["Taux de l'épargne", aFixer(ep.tauxMensuel, `${fmtTaux(ep.tauxMensuel)} par mois`)],
+        ["Préavis de retrait", aFixer(ep.preavisJours, `${ep.preavisJours} jour(s) avant tout retrait`)],
+        ["Dépôt minimum", aFixer(ep.depotMinFcfa, `${fmtN(ep.depotMinFcfa)} FCFA`)],
+        ["Retrait mensuel", aFixer(ep.retraitMaxMois, `${ep.retraitMaxMois} % du solde au maximum`)],
       ],
     },
   ];
@@ -688,7 +723,7 @@ function FragmentRow({ titre, lignes }: { titre: string; lignes: [string, string
 
 /* ══════════════════════════ page RÉUNIONS — calendrier de l'année ══════════════════════════ */
 
-function ReunionPage({ annee, roster, vousPhone }: { annee: TourMois[]; roster: Member[]; vousPhone?: string | null }) {
+function ReunionPage({ annee, roster, vousPhone, typesCotis, vousRole }: { annee: TourMois[]; roster: Member[]; vousPhone?: string | null; typesCotis: TypeCotisation[]; vousRole: RoleKey }) {
   // Fiche réunion : s'ouvre quand on touche un mois du calendrier ou une ligne du tableau
   const [fiche, setFiche] = useState<TourMois | null>(null);
   // Informations du bénéficiaire du mois — pop-up « Voir ses informations » :
@@ -874,7 +909,7 @@ function ReunionPage({ annee, roster, vousPhone }: { annee: TourMois[]; roster: 
       <ReglementCantine />
 
       {/* Fiche réunion — modale ouverte au clic sur un mois du calendrier */}
-      {fiche && <FicheReunion t={fiche} vousId={vousId} onFermer={() => setFiche(null)} />}
+      {fiche && <FicheReunion t={fiche} vousId={vousId} maCotisPerso={typeDeMembreAffiche({ id: vousId, role: vousRole }, typesCotis)} onFermer={() => setFiche(null)} />}
 
       {/* Informations du bénéficiaire du mois — téléphone + géolocalisation */}
       {infos && courant.beneficiary && (
@@ -984,7 +1019,7 @@ function MiniMois({ t, onOpen }: { t: TourMois; onOpen: () => void }) {
    bénéficiaires). Elle montre : QUI reçoit la réunion, SON NUMÉRO DE TÉLÉPHONE, SON
    LIEU, et LA SOMME QUE CHACUN DOIT COTISER pour cette réunion. */
 
-function FicheReunion({ t, vousId, onFermer }: { t: TourMois; vousId: string; onFermer: () => void }) {
+function FicheReunion({ t, vousId, maCotisPerso, onFermer }: { t: TourMois; vousId: string; maCotisPerso: TypeCotisation | null; onFermer: () => void }) {
   const e = etatReunion(t);
   const jr = joursAvant(t);
   const b = t.beneficiary;
@@ -1003,16 +1038,19 @@ function FicheReunion({ t, vousId, onFermer }: { t: TourMois; vousId: string; on
     };
   }, [onFermer]);
 
-  // La part de chacun : le bénéficiaire du mois ne cotise pas (il ne verse que la collation)
+  // La part de chacun : le bénéficiaire du mois ne cotise pas (il ne verse que la collation).
+  // Cotisation PERSONNALISÉE : si le bureau a fixé une somme pour moi (type de
+  // cotisation attribué), c'est CETTE somme que je verse — comme tout membre.
   const estBeneficiaire = !t.ag && b?.id === vousId;
-  const partCotis = estBeneficiaire ? 0 : TONTINE.montantCotisation;
+  const maCotisation = maCotisPerso ? maCotisPerso.montant : TONTINE.montantCotisation;
+  const partCotis = estBeneficiaire ? 0 : maCotisation;
   const partColla = t.ag ? 0 : TONTINE.montantCollation;
   const partTotale = partCotis + partColla;
 
   const parts: [string, string, string][] = t.ag
     ? []
     : [
-        ["Cotisation", estBeneficiaire ? "—" : fmtFcfa(TONTINE.montantCotisation), estBeneficiaire ? "Vous ne cotisez pas — vous recevez la réunion" : "Remise au trésorier pour la réunion"],
+        ["Cotisation", estBeneficiaire ? "—" : fmtFcfa(maCotisation), estBeneficiaire ? "Vous ne cotisez pas — vous recevez la réunion" : maCotisPerso ? `Somme fixée pour vous par le bureau (« ${maCotisPerso.nom} »)` : "Remise au trésorier pour la réunion"],
         ["Collation", fmtFcfa(TONTINE.montantCollation), "Payée par tout le monde, y compris le bénéficiaire"],
         ["Total par personne", fmtFcfa(partTotale), estBeneficiaire ? "Votre seule part ce mois-ci" : "À remettre au trésorier à la réunion"],
       ];
@@ -1085,6 +1123,16 @@ function FicheReunion({ t, vousId, onFermer }: { t: TourMois; vousId: string; on
           </div>
         ) : (
           <div className="space-y-3.5 px-4 py-4">
+            {/* Notification — le bureau a fixé MA cotisation (type attribué) */}
+            {maCotisPerso && (
+              <div className="flex items-start gap-2.5 rounded-2xl border-2 border-[#C89F62]/60 bg-[#C89F62]/12 p-3">
+                <BellRing className="mt-0.5 h-4.5 w-4.5 shrink-0 text-[#8A6420]" />
+                <p className="text-[12px] leading-relaxed text-[#7A5B2E]">
+                  <strong>Notification du bureau — votre cotisation mensuelle a été fixée à {fmtFcfa(maCotisPerso.montant)}</strong> (« {maCotisPerso.nom} »).
+                  Comme chaque membre sélectionné dans ce type, c&apos;est cette somme que vous remettez au trésorier.
+                </p>
+              </div>
+            )}
             {/* Qui reçoit la réunion */}
             <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Qui reçoit la réunion ce mois-ci</p>
             <div className="flex items-center gap-3 rounded-2xl border border-[#C89F62]/45 bg-[#C89F62]/10 p-3">
@@ -1638,8 +1686,8 @@ function FicheBeneficiaire({ t, vousPhone, onFermer }: { t: TourMois; vousPhone?
 
 /* ══════════════════════════ page MEMBRES ══════════════════════════ */
 
-function MembresPage({ annee, roster, payes, selected, onSelect, onGoRole }: {
-  annee: TourMois[]; roster: Member[]; payes: Payes;
+function MembresPage({ annee, roster, payes, typesCotis, selected, onSelect, onGoRole }: {
+  annee: TourMois[]; roster: Member[]; payes: Payes; typesCotis: TypeCotisation[];
   selected: string | null; onSelect: (id: string | null) => void; onGoRole: (p: TPage) => void;
 }) {
   const bureau = roster.filter((m) => m.role !== "membre");
@@ -1671,7 +1719,7 @@ function MembresPage({ annee, roster, payes, selected, onSelect, onGoRole }: {
         <TableMembres members={simples} variante="simples" annee={annee} payes={payes} selected={selected} onSelect={onSelect} />
       </Block>
 
-      {sel && <PanneauMembre m={sel} annee={annee} onGoRole={onGoRole} onFermer={() => onSelect(null)} />}
+      {sel && <PanneauMembre m={sel} annee={annee} typesCotis={typesCotis} onGoRole={onGoRole} onFermer={() => onSelect(null)} />}
     </div>
   );
 }
@@ -1737,13 +1785,17 @@ function TableMembres({ members, variante, annee, payes, selected, onSelect }: {
   );
 }
 
-function PanneauMembre({ m, annee, onGoRole, onFermer }: {
-  m: Member; annee: TourMois[]; onGoRole: (p: TPage) => void; onFermer: () => void;
+function PanneauMembre({ m, annee, typesCotis, onGoRole, onFermer }: {
+  m: Member; annee: TourMois[]; typesCotis: TypeCotisation[]; onGoRole: (p: TPage) => void; onFermer: () => void;
 }) {
   const meta = ROLE_META[m.role];
   const sonTour = annee[m.tour - 1];
   const courant = annee.find((t) => t.etat === "courant");
   const estBenef = !!courant && !courant.ag && courant.beneficiary?.id === m.id;
+  /* Cotisation personnalisée : la somme fixée pour CE membre par le bureau
+   * (type de cotisation attribué), sinon la cotisation de base. */
+  const sonType = typeDeMembreAffiche(m, typesCotis);
+  const saCotisation = sonType ? sonType.montant : TONTINE.montantCotisation;
 
   return (
     <FcCard className="border-[#C89F62]/50 bg-[#C89F62]/8 p-4">
@@ -1767,10 +1819,10 @@ function PanneauMembre({ m, annee, onGoRole, onFermer }: {
         <div className="rounded-xl bg-[#FFFDF6] p-3">
           <p className="text-[10px] font-bold uppercase tracking-wide text-[#8A9288]">À cotiser ce mois</p>
           <p className="text-[13.5px] font-bold text-[#1E4D2B]">
-            {!courant || courant.ag ? "—" : estBenef ? fmtN(TONTINE.montantCollation) : fmtN(detteParPersonne())}
+            {!courant || courant.ag ? "—" : estBenef ? fmtN(TONTINE.montantCollation) : fmtN(saCotisation + TONTINE.montantCollation)}
           </p>
           <p className="text-[10.5px] text-[#8A9288]">
-            {!courant || courant.ag ? "Assemblée générale" : estBenef ? "collation seulement (son tour)" : "cotisation + collation"}
+            {!courant || courant.ag ? "Assemblée générale" : estBenef ? "collation seulement (son tour)" : `cotisation${sonType ? ` (« ${sonType.nom} »)` : " de base"} + collation`}
           </p>
         </div>
         <div className="rounded-xl bg-[#FFFDF6] p-3">
