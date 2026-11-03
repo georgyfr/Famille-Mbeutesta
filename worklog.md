@@ -1262,3 +1262,22 @@ Stage Summary:
 - Les intérêts de l'année sont VISIBLES MOIS PAR MOIS : intérêts réalisés jusqu'au mois en cours, projection pour les mois à venir, total projeté au 31 décembre.
 - Chaque prêt porte son mois de départ et affiche son calendrier de remboursement complet (mois, intérêts, mensualité, reste dû, total).
 - En ligne sur famille-mbeutetsa.pages.dev (v4, ai:true) — vérifié en production.
+
+## Task 47 — Mes prêts (m-prets) : même traitement que l'épargne — calendrier de remboursement EN DIRECT dans le formulaire (calculs visibles dès la saisie, sans déposer la demande) [2026-11-03]
+
+Request (administrateur, 2026-11-03) :
+- « Tu devras faire la même chose pour https://famille-mbeutetsa.pages.dev/#president/m-prets comme tu l'as fait avec l'onglet épargne. »
+
+Work Log:
+- DIAGNOSTIC : sur m-epargne les calculs s'affichent AUSSITÔT (tableau « Mes intérêts mois par mois » toujours visible) ; sur m-prets le calendrier ne sortait qu'APRÈS « Déposer ma demande » (« Le calendrier complet s'affiche après la demande ») — l'administrateur tapait un montant + choisissait un mois sans voir un seul calcul.
+- NOUVEAU COMPOSANT TableCalendrierPret (maquette-president.tsx) : tableau partagé Mois (bascule {année+1} après décembre) | Intérêts | Mensualité | Reste dû + ligne Total (somme des intérêts affichés · capital+intérêts) — utilisé DEUX fois (aperçu en direct + chaque demande déposée), supprime la duplication.
+- APERÇU EN DIRECT dans le formulaire (bloc doré border-[#C9B98A]) : dès que le montant > 0, le calendrier complet s'affiche — démarre au mois choisi (moisDepart = moisChoisi ?? moisCourantIdx), recalcul à chaque frappe et à chaque changement de mois ; phrase « Il démarre en {mois} … et court sur {durée} mois — intérêts de {X} par mois. S'il déborde sur l'année suivante, c'est marqué. » ; bandeau réécrit « Vos calculs, en direct — mensualité ≈ X, intérêts totaux ≈ Y … tout se recalcule aussitôt » (fini le « après la demande »).
+- Nettoyage : totalInterets par demande désormais calculé DANS le composant (somme des lignes affichées — exact au FCFA près), variable inutilisée retirée (lint propre).
+- VÉRIFICATION E2E LOCALE (agent-browser, #president/m-prets) : saisie 100 000 → calendrier IMMÉDIAT (novembre→avril 2027, intérêts 3 000/mois, mensualité 19 667, reste dû 98 333→0) ✓ ; Total 18 000 / 118 000 FCFA ✓ ; changement de mois → septembre : calendrier recalculé (septembre→février 2027) ✓ ; dépôt demande complète (nature « Prêt scolaire », avaliste Marie-Louise, motif, garanties) → « Rattaché à septembre » + calendrier sous le dossier, badge « Vote bureau » ✓ ; mobile 390 px : onglets repliés propres, formulaire empilé, table à défilement horizontal ✓ ; ZÉRO erreur console ; lint fichier propre (les 12 erreurs restantes sont préexistantes dans des fichiers générés minifiés).
+- BUILD : build-cloudflare.sh OK (export statique .next-demo régénéré).
+- ⚠️ DÉPLOIEMENT BLOQUÉ : le sandbox a été réinitialisé entre les sessions et .env.cloudflare (CLOUDFLARE_API_TOKEN cfut_…605de, GitHub PAT, GLM_API_KEY) n'existe plus — jamais commité (par sécurité, correct). Account ID réel hébergeant le site (worklog Task 43) : ead74f172a86c9debb937c356976260f. → Redemander le token à l'administrateur, recréer .env.cloudflare puis `bunx wrangler@4 pages deploy .next-demo --project-name famille-mbeutetsa --branch main`.
+
+Stage Summary:
+- « Mes prêts » reçoit le même traitement que « Mes épargnes » : les calculs sont visibles IMMÉDIATEMENT — on tape un montant, on choisit le mois, le calendrier de remboursement mois par mois (intérêts, mensualité, reste dû, total) s'affiche en direct, sans avoir à déposer la demande.
+- Le calendrier reste affiché sous chaque demande déposée (« Rattaché à {mois} »), mêmes colonnes, même présentation.
+- Vérifié de bout en bout en local (desktop + mobile, zéro erreur console) ; en attente du token Cloudflare pour redeployer famille-mbeutetsa.pages.dev.

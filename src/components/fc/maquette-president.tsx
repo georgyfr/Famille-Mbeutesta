@@ -2114,6 +2114,47 @@ function MesEpargnesSection(p: {
 
 /* ══════════════════════════ ESPACE MEMBRE — MES PRÊTS ══════════════════════════ */
 
+/** Table du calendrier de remboursement — utilisée DEUX fois : pour l'aperçu
+ *  EN DIRECT du formulaire (comme le tableau d'intérêts de l'épargne, les
+ *  calculs apparaissent dès qu'on tape un montant) et sous chaque demande
+ *  déposée. Mêmes colonnes, même ligne Total. */
+function TableCalendrierPret(p: {
+  lignes: { mois: string; annee: number; interet: number; mensu: number; reste: number }[];
+  montant: number;
+}) {
+  const anneeCourante = new Date().getFullYear();
+  const totalInterets = p.lignes.reduce((s, l) => s + l.interet, 0);
+  return (
+    <div className="overflow-x-auto rounded-2xl border border-[#E5DCC0]">
+      <table className="w-full border-collapse text-[11.5px]">
+        <thead>
+          <tr className="bg-[#1E4D2B] text-white">
+            <th className="px-2.5 py-1.5 text-left font-black">Mois</th>
+            <th className="px-2.5 py-1.5 text-right font-black">Intérêts</th>
+            <th className="px-2.5 py-1.5 text-right font-black">Mensualité</th>
+            <th className="px-2.5 py-1.5 text-right font-black">Reste dû</th>
+          </tr>
+        </thead>
+        <tbody>
+          {p.lignes.map((l) => (
+            <tr key={l.mois + l.annee} className="border-b border-[#E5DCC0] bg-[#FFFDF6]">
+              <td className="px-2.5 py-1.5 font-bold text-[#2B3530]">{l.mois} {l.annee > anneeCourante ? l.annee : ""}</td>
+              <td className="px-2.5 py-1.5 text-right text-[#8A6420]">{fmt(l.interet)}</td>
+              <td className="px-2.5 py-1.5 text-right font-bold text-[#2B3530]">{fmt(l.mensu)}</td>
+              <td className="px-2.5 py-1.5 text-right font-semibold text-[#5C6B60]">{fmt(l.reste)}</td>
+            </tr>
+          ))}
+          <tr className="bg-[#C89F62]/15">
+            <td className="px-2.5 py-1.5 font-black text-[#2B2416]">Total</td>
+            <td className="px-2.5 py-1.5 text-right font-black text-[#8A6420]">{fmt(totalInterets)}</td>
+            <td className="px-2.5 py-1.5 text-right font-black text-[#2B2416]" colSpan={2}>{fcfa(p.montant + totalInterets)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function MesPretsSection(p: {
   mesPrets: PretDemande[];
   pretsPersos: PretPerso[];
@@ -2136,6 +2177,9 @@ function MesPretsSection(p: {
   const taux = p.regl.prets.tauxMensuel || TAUX_DEFAUT;
   const duree = p.regl.prets.dureeMaxMois > 0 ? p.regl.prets.dureeMaxMois : 6;
   const demandeMontant = Number(p.form.montant) || 0;
+  /* Mois de départ du calendrier EN DIRECT : celui choisi dans le formulaire,
+   * sinon le mois en cours — comme l'épargne, les calculs suivent le mois. */
+  const moisDepart = p.moisChoisi ?? p.moisCourantIdx ?? 0;
   const mensualite = demandeMontant > 0
     ? Math.round((demandeMontant * (1 + (taux / 100) * duree)) / duree)
     : 0;
@@ -2172,7 +2216,7 @@ function MesPretsSection(p: {
         </div>
         {mensualite > 0 && (
           <p className="mt-2 rounded-2xl border border-[#C89F62]/50 bg-[#C89F62]/10 px-3 py-2 text-[11.5px] font-semibold text-[#8A6420]">
-            Estimation — {fcfa(demandeMontant)} sur {duree} mois à {taux} %/mois : environ {fcfa(mensualite)} par mois. Le calendrier complet s’affiche après la demande.
+            Vos calculs, en direct — {fcfa(demandeMontant)} sur {duree} mois à {taux} %/mois : mensualité ≈ {fcfa(mensualite)}, intérêts totaux ≈ {fcfa(Math.round(demandeMontant * (taux / 100) * duree))}. Le calendrier détaillé est juste en dessous : changez le montant ou le mois, tout se recalcule aussitôt.
           </p>
         )}
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -2199,6 +2243,20 @@ function MesPretsSection(p: {
             ))}
           </select>
         </div>
+        {/* — CALENDRIER EN DIRECT : comme pour l'épargne, les calculs sont
+         *    visibles IMMÉDIATEMENT (pas besoin de déposer la demande) — ils
+         *    démarrent au mois choisi et se recalculent à chaque frappe. — */}
+        {demandeMontant > 0 && (
+          <div className="mt-3 rounded-2xl border-2 border-[#C9B98A] bg-[#FFFDF6] p-3">
+            <p className="text-[11.5px] font-bold text-[#2B3530]">Calendrier de remboursement — mois par mois</p>
+            <p className="mt-0.5 text-[10.5px] leading-snug text-[#8A9288]">
+              Il démarre en {MOIS_FR[Math.min(11, Math.max(0, moisDepart))]} (le mois choisi ci-dessus) et court sur {duree} mois — intérêts de {fcfa(Math.round(demandeMontant * (taux / 100)))} par mois. S’il déborde sur l’année suivante, c’est marqué.
+            </p>
+            <div className="mt-2">
+              <TableCalendrierPret lignes={calendrier(demandeMontant, moisDepart)} montant={demandeMontant} />
+            </div>
+          </div>
+        )}
         <select value={p.form.motif.startsWith("*") ? p.form.motif.slice(1) : ""}
           onChange={(e) => p.setForm({ ...p.form, motif: e.target.value ? `*${e.target.value}` : p.form.motif.replace(/^\*/, "") })}
           aria-label="Nature du prêt demandé"
@@ -2221,7 +2279,6 @@ function MesPretsSection(p: {
               const av = pr.avalisteId ? p.parMembre.get(pr.avalisteId) : null;
               const moisIdx = pr.moisIdx ?? p.moisCourantIdx ?? 0;
               const lignes = calendrier(pr.montant, moisIdx);
-              const totalInterets = Math.round(pr.montant * (taux / 100) * duree);
               return (
                 <li key={pr.id} className="px-4 py-3">
                   <div className="flex items-start justify-between gap-2">
@@ -2236,32 +2293,8 @@ function MesPretsSection(p: {
                         : <P cls={RJ_CLS}><XCircle className="h-3 w-3" /> Refusé</P>}
                   </div>
                   {pr.statut !== "refuse" && (
-                    <div className="mt-2.5 overflow-x-auto rounded-2xl border border-[#E5DCC0]">
-                      <table className="w-full border-collapse text-[11.5px]">
-                        <thead>
-                          <tr className="bg-[#1E4D2B] text-white">
-                            <th className="px-2.5 py-1.5 text-left font-black">Mois</th>
-                            <th className="px-2.5 py-1.5 text-right font-black">Intérêts</th>
-                            <th className="px-2.5 py-1.5 text-right font-black">Mensualité</th>
-                            <th className="px-2.5 py-1.5 text-right font-black">Reste dû</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {lignes.map((l) => (
-                            <tr key={l.mois + l.annee} className="border-b border-[#E5DCC0] bg-[#FFFDF6]">
-                              <td className="px-2.5 py-1.5 font-bold text-[#2B3530]">{l.mois} {l.annee > new Date().getFullYear() ? l.annee : ""}</td>
-                              <td className="px-2.5 py-1.5 text-right text-[#8A6420]">{fmt(l.interet)}</td>
-                              <td className="px-2.5 py-1.5 text-right font-bold text-[#2B3530]">{fmt(l.mensu)}</td>
-                              <td className="px-2.5 py-1.5 text-right font-semibold text-[#5C6B60]">{fmt(l.reste)}</td>
-                            </tr>
-                          ))}
-                          <tr className="bg-[#C89F62]/15">
-                            <td className="px-2.5 py-1.5 font-black text-[#2B2416]">Total</td>
-                            <td className="px-2.5 py-1.5 text-right font-black text-[#8A6420]">{fmt(totalInterets)}</td>
-                            <td className="px-2.5 py-1.5 text-right font-black text-[#2B2416]" colSpan={2}>{fcfa(pr.montant + totalInterets)}</td>
-                          </tr>
-                        </tbody>
-                      </table>
+                    <div className="mt-2.5">
+                      <TableCalendrierPret lignes={lignes} montant={pr.montant} />
                     </div>
                   )}
                 </li>
