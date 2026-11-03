@@ -23,15 +23,22 @@ import {
   BellRing, CalendarCheck, CalendarClock, Check, CheckCircle2, ChevronRight,
   ClipboardList, Coins, FileText, Gavel, Hand, HandCoins, HandHeart,
   HeartHandshake, Hourglass, Landmark, Lock, MessageSquarePlus,
-  Mic, Pause, Phone, PiggyBank, Play, ReceiptText, Scale, ScrollText, Send,
-  ShieldCheck, Sparkles, ThumbsDown, ThumbsUp, Timer, UserCheck, UserPlus,
+  Mic, Pause, Phone, PiggyBank, Play, ReceiptText, RotateCcw, Scale, ScrollText, Send,
+  ShieldCheck, SlidersHorizontal, Sparkles, ThumbsDown, ThumbsUp, Timer, UserCheck, UserPlus,
   Users, Vote, Wallet, XCircle,
 } from "lucide-react";
 import { FcCard } from "./ui";
 import {
-  MEMBRES_FICTIFS, MOIS_FR, TAUX_DEFAUT, TONTINE,
+  MEMBRES_FICTIFS, MOIS_FR, TONTINE, saveMontants,
   detteParPersonne, potMensuel, secondSunday,
+  type ReglagesTontine,
 } from "./tontine-data";
+import {
+  ECHELONS_LABELS, ENCAISSEUR_LABELS, EVENTS_SOLIDAIRES_LABELS, GARANTIES_LABELS,
+  MAJORITES_LABELS, PAIEMENTS_LABELS, REGLEMENT_DEFAUT, SANCTIONS_LABELS,
+  loadReglement, publierReglement, saveReglement,
+  type Reglement,
+} from "./reglement";
 
 /* ══════════════════════════ aides ══════════════════════════ */
 
@@ -45,6 +52,35 @@ const heure = () => {
 };
 let seq = 0;
 const nid = () => `mk-${Date.now().toString(36)}-${seq++}`;
+
+/** SÉANCE EN DIRECT — masquée à la demande de l'administrateur (novembre 2026) :
+ *  « Les éléments comme séance du jour, ouvrir la séance et autres, pour
+ *  l'instant ce n'est pas nécessaire… Nous allons les utiliser peut-être une
+ *  autre fois. » → passer à true pour tout réactiver (onglet Réunion en
+ *  direct, bloc Séance du jour du cockpit, file de parole, simulation). */
+const SEANCE_ACTIVE = false;
+
+/** Clés d'onglets autorisées dans l'URL — liens directs partageables :
+ *  famille-mbeutetsa.pages.dev/#president/impayes, /prets, /parametres… */
+const TAB_KEYS: TabKey[] = [
+  "cockpit", "reunion", "impayes", "prets", "solidarite", "adhesions", "postes",
+  "journal", "parametres", "m-cotis", "m-epargne", "m-prets",
+];
+
+function tabFromHash(): TabKey {
+  try {
+    const h = (window.location.hash || "").toLowerCase();
+    if (h.startsWith("#president/")) {
+      const sub = h.slice("#president/".length).replace(/\/+$/, "");
+      if ((TAB_KEYS as string[]).includes(sub)) return sub as TabKey;
+    } else if (h === "#president" || h === "#president/") {
+      return "cockpit";
+    }
+  } catch {
+    /* rien */
+  }
+  return "cockpit";
+}
 
 type Puce = { children: ReactNode; cls?: string };
 const P = ({ children, cls = "bg-[#2A4A3A]/8 text-[#5C6B60] border-[#E5DCC0]" }: Puce) => (
@@ -123,7 +159,7 @@ type Candidat = {
 };
 type JournalEntry = { id: string; le: string; texte: string; acteur: string };
 type TabKey = "cockpit" | "reunion" | "impayes" | "prets" | "solidarite" | "adhesions" | "postes" | "journal"
-  | "m-cotis" | "m-epargne" | "m-prets";
+  | "parametres" | "m-cotis" | "m-epargne" | "m-prets";
 
 const NIVEAUX = ["Relance amiable", "Mise en demeure", "Convocation par le bureau", "Garants & avalistes"] as const;
 
@@ -167,6 +203,14 @@ export function MaquettePresident() {
   /* — état global de la maquette — */
   const [tab, setTab] = useState<TabKey>("cockpit");
   const [seance, setSeance] = useState<"fermee" | "ouverte" | "cloturee">("fermee");
+  /* — RÈGLEMENT DE LA CANTINE : paramétrage complet du bureau (impayés,
+   *    recouvrements, prêts, solidarité, épargne) — publié et visible par
+   *    tous les membres. Initialisé sur les défauts (hydratation sûre), puis
+   *    chargé du stockage local après peinture. — */
+  const [reglement, setReglement] = useState<Reglement>(REGLEMENT_DEFAUT);
+  /* — montants réels (TONTINE) : modifiés ici = modifiés pour TOUS les membres
+   *    de la page Tontine (même moteur, saveMontants). — */
+  const [montants, setMontants] = useState<ReglagesTontine>({ ...TONTINE });
   const [presences, setPresences] = useState<Record<string, PresenceEtat>>(initPresences);
   const [oj, setOj] = useState<OJPoint[]>([
     { id: "oj1", titre: "Appel des membres & quorum", detail: "Présences, excuses et absences du jour", genre: "appel", statut: "en_attente" },
@@ -237,6 +281,8 @@ export function MaquettePresident() {
   /* — date : calculée côté client uniquement (hydratation sûre) — */
   useEffect(() => {
     const t = setTimeout(() => {
+      setReglement(loadReglement());
+      setMontants({ ...TONTINE });
       const n = new Date();
       let y = n.getFullYear();
       let m = n.getMonth();
@@ -253,9 +299,66 @@ export function MaquettePresident() {
     return () => clearTimeout(t);
   }, []);
 
-  /* — simulation : les membres demandent la parole pendant la séance — */
+  /* — onglets = URL partageable : #president/<onglet> — chaque sous-onglet du
+   *    président a sa propre adresse (collable, rafraîchissable, partageable). */
   useEffect(() => {
-    if (seance !== "ouverte") return;
+    const sync = () => setTab(tabFromHash());
+    const t0 = setTimeout(sync, 0);
+    window.addEventListener("hashchange", sync);
+    return () => {
+      clearTimeout(t0);
+      window.removeEventListener("hashchange", sync);
+    };
+  }, []);
+  const goTab = (t: TabKey) => {
+    setTab(t);
+    try {
+      const h = `#president/${t}`;
+      if (window.location.hash !== h) window.history.replaceState(null, "", h);
+    } catch {
+      /* rien */
+    }
+  };
+
+  /* — règlement : chaque modification est enregistrée (brouillon du bureau) —
+   *    la PUBLICATION aux membres est un geste séparé (onglet Paramètres). */
+  const majReglement = (patch: (r: Reglement) => Reglement) =>
+    setReglement((prev) => {
+      const next = patch(prev);
+      saveReglement(next);
+      return next;
+    });
+  const majMontants = (patch: Partial<ReglagesTontine>) => {
+    saveMontants(patch); // applique aux règles réelles + persiste pour les membres
+    setMontants({ ...TONTINE });
+    const touched: string[] = [];
+    if (patch.montantCotisation != null) touched.push(`cotisation ${fcfa(TONTINE.montantCotisation)}`);
+    if (patch.montantCollation != null) touched.push(`collation ${fcfa(TONTINE.montantCollation)}`);
+    if (patch.fraisAdhesion != null) touched.push(`adhésion ${fcfa(TONTINE.fraisAdhesion)}`);
+    if (patch.penaliteRetard != null) touched.push(`pénalité de retard ${fcfa(TONTINE.penaliteRetard)}`);
+    if (patch.penaliteAbsence != null) touched.push(`pénalité d'absence ${fcfa(TONTINE.penaliteAbsence)}`);
+    if (touched.length > 0) journalAdd(`Montants réglés par le président : ${touched.join(" · ")} — visibles aussitôt par tous les membres.`, "Président (paramétrage)");
+  };
+  const publierReglementAuxMembres = () => {
+    const p = publierReglement(reglement, "Président Joseph Mbeutetsa");
+    setReglement(p);
+    toast.success(`Règlement publié — version ${p.version}`, {
+      description: "Tous les membres le voient désormais en lecture seule dans la page Tontine, bloc « Règlement de la cantine ».",
+    });
+    journalAdd(`Règlement de la cantine publié (version ${p.version}) — visible par tous les membres.`, "Président (paramétrage)");
+  };
+  const reinitialiserReglement = () => {
+    const r = { ...REGLEMENT_DEFAUT };
+    saveReglement(r);
+    setReglement(r);
+    toast("Paramètres réinitialisés sur les valeurs d'origine");
+    journalAdd("Paramètres de la cantine réinitialisés sur les valeurs d'origine.", "Président (paramétrage)");
+  };
+
+  /* — simulation : les membres demandent la parole pendant la séance —
+   *    (désactivée tant que la séance en direct est masquée) — */
+  useEffect(() => {
+    if (!SEANCE_ACTIVE || seance !== "ouverte") return;
     const t = setInterval(() => {
       setParoles((prev) => {
         const enAttente = prev.filter((x) => x.statut === "demande").length;
@@ -547,10 +650,41 @@ export function MaquettePresident() {
     { key: "adhesions", label: "Adhésions", icon: <UserPlus className="h-3.5 w-3.5" /> },
     { key: "postes", label: "Autres postes", icon: <Users className="h-3.5 w-3.5" /> },
     { key: "journal", label: "Journal des décisions", icon: <ScrollText className="h-3.5 w-3.5" /> },
+    { key: "parametres", label: "Paramètres", icon: <SlidersHorizontal className="h-3.5 w-3.5" /> },
     { key: "m-cotis", label: "Mes cotisations", icon: <CalendarCheck className="h-3.5 w-3.5" />, membre: true },
     { key: "m-epargne", label: "Mes épargnes", icon: <PiggyBank className="h-3.5 w-3.5" />, membre: true },
     { key: "m-prets", label: "Mes prêts", icon: <HandCoins className="h-3.5 w-3.5" />, membre: true },
   ];
+  /* La séance en direct est masquée (SEANCE_ACTIVE = false) — l'onglet
+   * « Réunion en direct » disparaît jusqu'à réactivation. */
+  const tabsVisibles = TABS.filter((t) => SEANCE_ACTIVE || t.key !== "reunion");
+  const tabsGestion = tabsVisibles.filter((t) => !t.membre);
+  const tabsMembre = tabsVisibles.filter((t) => t.membre);
+  const renderTab = (t: (typeof TABS)[number]) => {
+    const actif = tab === t.key;
+    const badge = badges[t.key] ?? 0;
+    return (
+      <button
+        key={t.key}
+        type="button"
+        onClick={() => goTab(t.key)}
+        aria-current={actif ? "page" : undefined}
+        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-[12px] font-bold transition-all ${
+          actif
+            ? t.membre ? "border-transparent bg-[#3D6B72] text-white shadow-md" : "border-transparent bg-[#1E4D2B] text-white shadow-md"
+            : t.membre ? "border-[#C9D6CE] bg-[#F2F6F1] text-[#5C6B60] hover:border-[#3D6B72]/50" : "border-[#E5DCC0] bg-[#FBF7EA] text-[#5C6B60] hover:border-[#C89F62]/50"
+        }`}
+      >
+        {t.icon}
+        {t.label}
+        {badge > 0 && (
+          <span className={`inline-flex h-4.5 min-w-4.5 items-center justify-center rounded-full px-1 text-[10px] font-black ${actif ? "bg-[#C89F62] text-[#2B2416]" : "bg-[#A5473D] text-white"}`}>
+            {badge}
+          </span>
+        )}
+      </button>
+    );
+  };
 
   return (
     <div className="mx-auto w-full max-w-3xl px-3 pb-10 pt-3 sm:px-4">
@@ -558,7 +692,7 @@ export function MaquettePresident() {
       <div className="mb-3 flex items-center gap-2 rounded-xl border border-[#C89F62]/50 bg-[#C89F62]/12 px-3 py-2">
         <Sparkles className="h-4 w-4 shrink-0 text-[#8A6420]" />
         <p className="flex-1 text-[11.5px] font-semibold leading-snug text-[#7A5B2E]">
-          MAQUETTE v2 — espace membre du président inclus (cotiser, épargner, emprunter, prêter) · données de démonstration, aucune action réelle.
+          MAQUETTE v3 — paramétrage complet de la cantine (impayés, recouvrements, prêts, solidarité, épargne) · chaque onglet a son URL (#president/…) · données de démonstration, aucune action réelle.
         </p>
       </div>
 
@@ -587,58 +721,16 @@ export function MaquettePresident() {
         </div>
       </FcCard>
 
-      {/* ── onglets ── */}
+      {/* ── onglets — TOUS visibles (pas de coupure) ; chaque onglet a son URL :
+              #president/<onglet> — partageable, rafraîchissable, épinglable ── */}
       <nav aria-label="Sections du poste de commandement" className="sticky top-0 z-20 -mx-3 mt-3 bg-[#F6EFE2]/95 px-3 py-2 backdrop-blur sm:-mx-4 sm:px-4">
-        <div className="flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {TABS.filter((t) => !t.membre).map((t) => {
-            const actif = tab === t.key;
-            const badge = badges[t.key] ?? 0;
-            return (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => setTab(t.key)}
-                aria-current={actif ? "page" : undefined}
-                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-[12px] font-bold transition-all ${
-                  actif ? "border-transparent bg-[#1E4D2B] text-white shadow-md" : "border-[#E5DCC0] bg-[#FBF7EA] text-[#5C6B60] hover:border-[#C89F62]/50"
-                }`}
-              >
-                {t.icon}
-                {t.label}
-                {badge > 0 && (
-                  <span className={`inline-flex h-4.5 min-w-4.5 items-center justify-center rounded-full px-1 text-[10px] font-black ${actif ? "bg-[#C89F62] text-[#2B2416]" : "bg-[#A5473D] text-white"}`}>
-                    {badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-          <span aria-hidden className="inline-flex shrink-0 select-none items-center self-center px-1 text-[9px] font-black uppercase tracking-[0.16em] text-[#8A9288]">
-            Espace membre
-          </span>
-          {TABS.filter((t) => t.membre).map((t) => {
-            const actif = tab === t.key;
-            const badge = badges[t.key] ?? 0;
-            return (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => setTab(t.key)}
-                aria-current={actif ? "page" : undefined}
-                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-[12px] font-bold transition-all ${
-                  actif ? "border-transparent bg-[#3D6B72] text-white shadow-md" : "border-[#C9D6CE] bg-[#F2F6F1] text-[#5C6B60] hover:border-[#3D6B72]/50"
-                }`}
-              >
-                {t.icon}
-                {t.label}
-                {badge > 0 && (
-                  <span className="inline-flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-[#A5473D] px-1 text-[10px] font-black text-white">
-                    {badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+        <div className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-2 shadow-sm">
+          <p className="px-1 pb-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-[#8A9288]">Gestion de la cantine</p>
+          <div className="flex flex-wrap gap-1.5">{tabsGestion.map(renderTab)}</div>
+          <p className="px-1 pb-1.5 pt-2.5 text-[9px] font-black uppercase tracking-[0.16em] text-[#3D6B72]">
+            Espace membre — le président cotise, épargne et emprunte comme tous
+          </p>
+          <div className="flex flex-wrap gap-1.5">{tabsMembre.map(renderTab)}</div>
         </div>
       </nav>
 
@@ -662,11 +754,11 @@ export function MaquettePresident() {
             pointsClotures={pointsClotures}
             nbDecisions={decisions.length}
             decisions={decisions}
-            onGo={setTab}
+            onGo={goTab}
             onOuvrir={ouvrirSeance}
           />
         )}
-        {tab === "reunion" && (
+        {SEANCE_ACTIVE && tab === "reunion" && (
           <ReunionSection
             seance={seance}
             oj={oj}
@@ -698,6 +790,7 @@ export function MaquettePresident() {
           <ImpayesSection
             retards={retards}
             parMembre={parMembre}
+            regl={reglement}
             penRetard={TONTINE.penaliteRetard}
             onRelancer={relancer}
             onEscalader={escalader}
@@ -710,7 +803,7 @@ export function MaquettePresident() {
             prets={prets}
             parMembre={parMembre}
             roster={roster}
-            taux={TAUX_DEFAUT}
+            regl={reglement}
             onMaj={majPret}
             onAccorder={accorderPret}
             onRefuser={refuserPret}
@@ -722,6 +815,7 @@ export function MaquettePresident() {
             evs={evs}
             parMembre={parMembre}
             caisseSecours={caisseSecours}
+            regl={reglement}
             onProposer={proposerAide}
             onVoter={voter}
             onDecaisser={decaisser}
@@ -738,6 +832,16 @@ export function MaquettePresident() {
         )}
         {tab === "postes" && <PostesSection />}
         {tab === "journal" && <JournalSection journal={journal} />}
+        {tab === "parametres" && (
+          <ParametresSection
+            regl={reglement}
+            maj={majReglement}
+            montants={montants}
+            majMontants={majMontants}
+            onPublier={publierReglementAuxMembres}
+            onReinitialiser={reinitialiserReglement}
+          />
+        )}
         {tab === "m-cotis" && (
           <MesCotisationsSection
             moisCourant={moisCourant}
@@ -752,7 +856,8 @@ export function MaquettePresident() {
           <MesEpargnesSection
             solde={epargneSolde}
             ops={epargneOps}
-            taux={TAUX_DEFAUT}
+            taux={reglement.epargne.tauxMensuel}
+            preavisJours={reglement.epargne.preavisJours}
             onDepot={epargnerMoi}
             onRetrait={retirerEpargneMoi}
           />
@@ -763,7 +868,7 @@ export function MaquettePresident() {
             pretsPersos={pretsPersos}
             parMembre={parMembre}
             roster={roster}
-            taux={TAUX_DEFAUT}
+            regl={reglement}
             form={mesPretsForm}
             setForm={setMesPretsForm}
             onDemander={demanderPretMoi}
@@ -777,6 +882,8 @@ export function MaquettePresident() {
 
       <p className="mt-6 text-center text-[11px] leading-relaxed text-[#8A9288]">
         Maquette interactive — les noms, montants et situations sont fictifs.
+        <br />
+        v3 : le président paramètre la cantine (impayés, recouvrements, prêts, solidarité, épargne) et publie le règlement — visible par tous les membres.
         <br />
         v2 : le président est d’abord membre — il cotise, épargne, emprunte et prête comme tout le monde, sans aucun avantage.
       </p>
@@ -800,7 +907,7 @@ function CockpitSection(p: {
   if (p.pretsAttente > 0) urgentes.push({ texte: `${p.pretsAttente} demande(s) de prêt à statuer (avaliste + co-signature)`, cta: "Statuer", tab: "prets", cls: OR_CLS, icon: <ShieldCheck className="h-3.5 w-3.5" /> });
   if (p.votesEnCours > 0) urgentes.push({ texte: `Caisse de secours — ${p.votesEnCours} dossier(s) à proposer / faire voter`, cta: "Ouvrir", tab: "solidarite", cls: TE_CLS, icon: <HeartHandshake className="h-3.5 w-3.5" /> });
   if (p.candidatsEnCours > 0) urgentes.push({ texte: `${p.candidatsEnCours} candidature(s) à instruire (moralité, solvabilité)`, cta: "Instruire", tab: "adhesions", cls: "bg-[#2F6B45]/10 text-[#2F6B45] border-[#2F6B45]/25", icon: <UserPlus className="h-3.5 w-3.5" /> });
-  if (p.parolesAttente > 0) urgentes.push({ texte: `${p.parolesAttente} demande(s) de parole en attente`, cta: "Séance", tab: "reunion", cls: TE_CLS, icon: <Hand className="h-3.5 w-3.5" /> });
+  if (SEANCE_ACTIVE && p.parolesAttente > 0) urgentes.push({ texte: `${p.parolesAttente} demande(s) de parole en attente`, cta: "Séance", tab: "reunion", cls: TE_CLS, icon: <Hand className="h-3.5 w-3.5" /> });
 
   return (
     <>
@@ -824,6 +931,9 @@ function CockpitSection(p: {
           tone="#3D6B72" />
       </div>
 
+      {/* Séance du jour — MASQUÉE pour l'instant (SEANCE_ACTIVE = false, demande
+          de l'administrateur : « on les utilisera peut-être une autre fois »). */}
+      {SEANCE_ACTIVE && (
       <Block title="Séance du jour" icon={<Timer className="h-4.5 w-4.5" />}>
         {p.seance === "fermee" && (
           <div className="flex flex-col items-start gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -853,6 +963,7 @@ function CockpitSection(p: {
           </div>
         )}
       </Block>
+      )}
 
       <Block title="Actions urgentes" icon={<AlertTriangle className="h-4.5 w-4.5" />} note="Chaque action est interactive : elle notifie l’acteur concerné (trésorier, secrétaire, vice-président, membre) et s’inscrit au journal.">
         {urgentes.length === 0 ? (
