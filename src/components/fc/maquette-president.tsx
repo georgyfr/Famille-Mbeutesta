@@ -845,7 +845,7 @@ export function MaquettePresident() {
       <div className="mb-3 flex items-center gap-2 rounded-xl border border-[#C89F62]/50 bg-[#C89F62]/12 px-3 py-2">
         <Sparkles className="h-4 w-4 shrink-0 text-[#8A6420]" />
         <p className="flex-1 text-[11.5px] font-semibold leading-snug text-[#7A5B2E]">
-          MAQUETTE v7 — réglages de cotisation UNIQUEMENT dans Paramètres → Cotisations & collations : « Ajouter une somme de cotisation mensuelle » (type, somme, personnes habilitées), « Ajouter une collation » (autant de collations que souhaité : nom, somme par personne et par réunion, personnes qui la paient) et champ « Cotisation mensuelle de base » · la page d'accueil « Cotisations & collations » redevient une page de SUIVI : collecte du mois membre par membre, encaissement en un clic · section « Montants de la cantine » retirée — la part collation de chaque membre = la somme de ses collations · calendrier de remboursement EN DIRECT pour tous les prêts · formulaire de prêt simplifié (montant, avaliste, mois) · onglets cockpit, journal et adhésions masqués · prêts personnels retirés · données de démonstration, aucune action réelle.
+          MAQUETTE v8 — réglages de cotisation UNIQUEMENT dans Paramètres → Cotisations & collations : « Ajouter une somme de cotisation mensuelle » (type, somme, personnes habilitées), « Ajouter une collation » (autant de collations que souhaité : nom, somme par personne et par réunion, personnes qui la paient) et champ « Cotisation mensuelle de base » · anti-doublon : une personne déjà attribuée à un type de cotisation est signalée « déjà dans… » (type cité) et ne peut pas être cochée dans un autre — un membre ne cotise qu'UNE somme · la page d'accueil « Cotisations & collations » redevient une page de SUIVI : collecte du mois membre par membre, encaissement en un clic · section « Montants de la cantine » retirée — la part collation de chaque membre = la somme de ses collations · calendrier de remboursement EN DIRECT pour tous les prêts · formulaire de prêt simplifié (montant, avaliste, mois) · onglets cockpit, journal et adhésions masqués · prêts personnels retirés · données de démonstration, aucune action réelle.
         </p>
       </div>
 
@@ -1064,6 +1064,8 @@ export function MaquettePresident() {
 
       <p className="mt-6 text-center text-[11px] leading-relaxed text-[#8A9288]">
         Maquette interactive — les noms, montants et situations sont fictifs.
+        <br />
+        v8 : anti-doublon dans les types de cotisations — une personne déjà cochée dans un type est signalée « déjà dans « type » » (badge avec le nom du type) et ne peut pas être cochée dans un autre ; « Tout cocher » ne coche que les personnes libres ; formulaire de création ET cartes de types concernés.
         <br />
         v7 : les champs d'ajout reviennent UNIQUEMENT dans Paramètres → Cotisations & collations (« Ajouter une somme de cotisation mensuelle », « Ajouter une collation », « Cotisation mensuelle de base ») — la page d'accueil « Cotisations & collations » redevient une page de suivi (collecte du mois, encaissement membre par membre).
         <br />
@@ -2734,6 +2736,13 @@ function ParametresSection(p: {
     toast.success("Collations enregistrées", { description: "La part collation de chaque personne désignée est aussitôt mise à jour dans la page Cotisations & collations." });
   };
 
+  /* — RÈGLE DE LA CANTINE : un membre ne cotise qu'UNE seule somme mensuelle —
+   *    typeOccupant(membreId, editeId?) retourne le type (autre que celui en
+   *    cours d'édition) auquel la personne est DÉJÀ attribuée, pour le CITER
+   *    à l'écran (« déjà dans « X » ») et bloquer son cochage ailleurs. */
+  const typeOccupant = (membreId: string, editeId?: string): TypeCotisation | null =>
+    typesLocaux.find((t) => t.id !== editeId && t.membreIds.includes(membreId)) ?? null;
+
   /* — types de cotisations : le bouton OUVRIT un formulaire (type + somme +
    *    personnes habilitées) ; à la création, le type apparaît rempli ci-
    *    dessous — la validation (« Valider l'attribution ») notifie ensuite les
@@ -2911,23 +2920,44 @@ function ParametresSection(p: {
                           <ListChecks className="h-3.5 w-3.5 text-[#1E4D2B]" /> Personnes habilitées à payer cela — {formCotis.membreIds.length} sélectionnée(s)
                         </p>
                         <div className="flex gap-1.5">
-                          <Btn small tone="neutre" onClick={() => setFormCotis((x) => ({ ...x, membreIds: p.roster.map((m) => m.id) }))}>Tout cocher</Btn>
+                          <Btn small tone="neutre" onClick={() => {
+                            const libres = p.roster.filter((m) => !typeOccupant(m.id));
+                            const exclus = p.roster.length - libres.length;
+                            setFormCotis((x) => ({ ...x, membreIds: libres.map((m) => m.id) }));
+                            if (exclus > 0) toast(`${exclus} personne(s) non cochée(s)`, { description: "Elles cotisent déjà une autre somme — un membre ne cotise qu'une seule somme mensuelle." });
+                          }}>Tout cocher</Btn>
                           <Btn small tone="neutre" onClick={() => setFormCotis((x) => ({ ...x, membreIds: [] }))}>Tout décocher</Btn>
                         </div>
                       </div>
+                      <p className="mt-1.5 text-[10.5px] leading-snug text-[#8A9288]">Règle de la cantine : un membre ne cotise qu&apos;une seule somme mensuelle — une personne déjà attribuée à un autre type est signalée « déjà dans… » et ne peut pas être cochée ici.</p>
                       <div className="mt-2 max-h-52 space-y-1 overflow-y-auto rounded-xl bg-[#FBF7EA] p-2">
                         {p.roster.map((m) => {
                           const coche = formCotis.membreIds.includes(m.id);
+                          const occupant = typeOccupant(m.id);
+                          const bloque = !!occupant && !coche;
                           return (
-                            <label key={m.id} className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 transition-colors ${coche ? "bg-[#1E4D2B]/8" : "hover:bg-white"}`}>
-                              {coche ? <CheckSquare className="h-4 w-4 shrink-0 text-[#1E4D2B]" /> : <Square className="h-4 w-4 shrink-0 text-[#8A9288]" />}
+                            <label key={m.id} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors ${coche ? "bg-[#1E4D2B]/8" : bloque ? "cursor-not-allowed bg-[#C05146]/4" : "cursor-pointer hover:bg-white"}`}>
+                              {coche ? <CheckSquare className="h-4 w-4 shrink-0 text-[#1E4D2B]" /> : bloque ? <Ban className="h-4 w-4 shrink-0 text-[#C05146]" /> : <Square className="h-4 w-4 shrink-0 text-[#8A9288]" />}
                               <input
                                 type="checkbox"
                                 className="sr-only"
                                 checked={coche}
-                                onChange={() => setFormCotis((x) => ({ ...x, membreIds: coche ? x.membreIds.filter((id) => id !== m.id) : [...x.membreIds, m.id] }))}
+                                aria-disabled={bloque}
+                                onChange={() => {
+                                  if (bloque) {
+                                    toast.error("Cette personne cotise déjà ailleurs", { description: `${m.name} est déjà attribué(e) au type « ${occupant!.nom} ». Un membre ne cotise qu'une seule somme mensuelle — décochez-la d'abord dans ce type pour pouvoir la cocher ici.` });
+                                    return;
+                                  }
+                                  setFormCotis((x) => ({ ...x, membreIds: coche ? x.membreIds.filter((id) => id !== m.id) : [...x.membreIds, m.id] }));
+                                }}
                               />
-                              <span className={`text-[12px] font-semibold ${coche ? "text-[#1E4D2B]" : "text-[#2B3530]"}`}>{m.name}{m.role !== "membre" ? " — bureau" : ""}</span>
+                              <span className={`text-[12px] font-semibold ${coche ? "text-[#1E4D2B]" : bloque ? "text-[#A5473D]" : "text-[#2B3530]"}`}>{m.name}{m.role !== "membre" ? " — bureau" : ""}</span>
+                              {bloque && (
+                                <span className="ml-auto flex min-w-0 items-center gap-1 rounded-full bg-[#C89F62]/15 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-[#8A6420]">
+                                  <Ban className="h-2.5 w-2.5 shrink-0" />
+                                  <span className="truncate">déjà dans « {occupant!.nom} »</span>
+                                </span>
+                              )}
                             </label>
                           );
                         })}
@@ -2974,23 +3004,46 @@ function ParametresSection(p: {
                         <ListChecks className="h-3.5 w-3.5 text-[#1E4D2B]" /> {t.membreIds.length} membre(s) doit(vent) cotiser {fmtMontant(t.montant)}
                       </p>
                       <div className="flex gap-1.5">
-                        <Btn small tone="neutre" onClick={() => { setTypesLocaux((x) => x.map((y) => (y.id === t.id ? { ...y, membreIds: p.roster.map((m) => m.id) } : y))); marquerSale("cotisations"); }}>Tout cocher</Btn>
+                        <Btn small tone="neutre" onClick={() => {
+                          const libres = p.roster.filter((m2) => !typeOccupant(m2.id, t.id));
+                          const exclus = p.roster.length - libres.length;
+                          setTypesLocaux((x) => x.map((y) => (y.id === t.id ? { ...y, membreIds: libres.map((m2) => m2.id) } : y)));
+                          marquerSale("cotisations");
+                          if (exclus > 0) toast(`${exclus} personne(s) non cochée(s)`, { description: "Elles cotisent déjà une autre somme — un membre ne cotise qu'une seule somme mensuelle." });
+                        }}>Tout cocher</Btn>
                         <Btn small tone="neutre" onClick={() => { setTypesLocaux((x) => x.map((y) => (y.id === t.id ? { ...y, membreIds: [] } : y))); marquerSale("cotisations"); }}>Tout décocher</Btn>
                       </div>
                     </div>
+                    <p className="mt-1.5 text-[10px] leading-snug text-[#8A9288]">Un membre ne cotise qu&apos;une seule somme — une personne déjà attribuée à un autre type est signalée « déjà dans… » et ne peut pas être cochée ici.</p>
                     <div className="mt-2 max-h-52 space-y-1 overflow-y-auto rounded-xl bg-[#FBF7EA] p-2">
                       {p.roster.map((m) => {
                         const coche = t.membreIds.includes(m.id);
+                        const occupant = typeOccupant(m.id, t.id);
+                        const bloque = !!occupant && !coche;
                         return (
-                          <label key={m.id} className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 transition-colors ${coche ? "bg-[#1E4D2B]/8" : "hover:bg-white"}`}>
-                            {coche ? <CheckSquare className="h-4 w-4 shrink-0 text-[#1E4D2B]" /> : <Square className="h-4 w-4 shrink-0 text-[#8A9288]" />}
+                          <label key={m.id} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors ${coche ? "bg-[#1E4D2B]/8" : bloque ? "cursor-not-allowed bg-[#C05146]/4" : "cursor-pointer hover:bg-white"}`}>
+                            {coche ? <CheckSquare className="h-4 w-4 shrink-0 text-[#1E4D2B]" /> : bloque ? <Ban className="h-4 w-4 shrink-0 text-[#C05146]" /> : <Square className="h-4 w-4 shrink-0 text-[#8A9288]" />}
                             <input
                               type="checkbox"
                               className="sr-only"
                               checked={coche}
-                              onChange={() => { setTypesLocaux((x) => x.map((y) => (y.id === t.id ? { ...y, membreIds: coche ? y.membreIds.filter((id) => id !== m.id) : [...y.membreIds, m.id] } : y))); marquerSale("cotisations"); }}
+                              aria-disabled={bloque}
+                              onChange={() => {
+                                if (bloque) {
+                                  toast.error("Cette personne cotise déjà ailleurs", { description: `${m.name} est déjà attribué(e) au type « ${occupant!.nom} ». Un membre ne cotise qu'une seule somme mensuelle — décochez-la d'abord dans ce type pour pouvoir la cocher ici.` });
+                                  return;
+                                }
+                                setTypesLocaux((x) => x.map((y) => (y.id === t.id ? { ...y, membreIds: coche ? y.membreIds.filter((id) => id !== m.id) : [...y.membreIds, m.id] } : y)));
+                                marquerSale("cotisations");
+                              }}
                             />
-                            <span className={`text-[12px] font-semibold ${coche ? "text-[#1E4D2B]" : "text-[#2B3530]"}`}>{m.name}{m.role !== "membre" ? " — bureau" : ""}</span>
+                            <span className={`text-[12px] font-semibold ${coche ? "text-[#1E4D2B]" : bloque ? "text-[#A5473D]" : "text-[#2B3530]"}`}>{m.name}{m.role !== "membre" ? " — bureau" : ""}</span>
+                            {bloque && (
+                              <span className="ml-auto flex min-w-0 items-center gap-1 rounded-full bg-[#C89F62]/15 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-[#8A6420]">
+                                <Ban className="h-2.5 w-2.5 shrink-0" />
+                                <span className="truncate">déjà dans « {occupant!.nom} »</span>
+                              </span>
+                            )}
                           </label>
                         );
                       })}
