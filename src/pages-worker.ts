@@ -312,7 +312,7 @@ export default {
         }
         const payload = {
           subscription: s,
-          title: action === "welcome" ? "🌳 Bienvenue dans la famille !" : "🔔 Famille.Mbeutetsa — test réussi",
+          title: action === "welcome" ? "🌳 Bienvenue dans la famille !" : "🔔 MALIFE+ — test réussi",
           body:
             action === "welcome"
               ? String(b.body || "Félicitations — les alertes de la famille vous parviendront ici, même l'application fermée.")

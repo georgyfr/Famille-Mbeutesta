@@ -822,7 +822,7 @@ export function MaquettePresident() {
       <div className="mb-3 flex items-center gap-2 rounded-xl border border-[#C89F62]/50 bg-[#C89F62]/12 px-3 py-2">
         <Sparkles className="h-4 w-4 shrink-0 text-[#8A6420]" />
         <p className="flex-1 text-[11.5px] font-semibold leading-snug text-[#7A5B2E]">
-          MAQUETTE v5 — nouvelle page « Cotisations & collations » (tout le mois, membre par membre) · calendrier de remboursement EN DIRECT pour tous les prêts (espace membre ET dossiers des membres) · formulaire de prêt simplifié (montant, avaliste, mois) · onglets cockpit, journal et adhésions masqués · prêts personnels retirés · données de démonstration, aucune action réelle.
+          MAQUETTE v5 — marque « MALIFE+ » désormais affichée partout (onglet du navigateur, écran d’accueil, PWA installée, notifications push) · nouvelle page « Cotisations & collations » (tout le mois, membre par membre) · calendrier de remboursement EN DIRECT pour tous les prêts (espace membre ET dossiers des membres) · formulaire de prêt simplifié (montant, avaliste, mois) · onglets cockpit, journal et adhésions masqués · prêts personnels retirés · données de démonstration, aucune action réelle.
         </p>
       </div>
 
@@ -834,7 +834,7 @@ export function MaquettePresident() {
               <Gavel className="h-6 w-6" />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[10.5px] font-bold uppercase tracking-widest text-[#C89F62]">Table de gestion opérationnelle</p>
+              <p className="text-[10.5px] font-bold uppercase tracking-widest text-[#C89F62]">MALIFE+ · Table de gestion opérationnelle</p>
               <p className="fc-serif text-[19px] font-bold leading-tight">Poste de commandement — Président</p>
               <p className="mt-0.5 text-[12px] text-white/85">Joseph Mbeutetsa (vous) · Cantine Mbeutetsa · {TONTINE.jourLabel}</p>
             </div>

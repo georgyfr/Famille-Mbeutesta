@@ -187,7 +187,7 @@ export function LegacyApp() {
             <img src="/logo-famille.webp" alt="Armoiries de la famille Mbeutetsa" className="l-logo" />
             <div>
               <p className="l-brand-name">Famille.Mbeutetsa</p>
-              <p className="l-brand-sub">Le registre vivant</p>
+              <p className="l-brand-sub">Le registre vivant · MALIFE+</p>
             </div>
           </div>
           <button id="l-bell" type="button" className="l-bell" aria-label="Notifications">

@@ -116,7 +116,10 @@ export function AuthFlow({ onReady }: { onReady: (name: string) => void }) {
               className="h-16 w-16 rounded-2xl bg-[#FBF7EA] p-1.5 shadow-lg ring-1 ring-[#C89F62]/70"
             />
             <div>
-              <p className="fc-serif text-2xl font-bold tracking-tight">Famille.Mbeutetsa</p>
+              <p className="fc-serif text-2xl font-bold tracking-tight">
+                Famille.Mbeutetsa
+                <span className="ml-2 inline-block rounded-md border border-[#C89F62]/60 bg-[#C89F62]/15 px-1.5 py-0.5 align-middle text-[10px] font-black tracking-[0.08em] text-[#E4B96B]">MALIFE+</span>
+              </p>
               <p className="text-sm text-white/60">Espace numérique de la famille</p>
             </div>
           </div>
@@ -158,7 +161,10 @@ export function AuthFlow({ onReady }: { onReady: (name: string) => void }) {
             className="h-16 w-auto drop-shadow-sm"
           />
           <div>
-            <p className="fc-serif text-xl font-bold leading-tight text-[#1E4D2B]">Famille.Mbeutetsa</p>
+            <p className="fc-serif text-xl font-bold leading-tight text-[#1E4D2B]">
+              Famille.Mbeutetsa
+              <span className="ml-1.5 inline-block rounded-md border border-[#C89F62]/50 bg-[#C89F62]/12 px-1.5 py-0.5 align-middle text-[9.5px] font-black tracking-[0.08em] text-[#8A6420]">MALIFE+</span>
+            </p>
             <p className="text-[11px] text-[#8A9288]">Espace numérique de la famille</p>
           </div>
         </div>
