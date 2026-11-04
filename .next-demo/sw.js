@@ -18,7 +18,7 @@ self.addEventListener("activate", (event) => {
 
 // Réception du push : affichage de la notification système (même app fermée)
 self.addEventListener("push", (event) => {
-  let data = { title: "FamilleConnect", body: "Nouvelle notification familiale", url: "/" };
+  let data = { title: "MALIFE+ · FamilleConnect", body: "Nouvelle notification familiale", url: "/" };
   try {
     if (event.data) data = { ...data, ...event.data.json() };
   } catch (e) {

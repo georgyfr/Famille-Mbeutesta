@@ -1314,3 +1314,17 @@ Work Log:
 - Build statique refait (scripts/build-cloudflare.sh → .next-demo, _worker.js 10.14 KB) avec le code v5 Task 48, puis déploiement : bunx wrangler@4 pages deploy .next-demo --project-name famille-mbeutetsa --branch main --commit-dirty=true → SUCCESS, déploiement https://99f84ac2.famille-mbeutetsa.pages.dev (prod famille-mbeutetsa.pages.dev).
 - VÉRIFICATION E2E EN PRODUCTION (agent-browser) : accueil = « Cotisations & collations » (tableau membre par membre de novembre, 0 onglet cockpit/journal/adhésions) ✓ ; #president/journal|cockpit|adhesions → contenu accueil, 0 « Procès-verbal » ✓ ; m-prets = formulaire 3 champs (Montant, Avaliste, Mois) ✓ ; 100 000 + mois novembre → bandeau « mensualité ≈ 19 667, intérêts totaux ≈ 18 000 » + calendrier mois par mois (cellules 19 667) ✓ ; ZÉRO erreur console ✓.
 - CI/CD GitHub : PAT fourni et stocké dans .env.cloudflare pour les prochains workflows (non testé cette session).
+
+## Task 49 — Marque « MALIFE+ » présente partout ✅ 2026-11-04
+Contexte : vidéo de l'utilisateur (screen recording Z.ai, projet « MALIFE+ » — la tontine) : « peux tu t'assurer que malife + puisse etre aussi présent stp ». Analyse vidéo : VLM sur 10 frames + 19 frames/s (contenu identique = conversation notifications) + ASR audio (sans parole). Interprétation : co-brand MALIFE+ aux côtés de Famille.Mbeutetsa (jamais remplacé).
+Work Log:
+- layout.tsx : title « MALIFE+ · Famille.Mbeutetsa — Espace numérique de famille », description préfixée MALIFE+, applicationName=« MALIFE+ », appleWebApp.title=« MALIFE+ ».
+- manifest.webmanifest : name « MALIFE+ — Famille.Mbeutetsa — Espace numérique de famille », short_name « MALIFE+ » (nom sous l'icône installée).
+- Notifications (cœur du sujet de la vidéo) : sw.js titre par défaut « MALIFE+ · FamilleConnect » ; tests push « 🔔 MALIFE+ — test réussi » dans src/app/api/push/route.ts ET src/pages-worker.ts (relais Cloudflare _worker.js).
+- UI visible : badge doré « MALIFE+ » à côté de Famille.Mbeutetsa sur l'écran d'accueil (auth-flow ×2 : panneau sombre + panneau clair) et le header du dashboard ; en-tête du poste de commandement « MALIFE+ · TABLE DE GESTION OPÉRATIONNELLE » ; sous-titre app legacy « Le registre vivant · MALIFE+ » ; footer « MALIFE+ · Famille.Mbeutetsa © 2026 » ; bandeau v5 documente la marque.
+- Lint : 0 erreur (1 warning préexistant pages-worker.ts export anonyme).
+- ⚠️ .env.cloudflare a de NOUVEAU disparu (reset intermédiaire) — recréé (token + account ID corrects), gitignore vérifié, chmod 600.
+- Déploiement : build refait → wrangler pages deploy → https://b70247cd.famille-mbeutetsa.pages.dev (prod famille-mbeutetsa.pages.dev).
+- VÉRIFICATION PRODUCTION (curl + agent-browser) : <title> MALIFE+ · Famille.Mbeutetsa ✓ ; manifest name/short_name MALIFE+ ✓ ; sw.js MALIFE+ ✓ ; en-tête « MALIFE+ · TABLE DE GESTION OPÉRATIONNELLE » ✓ ; bandeau v5 ✓ ; zéro erreur console ✓. Écran d'accueil (screenshot) : chip doré MALIFE+ à côté de Famille.Mbeutetsa ✓.
+Stage Summary:
+- MALIFE+ est désormais visible partout : onglet du navigateur, écran d'accueil, header du dashboard, poste de commandement, app legacy, footer, PWA installée (nom d'icône) et NOTIFICATIONS système — en co-brand avec Famille.Mbeutetsa qui reste affiché.
