@@ -822,7 +822,7 @@ export function MaquettePresident() {
       <div className="mb-3 flex items-center gap-2 rounded-xl border border-[#C89F62]/50 bg-[#C89F62]/12 px-3 py-2">
         <Sparkles className="h-4 w-4 shrink-0 text-[#8A6420]" />
         <p className="flex-1 text-[11.5px] font-semibold leading-snug text-[#7A5B2E]">
-          MAQUETTE v5 — nouvelle page « Cotisations & collations » (tout le mois, membre par membre) · calendrier de remboursement EN DIRECT pour tous les prêts (espace membre ET dossiers des membres) · formulaire de prêt simplifié (montant, avaliste, mois) · onglets cockpit, journal et adhésions masqués · prêts personnels retirés · données de démonstration, aucune action réelle.
+          MAQUETTE v5 — nouvelle page « Cotisations & collations » (tout le mois, membre par membre) · calendrier de remboursement EN DIRECT pour tous les prêts (espace membre ET dossiers des membres) · formulaire de prêt simplifié (montant, avaliste, mois) · création d&apos;un type de cotisation par formulaire dédié (type, somme, personnes habilitées) · onglets cockpit, journal et adhésions masqués · prêts personnels retirés · données de démonstration, aucune action réelle.
         </p>
       </div>
 
@@ -2614,6 +2614,11 @@ function ParametresSection(p: {
   const [brouillon, setBrouillon] = useState<Reglement>(p.regl);
   const [brouillonM, setBrouillonM] = useState<ReglagesTontine>({ ...p.montants });
   const [typesLocaux, setTypesLocaux] = useState<TypeCotisation[]>(p.typesCotis);
+  /* — formulaire de création d'un type de cotisation : ouvert par le bouton
+   *    « Ajouter une somme de cotisation mensuelle » — on y renseigne le TYPE,
+   *    la SOMME et les PERSONNES HABILITÉES à payer, puis on crée. — */
+  const [formCotisOpen, setFormCotisOpen] = useState(false);
+  const [formCotis, setFormCotis] = useState<{ nom: string; montant: number; membreIds: string[] }>({ nom: "", montant: 0, membreIds: [] });
   const [sales, setSales] = useState<Record<string, boolean>>({});
   const marquerSale = (s: string) => setSales((x) => ({ ...x, [s]: true }));
 
@@ -2678,14 +2683,22 @@ function ParametresSection(p: {
     toast.success("Types de cotisations enregistrés", { description: "Validez l'attribution d'un type pour notifier les membres concernés." });
   };
 
-  /* — types de cotisations : ajouter une somme, fixer le montant, sélectionner
-   *    les membres, valider — les membres notifiés le voient aussitôt sur leur
-   *    page avec une notification. — */
-  const ajouterTypeCotis = () => {
-    const t = nouveauTypeCotisation(`Cotisation ${typesLocaux.length + 1}`);
+  /* — types de cotisations : le bouton OUVRIT un formulaire (type + somme +
+   *    personnes habilitées) ; à la création, le type apparaît rempli ci-
+   *    dessous — la validation (« Valider l'attribution ») notifie ensuite les
+   *    membres, qui voient la somme sur leur page avec une notification. — */
+  const basculerFormCotis = () => {
+    if (formCotisOpen) { setFormCotisOpen(false); return; }
+    setFormCotis({ nom: "", montant: 0, membreIds: [] });
+    setFormCotisOpen(true);
+  };
+  const creerTypeCotis = () => {
+    const nom = formCotis.nom.trim() || `Cotisation ${typesLocaux.length + 1}`;
+    const t: TypeCotisation = { ...nouveauTypeCotisation(nom), montant: formCotis.montant, membreIds: [...formCotis.membreIds] };
     setTypesLocaux((x) => [...x, t]);
+    setFormCotisOpen(false);
     marquerSale("cotisations");
-    toast("Somme de cotisation ajoutée", { description: "Fixez le montant (aujourd'hui à 0), sélectionnez les membres concernés, puis validez l'attribution." });
+    toast.success(`Type « ${nom} » créé`, { description: `${t.membreIds.length} membre(s) habilité(s) — « Valider l'attribution » ci-dessous notifiera chaque membre concerné.` });
   };
   const validerTypeCotis = (t: TypeCotisation) => {
     if (t.montant <= 0) { toast.error("Fixez d'abord la somme de ce type (aujourd'hui à 0)"); return; }
@@ -2790,7 +2803,61 @@ function ParametresSection(p: {
             note="Tout le monde ne cotise pas la même somme. Ajoutez une somme (ex. 50 000 FCFA), sélectionnez les membres qui doivent cotiser cette somme, validez — ils la verront sur leur page avec une notification. Un membre non choisi reste sur la cotisation de base."
           >
             <div className="space-y-3 p-4">
-              <Btn tone="or" onClick={ajouterTypeCotis}><Plus className="h-4 w-4" /> Ajouter une somme de cotisation mensuelle</Btn>
+              <Btn tone="or" onClick={basculerFormCotis} aria-expanded={formCotisOpen}><Plus className="h-4 w-4" /> Ajouter une somme de cotisation mensuelle</Btn>
+              {/* — FORMULAIRE DE CRÉATION : type + somme + personnes habilitées — */}
+              {formCotisOpen && (
+                <div className="rounded-2xl border-2 border-[#C89F62] bg-[#FFF9EC] p-3">
+                  <p className="flex items-center gap-1.5 text-[12px] font-black uppercase tracking-wider text-[#8A6420]"><Layers className="h-3.5 w-3.5" /> Nouveau type de cotisation mensuelle</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-[#8A9288]">Renseignez le type, la somme et les personnes habilitées à la payer — puis créez : le type apparaît rempli ci-dessous (il reste à valider pour notifier les membres).</p>
+                  <div className="mt-2.5 space-y-2.5">
+                    <div>
+                      <label htmlFor="fc-cotis-nom" className="text-[11.5px] font-bold text-[#2B3530]">Type de cotisation mensuelle</label>
+                      <input
+                        id="fc-cotis-nom"
+                        value={formCotis.nom}
+                        onChange={(e) => setFormCotis((x) => ({ ...x, nom: e.target.value }))}
+                        autoFocus
+                        placeholder="Ex. Cotisation des fondateurs"
+                        className="mt-1 w-full rounded-lg border border-[#C9B98A] bg-white px-3 py-2 text-[13px] font-semibold text-[#2B3530] placeholder:font-normal placeholder:text-[#8A9288] outline-none focus:border-[#1F5B3F]"
+                      />
+                    </div>
+                    <NumField label="Somme mensuelle que ces membres verseront" note="Le montant démarre à 0 — c'est vous qui décidez" value={formCotis.montant} fcfaPreview step={5_000}
+                      onChange={(n) => setFormCotis((x) => ({ ...x, montant: n }))} />
+                    <div className="rounded-2xl border border-[#E5DCC0] bg-white p-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="flex items-center gap-1.5 text-[11.5px] font-bold text-[#2B3530]">
+                          <ListChecks className="h-3.5 w-3.5 text-[#1E4D2B]" /> Personnes habilitées à payer cela — {formCotis.membreIds.length} sélectionnée(s)
+                        </p>
+                        <div className="flex gap-1.5">
+                          <Btn small tone="neutre" onClick={() => setFormCotis((x) => ({ ...x, membreIds: p.roster.map((m) => m.id) }))}>Tout cocher</Btn>
+                          <Btn small tone="neutre" onClick={() => setFormCotis((x) => ({ ...x, membreIds: [] }))}>Tout décocher</Btn>
+                        </div>
+                      </div>
+                      <div className="mt-2 max-h-52 space-y-1 overflow-y-auto rounded-xl bg-[#FBF7EA] p-2">
+                        {p.roster.map((m) => {
+                          const coche = formCotis.membreIds.includes(m.id);
+                          return (
+                            <label key={m.id} className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 transition-colors ${coche ? "bg-[#1E4D2B]/8" : "hover:bg-white"}`}>
+                              {coche ? <CheckSquare className="h-4 w-4 shrink-0 text-[#1E4D2B]" /> : <Square className="h-4 w-4 shrink-0 text-[#8A9288]" />}
+                              <input
+                                type="checkbox"
+                                className="sr-only"
+                                checked={coche}
+                                onChange={() => setFormCotis((x) => ({ ...x, membreIds: coche ? x.membreIds.filter((id) => id !== m.id) : [...x.membreIds, m.id] }))}
+                              />
+                              <span className={`text-[12px] font-semibold ${coche ? "text-[#1E4D2B]" : "text-[#2B3530]"}`}>{m.name}{m.role !== "membre" ? " — bureau" : ""}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Btn onClick={creerTypeCotis}><CheckCircle2 className="h-4 w-4" /> Créer ce type de cotisation</Btn>
+                    <Btn tone="neutre" onClick={() => setFormCotisOpen(false)}>Annuler</Btn>
+                  </div>
+                </div>
+              )}
               {typesLocaux.length === 0 && (
                 <p className="rounded-2xl border border-dashed border-[#C9B98A] bg-[#FBF7EA] px-3 py-2.5 text-[11.5px] leading-relaxed text-[#8A9288]">
                   Aucun type créé pour l&apos;instant — tout le monde cotise la cotisation de base. Créez un premier type pour les membres qui cotisent une autre somme.
