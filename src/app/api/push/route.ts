@@ -39,8 +39,8 @@ export async function POST(req: NextRequest) {
           url: "/",
         }
       : {
-          title: "🔔 MALIFE+ — test réussi",
-          body: `Les notifications push MALIFE+ (Famille.Mbeutetsa) fonctionnent sur « ${device.name} ». Vous ne manquerez plus aucun événement familial.`,
+          title: "🔔 Famille.Mbeutetsa — test réussi",
+          body: `Les notifications push fonctionnent sur « ${device.name} ». Vous ne manquerez plus aucun événement familial.`,
           tag: "fc-push-test",
           url: "/",
         };

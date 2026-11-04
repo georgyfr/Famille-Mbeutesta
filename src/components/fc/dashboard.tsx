@@ -143,10 +143,7 @@ export function Dashboard({
         <div className="flex items-center gap-2">
           <img src="/logo-famille.webp" alt="" className="h-9 w-9" />
           <div>
-            <p className="fc-serif text-[17px] font-bold leading-tight text-[#1E4D2B]">
-              Famille.Mbeutetsa
-              <span className="ml-1.5 inline-block rounded-md border border-[#C89F62]/50 bg-[#C89F62]/12 px-1 py-0.5 align-middle text-[9px] font-black tracking-[0.08em] text-[#8A6420]">MALIFE+</span>
-            </p>
+            <p className="fc-serif text-[17px] font-bold leading-tight text-[#1E4D2B]">Famille.Mbeutetsa</p>
             <p className="text-[11px] leading-tight text-[#8A9288]">Le registre vivant</p>
           </div>
         </div>

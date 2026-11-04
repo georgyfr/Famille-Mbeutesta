@@ -1,7 +1,7 @@
 {
-  "name": "MALIFE+ — Famille.Mbeutetsa — Espace numérique de famille",
-  "short_name": "MALIFE+",
-  "description": "MALIFE+ · L'espace numérique de la famille Mbeutetsa — registre, événements, solidarité, finances, gouvernance, mémoire et réseau.",
+  "name": "Famille.Mbeutetsa — Espace numérique de famille",
+  "short_name": "Mbeutetsa",
+  "description": "L'espace numérique de la famille Mbeutetsa — registre, événements, solidarité, finances, gouvernance, mémoire et réseau.",
   "id": "/",
   "start_url": "/",
   "scope": "/",

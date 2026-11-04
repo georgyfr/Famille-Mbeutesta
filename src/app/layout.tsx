@@ -4,10 +4,10 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
-  title: "MALIFE+ · Famille.Mbeutetsa — Espace numérique de famille",
+  title: "Famille.Mbeutetsa — Espace numérique de famille",
   description:
-    "MALIFE+ · Famille.Mbeutetsa — Plateforme de gouvernance des grandes familles africaines. Registre, événements, solidarité, finances, gouvernance, mémoire et réseau.",
-  applicationName: "MALIFE+",
+    "Plateforme de gouvernance des grandes familles africaines. Registre, événements, solidarité, finances, gouvernance, mémoire et réseau.",
+  applicationName: "Famille.Mbeutetsa",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "MALIFE+",
+    title: "Famille.Mbeutetsa",
   },
 };
 

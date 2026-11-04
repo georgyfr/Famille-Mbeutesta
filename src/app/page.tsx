@@ -27,7 +27,7 @@ export default function Page() {
         style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
       >
         <p className="pt-3">
-          MALIFE+ · Famille.Mbeutetsa © 2026 — Le registre vivant des grandes familles
+          Famille.Mbeutetsa © 2026 — Le registre vivant des grandes familles
           <DevFooterLink />
         </p>
       </footer>
