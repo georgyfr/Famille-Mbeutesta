@@ -21,7 +21,7 @@ import { toast } from "sonner";
 import {
   AlertTriangle, ArrowDownToLine, ArrowRight, ArrowUpFromLine, BadgeCheck, Ban,
   BellRing, CalendarCheck, CalendarClock, Check, CheckCircle2, CheckSquare, ChevronRight,
-  ClipboardList, Coins, FileText, Gavel, Hand, HandCoins, HandHeart,
+  ClipboardList, Coins, Coffee, FileText, Gavel, Hand, HandCoins, HandHeart,
   HeartHandshake, Hourglass, Landmark, Layers, ListChecks, Lock, MessageSquarePlus,
   Mic, Pause, Phone, PiggyBank, Play, Plus, ReceiptText, RotateCcw, Scale, ScrollText, Send,
   ShieldCheck, SlidersHorizontal, Sparkles, Square, Tag, ThumbsDown, ThumbsUp, Timer, TrendingUp,
@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { FcCard } from "./ui";
 import {
-  MEMBRES_FICTIFS, MOIS_FR, ROLE_META, TONTINE, saveMontants, TAUX_DEFAUT,
+  MEMBRES_FICTIFS, MOIS_FR, ROLE_META, TONTINE, TAUX_DEFAUT,
   detteParPersonne, potMensuel, secondSunday,
   type ReglagesTontine,
 } from "./tontine-data";
@@ -46,6 +46,10 @@ import {
   typeDuMembre, cotisationDuMembre, fmtMontant,
   type TypeCotisation,
 } from "./cotisations-types";
+import {
+  loadCollations, nouvelleCollation, saveCollations, collationDuMembre,
+  type Collation,
+} from "./collations";
 
 /* ══════════════════════════ aides ══════════════════════════ */
 
@@ -88,7 +92,7 @@ const ADHESIONS_ACTIVE = false;
  *  et chaque section a SON URL (#president/parametres/cotisations…). — */
 type SousParamKey = "cotisations" | "impayes" | "prets" | "solidarite" | "epargne" | "publication";
 const SOUS_PARAMS: { key: SousParamKey; label: string; icon: ReactNode }[] = [
-  { key: "cotisations", label: "Cotisations", icon: <Coins className="h-3.5 w-3.5" /> },
+  { key: "cotisations", label: "Cotisations & collations", icon: <Coins className="h-3.5 w-3.5" /> },
   { key: "impayes", label: "Impayés & recouvrement", icon: <BellRing className="h-3.5 w-3.5" /> },
   { key: "prets", label: "Prêts", icon: <ShieldCheck className="h-3.5 w-3.5" /> },
   { key: "solidarite", label: "Solidarité", icon: <HandHeart className="h-3.5 w-3.5" /> },
@@ -274,8 +278,13 @@ export function MaquettePresident() {
    *    attribuées aux membres ; chaque membre sélectionné voit CE montant sur
    *    sa page, avec une notification. — */
   const [typesCotis, setTypesCotis] = useState<TypeCotisation[]>([]);
-  /* — montants réels (TONTINE) : modifiés ici = modifiés pour TOUS les membres
-   *    de la page Tontine (même moteur, saveMontants). — */
+  /* — COLLATIONS : créées par le président (autant que souhaité) ; chaque
+   *    personne désignée paie la somme de CHAQUE collation qui lui est
+   *    attribuée — sa part = la somme de ses collations. — */
+  const [collations, setCollations] = useState<Collation[]>([]);
+  /* — montants de base (TONTINE) : servent de référence à la cotisation de
+   *    base ; les sommes spécifiques passent par les types de cotisations et
+   *    les collations créées dans Paramètres. — */
   const [montants, setMontants] = useState<ReglagesTontine>({ ...TONTINE });
   const [presences, setPresences] = useState<Record<string, PresenceEtat>>(initPresences);
   const [oj, setOj] = useState<OJPoint[]>([
@@ -356,6 +365,7 @@ export function MaquettePresident() {
     const t = setTimeout(() => {
       setReglement(loadReglement());
       setTypesCotis(loadTypesCotisation());
+      setCollations(loadCollations());
       setMontants({ ...TONTINE });
       const n = new Date();
       let y = n.getFullYear();
@@ -422,17 +432,6 @@ export function MaquettePresident() {
     });
     setReglSale(true);
   };
-  const majMontants = (patch: Partial<ReglagesTontine>) => {
-    saveMontants(patch); // applique aux règles réelles + persiste pour les membres
-    setMontants({ ...TONTINE });
-    const touched: string[] = [];
-    if (patch.montantCotisation != null) touched.push(`cotisation ${fcfa(TONTINE.montantCotisation)}`);
-    if (patch.montantCollation != null) touched.push(`collation ${fcfa(TONTINE.montantCollation)}`);
-    if (patch.fraisAdhesion != null) touched.push(`adhésion ${fcfa(TONTINE.fraisAdhesion)}`);
-    if (patch.penaliteRetard != null) touched.push(`pénalité de retard ${fcfa(TONTINE.penaliteRetard)}`);
-    if (patch.penaliteAbsence != null) touched.push(`pénalité d'absence ${fcfa(TONTINE.penaliteAbsence)}`);
-    if (touched.length > 0) journalAdd(`Montants réglés par le président : ${touched.join(" · ")} — visibles aussitôt par tous les membres.`, "Président (paramétrage)");
-  };
   const publierReglementAuxMembres = () => {
     const p = publierReglement(reglement, "Président Joseph Mbeutetsa");
     setReglement(p);
@@ -456,6 +455,17 @@ export function MaquettePresident() {
   const majTypesCotis = (next: TypeCotisation[], message?: string) => {
     setTypesCotis(next);
     saveTypesCotisation(next);
+    if (message) {
+      toast.success("Attribution validée", { description: message });
+      journalAdd(message, "Président (paramétrage)");
+    }
+  };
+
+  /* — collations : même mécanique — la part collation de chaque personne
+   *    désignée est mise à jour aussitôt dans la page Cotisations & collations. — */
+  const majCollations = (next: Collation[], message?: string) => {
+    setCollations(next);
+    saveCollations(next);
     if (message) {
       toast.success("Attribution validée", { description: message });
       journalAdd(message, "Président (paramétrage)");
@@ -666,11 +676,15 @@ export function MaquettePresident() {
   /* — actions : espace membre (cotiser, épargner, emprunter, prêter) — */
   const cotiserMoi = () => {
     if (cotisCeMois) { toast("Votre cotisation du mois est déjà enregistrée"); return; }
-    const total = TONTINE.montantCotisation + TONTINE.montantCollation;
+    /* mêmes règles que tous : ma cotisation (type attribué ou base) + la somme
+     * de MES collations — aucune exception. */
+    const maCotis = cotisationDuMembre(MOI, typesCotis, TONTINE.montantCotisation);
+    const mesCollations = collationDuMembre(MOI, collations);
+    const total = maCotis + mesCollations;
     setCotisCeMois(true);
     setHistoriqueCotis((prev) => [...prev, { mois: moisCourant ?? "ce mois", paye: true }]);
-    setCotisMois((prev) => ({ ...prev, [MOI]: { cotisation: true, collation: true } }));
-    toast.success("Votre cotisation est enregistrée", { description: `${fcfa(total)} (cotisation + collation) — reçu immédiat. Le total du mois monte à ${Math.min(cotisDeclarees + 1, roster.length)}/${roster.length} pour le trésorier.` });
+    setCotisMois((prev) => ({ ...prev, [MOI]: { cotisation: true, collation: mesCollations > 0 } }));
+    toast.success("Votre cotisation est enregistrée", { description: `${fcfa(total)}${mesCollations > 0 ? " (cotisation + collation)" : " (cotisation)"} — reçu immédiat. Le total du mois monte à ${Math.min(cotisDeclarees + 1, roster.length)}/${roster.length} pour le trésorier.` });
     journalAdd(`Le président a cotisé comme membre : ${fcfa(total)} pour ${moisCourant ?? "ce mois"} — mêmes règles que tous, aucune exception.`, "Président (membre)");
   };
   const epargnerMoi = (montant: number, moisIdx: number) => {
@@ -822,7 +836,7 @@ export function MaquettePresident() {
       <div className="mb-3 flex items-center gap-2 rounded-xl border border-[#C89F62]/50 bg-[#C89F62]/12 px-3 py-2">
         <Sparkles className="h-4 w-4 shrink-0 text-[#8A6420]" />
         <p className="flex-1 text-[11.5px] font-semibold leading-snug text-[#7A5B2E]">
-          MAQUETTE v5 — nouvelle page « Cotisations & collations » (tout le mois, membre par membre) · calendrier de remboursement EN DIRECT pour tous les prêts (espace membre ET dossiers des membres) · formulaire de prêt simplifié (montant, avaliste, mois) · création d&apos;un type de cotisation par formulaire dédié (type, somme, personnes habilitées) · onglets cockpit, journal et adhésions masqués · prêts personnels retirés · données de démonstration, aucune action réelle.
+          MAQUETTE v6 — nouvelle section COLLATIONS : ajoutez autant de collations que souhaité (nom, somme par personne et par réunion, personnes qui la paient) · section « Montants de la cantine » retirée — la part collation de chaque membre = la somme de ses collations · page « Cotisations & collations » membre par membre · calendrier de remboursement EN DIRECT pour tous les prêts · formulaire de prêt simplifié (montant, avaliste, mois) · création d&apos;un type de cotisation par formulaire dédié (type, somme, personnes habilitées) · onglets cockpit, journal et adhésions masqués · prêts personnels retirés · données de démonstration, aucune action réelle.
         </p>
       </div>
 
@@ -895,6 +909,7 @@ export function MaquettePresident() {
             roster={roster}
             parMembre={parMembre}
             typesCotis={typesCotis}
+            collations={collations}
             montants={montants}
             cotisMois={cotisMois}
             onEncaisser={encaisserCotis}
@@ -982,10 +997,10 @@ export function MaquettePresident() {
             regl={reglement}
             sale={reglSale}
             maj={majReglement}
-            montants={montants}
-            majMontants={majMontants}
             typesCotis={typesCotis}
             majTypesCotis={majTypesCotis}
+            collations={collations}
+            majCollations={majCollations}
             roster={roster}
             sous={sousParam}
             goSous={goSousParam}
@@ -1001,6 +1016,7 @@ export function MaquettePresident() {
             declarees={cotisDeclarees}
             attendues={roster.length}
             typesCotis={typesCotis}
+            collations={collations}
             penRetard={TONTINE.penaliteRetard}
             onCotiser={cotiserMoi}
           />
@@ -1037,6 +1053,8 @@ export function MaquettePresident() {
 
       <p className="mt-6 text-center text-[11px] leading-relaxed text-[#8A9288]">
         Maquette interactive — les noms, montants et situations sont fictifs.
+        <br />
+        v6 : section « Montants de la cantine » retirée — nouvelle section COLLATIONS dans Paramètres : ajoutez autant de collations que souhaité (nom, somme par personne et par réunion, personnes qui la paient) ; la part collation de chaque membre devient la somme de ses collations, sur sa page et dans la collecte du mois.
         <br />
         v5 : page « Cotisations & collations » (tout le mois, membre par membre, encaissement en un clic) · calendrier de remboursement EN DIRECT pour tous les prêts · formulaire de prêt simplifié (montant, avaliste, mois) · cockpit, journal et adhésions masqués.
         <br />
@@ -1932,6 +1950,9 @@ function MesCotisationsSection(p: {
    *  membre est traité EXACTEMENT comme un membre : s'il est sélectionné dans
    *  un type, c'est CETTE somme qu'il doit verser. */
   typesCotis: TypeCotisation[];
+  /** Collations fixées par le président — sa part = la somme de celles où
+   *  il est désigné, comme pour chaque membre. */
+  collations: Collation[];
   penRetard: number;
   onCotiser: () => void;
 }) {
@@ -1939,7 +1960,8 @@ function MesCotisationsSection(p: {
    * la cotisation de base — comme pour chaque membre de la cantine. */
   const monType = typeDuMembre(MOI, p.typesCotis);
   const maCotis = cotisationDuMembre(MOI, p.typesCotis, TONTINE.montantCotisation);
-  const total = maCotis + TONTINE.montantCollation;
+  const mesCollations = collationDuMembre(MOI, p.collations);
+  const total = maCotis + mesCollations;
   return (
     <>
       <FcCard className="overflow-hidden">
@@ -1957,7 +1979,7 @@ function MesCotisationsSection(p: {
           <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] px-4 py-3.5">
             <div>
               <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Ma cotisation {p.moisCourant ? `— ${p.moisCourant}` : "du mois"}</p>
-              <p className="text-[19px] font-black text-[#2B3530]">{fcfa(maCotis)} <span className="text-[12px] font-semibold text-[#8A9288]">+ {fcfa(TONTINE.montantCollation)} de collation</span></p>
+              <p className="text-[19px] font-black text-[#2B3530]">{fcfa(maCotis)}{mesCollations > 0 && <span className="text-[12px] font-semibold text-[#8A9288]"> + {fcfa(mesCollations)} de collation</span>}</p>
               <p className="mt-0.5 text-[11px] font-semibold text-[#8A6420]">
                 {monType ? `Type attribué par le bureau : ${monType.nom}` : "Cotisation de base de la cantine"}
               </p>
@@ -2385,6 +2407,10 @@ function CotisationsCollationsSection(p: {
   roster: typeof MEMBRES_FICTIFS;
   parMembre: Map<string, (typeof MEMBRES_FICTIFS)[number]>;
   typesCotis: TypeCotisation[];
+  /** Collations créées par le président — la part d'un membre = la somme
+   *  des collations qui lui sont attribuées (autant de collations que
+   *  souhaité, chacune avec ses personnes). */
+  collations: Collation[];
   montants: ReglagesTontine;
   cotisMois: Record<string, MouvementCotisMois>;
   onEncaisser: (membreId: string, quoi: "cotisation" | "collation", recu: boolean) => void;
@@ -2392,24 +2418,27 @@ function CotisationsCollationsSection(p: {
   onNotifierTresorier: () => void;
 }) {
   const cotisBase = p.montants.montantCotisation;
-  const collation = p.montants.montantCollation;
   /* — par membre : sa cotisation attendue (type attribué par le bureau, sinon
-   *    le montant de base — 0 = « à fixer par le bureau ») + son état — */
+   *    le montant de base) + sa part collation (somme de ses collations) —
+   *    0 = « à fixer par le bureau » — */
   const lignes = p.roster.map((m) => {
     const t = typeDuMembre(m.id, p.typesCotis);
     const attenduCotis = t ? t.montant : cotisBase;
+    const attenduColl = collationDuMembre(m.id, p.collations);
     const st = p.cotisMois[m.id] ?? { cotisation: false, collation: false };
     return {
       m,
       typeNom: t?.nom ?? null,
       attenduCotis,
+      attenduColl,
       st,
-      totalRecu: (st.cotisation ? attenduCotis : 0) + (st.collation ? collation : 0),
+      totalRecu: (st.cotisation ? attenduCotis : 0) + (st.collation ? attenduColl : 0),
     };
   });
   const totalCotisRecu = lignes.reduce((s, l) => s + (l.st.cotisation ? l.attenduCotis : 0), 0);
   const totalCotisAttendu = lignes.reduce((s, l) => s + l.attenduCotis, 0);
-  const totalCollRecu = lignes.reduce((s, l) => s + (l.st.collation ? collation : 0), 0);
+  const totalCollRecu = lignes.reduce((s, l) => s + (l.st.collation ? l.attenduColl : 0), 0);
+  const totalCollAttendu = lignes.reduce((s, l) => s + l.attenduColl, 0);
   const nbCotis = lignes.filter((l) => l.st.cotisation).length;
   const nbColl = lignes.filter((l) => l.st.collation).length;
   const totalRecu = totalCotisRecu + totalCollRecu;
@@ -2437,7 +2466,7 @@ function CotisationsCollationsSection(p: {
           <div className="rounded-2xl border border-[#E5DCC0] bg-white px-3.5 py-2.5">
             <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Collations du mois</p>
             <p className="text-[14px] font-black text-[#2B3530]">{fcfa(totalCollRecu)} <span className="text-[11px] font-semibold text-[#8A9288]">encaissées</span></p>
-            <p className="text-[11px] text-[#8A9288]">{collation > 0 ? `${fcfa(collation)} par membre — ${p.roster.length} membres` : "à fixer par le bureau"}</p>
+            <p className="text-[11px] text-[#8A9288]">{totalCollAttendu > 0 ? `attendu : ${fcfa(totalCollAttendu)} — ${p.collations.length} collation${p.collations.length > 1 ? "s" : ""} fixée${p.collations.length > 1 ? "s" : ""} par le bureau` : "à fixer par le bureau (Paramètres → Cotisations & collations)"}</p>
           </div>
         </div>
         <p className="mt-2.5 text-[12px] leading-relaxed text-[#5C6B60]">
@@ -2450,7 +2479,7 @@ function CotisationsCollationsSection(p: {
       </FcCard>
 
       <Block title={`Membre par membre — ${p.mois ?? "mois en cours"}`} icon={<Users className="h-4.5 w-4.5" />}
-        note="Cotisation = le montant fixé pour CE membre par le bureau (ou le montant de base). Collation = la part collation du mois. Cliquez à nouveau pour corriger une erreur de saisie.">
+        note="Cotisation = le montant fixé pour CE membre par le bureau (ou le montant de base). Collation = la somme des collations fixées pour CE membre. Cliquez à nouveau pour corriger une erreur de saisie.">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-[12px]">
             <thead>
@@ -2477,8 +2506,8 @@ function CotisationsCollationsSection(p: {
                     </Btn>
                   </td>
                   <td className="px-2.5 py-2 text-center">
-                    <p className="text-[11.5px] font-semibold text-[#2B3530]">{collation > 0 ? fmt(collation) : "—"}</p>
-                    <Btn small tone={l.st.collation ? "or" : "neutre"} disabled={collation <= 0} onClick={() => p.onEncaisser(l.m.id, "collation", !l.st.collation)}>
+                    <p className="text-[11.5px] font-semibold text-[#2B3530]">{l.attenduColl > 0 ? fmt(l.attenduColl) : "—"}</p>
+                    <Btn small tone={l.st.collation ? "or" : "neutre"} disabled={l.attenduColl <= 0} onClick={() => p.onEncaisser(l.m.id, "collation", !l.st.collation)}>
                       {l.st.collation ? <><CheckCircle2 className="h-3.5 w-3.5" /> Reçue</> : <><Hourglass className="h-3.5 w-3.5" /> En attente</>}
                     </Btn>
                   </td>
@@ -2598,10 +2627,10 @@ function ParametresSection(p: {
   /** Brouillon modifié mais pas encore publié aux membres. */
   sale: boolean;
   maj: (patch: (r: Reglement) => Reglement) => void;
-  montants: ReglagesTontine;
-  majMontants: (patch: Partial<ReglagesTontine>) => void;
   typesCotis: TypeCotisation[];
   majTypesCotis: (next: TypeCotisation[], message?: string) => void;
+  collations: Collation[];
+  majCollations: (next: Collation[], message?: string) => void;
   roster: typeof MEMBRES_FICTIFS;
   sous: SousParamKey;
   goSous: (s: SousParamKey) => void;
@@ -2612,13 +2641,18 @@ function ParametresSection(p: {
    *    son propre bouton « Enregistrer » ; si vous quittez l'onglet sans
    *    enregistrer, rien n'est perdu (voir l'effet de sécurité plus bas). — */
   const [brouillon, setBrouillon] = useState<Reglement>(p.regl);
-  const [brouillonM, setBrouillonM] = useState<ReglagesTontine>({ ...p.montants });
   const [typesLocaux, setTypesLocaux] = useState<TypeCotisation[]>(p.typesCotis);
+  const [collationsLocales, setCollationsLocales] = useState<Collation[]>(p.collations);
   /* — formulaire de création d'un type de cotisation : ouvert par le bouton
    *    « Ajouter une somme de cotisation mensuelle » — on y renseigne le TYPE,
    *    la SOMME et les PERSONNES HABILITÉES à payer, puis on crée. — */
   const [formCotisOpen, setFormCotisOpen] = useState(false);
   const [formCotis, setFormCotis] = useState<{ nom: string; montant: number; membreIds: string[] }>({ nom: "", montant: 0, membreIds: [] });
+  /* — formulaire de création d'une collation : même principe — on en crée
+   *    AUTANT qu'on veut : nom, somme par personne et par réunion, personnes
+   *    qui la paient. — */
+  const [formCollOpen, setFormCollOpen] = useState(false);
+  const [formColl, setFormColl] = useState<{ nom: string; montant: number; membreIds: string[] }>({ nom: "", montant: 0, membreIds: [] });
   const [sales, setSales] = useState<Record<string, boolean>>({});
   const marquerSale = (s: string) => setSales((x) => ({ ...x, [s]: true }));
 
@@ -2626,31 +2660,29 @@ function ParametresSection(p: {
    * réinitialisation, enregistrement d'une autre section…) — pattern React
    * « ajuster l'état pendant le rendu quand une prop change ». */
   const [dernierRegl, setDernierRegl] = useState(p.regl);
-  const [dernierMontants, setDernierMontants] = useState(p.montants);
   const [derniersTypes, setDerniersTypes] = useState(p.typesCotis);
-  if (dernierRegl !== p.regl || dernierMontants !== p.montants || derniersTypes !== p.typesCotis) {
+  const [dernieresColls, setDernieresColls] = useState(p.collations);
+  if (dernierRegl !== p.regl || derniersTypes !== p.typesCotis || dernieresColls !== p.collations) {
     setDernierRegl(p.regl);
-    setDernierMontants(p.montants);
     setDerniersTypes(p.typesCotis);
+    setDernieresColls(p.collations);
     setBrouillon(p.regl);
-    setBrouillonM({ ...p.montants });
     setTypesLocaux(p.typesCotis);
+    setCollationsLocales(p.collations);
   }
 
   /* — sécurité : en quittant l'onglet Paramètres, ce qui n'a pas été
    *    enregistré par bouton est conservé comme brouillon du bureau (sans
    *    notification — la publication reste un geste séparé). — */
-  const refs = useRef({ brouillon, brouillonM, typesLocaux, sales, maj: p.maj, majMontants: p.majMontants, majTypes: p.majTypesCotis });
+  const refs = useRef({ brouillon, typesLocaux, collationsLocales, sales, maj: p.maj, majTypes: p.majTypesCotis, majColl: p.majCollations });
   useEffect(() => {
-    refs.current = { brouillon, brouillonM, typesLocaux, sales, maj: p.maj, majMontants: p.majMontants, majTypes: p.majTypesCotis };
+    refs.current = { brouillon, typesLocaux, collationsLocales, sales, maj: p.maj, majTypes: p.majTypesCotis, majColl: p.majCollations };
   });
   useEffect(() => () => {
     const s = refs.current.sales;
     if (s.impayes || s.prets || s.solidarite || s.epargne) refs.current.maj(() => ({ ...refs.current.brouillon }));
-    if (s.cotisations) {
-      refs.current.majMontants({ ...refs.current.brouillonM });
-      refs.current.majTypes(refs.current.typesLocaux);
-    }
+    if (s.cotisations) refs.current.majTypes(refs.current.typesLocaux);
+    if (s.collations) refs.current.majColl(refs.current.collationsLocales);
   }, []);
 
   const r = brouillon;
@@ -2672,15 +2704,15 @@ function ParametresSection(p: {
     setSales((x) => ({ ...x, [s]: false }));
     toast.success(`« ${label} » enregistré`, { description: "Réglage conservé par le bureau — publiez-le pour que les membres le voient." });
   };
-  const enregistrerMontants = () => {
-    p.majMontants({ ...brouillonM });
-    setSales((x) => ({ ...x, cotisations: false }));
-    toast.success("Montants enregistrés", { description: "Ces montants sont aussitôt visibles par tous les membres dans la page Tontine." });
-  };
   const enregistrerTypes = () => {
     p.majTypesCotis(typesLocaux);
     setSales((x) => ({ ...x, cotisations: false }));
     toast.success("Types de cotisations enregistrés", { description: "Validez l'attribution d'un type pour notifier les membres concernés." });
+  };
+  const enregistrerCollations = () => {
+    p.majCollations(collationsLocales);
+    setSales((x) => ({ ...x, collations: false }));
+    toast.success("Collations enregistrées", { description: "La part collation de chaque personne désignée est aussitôt mise à jour dans la page Cotisations & collations." });
   };
 
   /* — types de cotisations : le bouton OUVRIT un formulaire (type + somme +
@@ -2717,6 +2749,37 @@ function ParametresSection(p: {
     p.majTypesCotis(next);
     marquerSale("cotisations");
     toast(`Type « ${t.nom} » supprimé`, { description: "Les membres concernés repassent à la cotisation de base." });
+  };
+
+  /* — collations : le bouton « Ajouter une collation » OUVRIT un formulaire
+   *    (nom + somme par personne + personnes qui la paient) — on en crée
+   *    AUTANT qu'on veut ; la part d'un membre = la somme de ses collations. — */
+  const basculerFormColl = () => {
+    if (formCollOpen) { setFormCollOpen(false); return; }
+    setFormColl({ nom: "", montant: 0, membreIds: [] });
+    setFormCollOpen(true);
+  };
+  const creerCollation = () => {
+    const nom = formColl.nom.trim() || `Collation ${collationsLocales.length + 1}`;
+    const c: Collation = { ...nouvelleCollation(nom), montant: formColl.montant, membreIds: [...formColl.membreIds] };
+    setCollationsLocales((x) => [...x, c]);
+    setFormCollOpen(false);
+    marquerSale("collations");
+    toast.success(`Collation « ${nom} » créée`, { description: `${c.membreIds.length} personne(s) désignée(s) — « Valider l'attribution » ci-dessous notifiera chaque personne concernée.` });
+  };
+  const validerCollation = (c: Collation) => {
+    if (c.montant <= 0) { toast.error("Fixez d'abord la somme de cette collation (aujourd'hui à 0)"); return; }
+    if (c.membreIds.length === 0) { toast.error("Sélectionnez au moins une personne qui doit payer cette collation"); return; }
+    const next = collationsLocales.map((x) => (x.id === c.id ? { ...x, valideLe: new Date().toISOString() } : x));
+    setCollationsLocales(next);
+    p.majCollations(next, `${fmtMontant(c.montant)} par réunion (« ${c.nom} ») attribués à ${c.membreIds.length} personne(s) — elles voient cette somme sur leur page avec une notification.`);
+  };
+  const supprimerCollation = (c: Collation) => {
+    const next = collationsLocales.filter((x) => x.id !== c.id);
+    setCollationsLocales(next);
+    p.majCollations(next);
+    marquerSale("collations");
+    toast(`Collation « ${c.nom} » supprimée`, { description: "La part collation des personnes désignées est mise à jour aussitôt." });
   };
 
   const publieLe = r.publieLe
@@ -2767,36 +2830,20 @@ function ParametresSection(p: {
                 }`}
               >
                 {s.icon}{s.label}
-                {sales[s.key] && <span className="h-2 w-2 shrink-0 rounded-full bg-[#C89F62]" aria-label="modifications non enregistrées" />}
+                {(sales[s.key] || (s.key === "cotisations" && sales.collations)) && <span className="h-2 w-2 shrink-0 rounded-full bg-[#C89F62]" aria-label="modifications non enregistrées" />}
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* ══════════════════ SECTION COTISATIONS ══════════════════ */}
+      {/* ══════════════════ SECTION COTISATIONS & COLLATIONS ══════════════════
+       *  L'ancienne section « Montants de la cantine » (5 champs) a été retirée
+       *  à la demande de l'administrateur : les sommes passent DÉSORMAIS par les
+       *  types de cotisations ci-dessous, et les collations par la section
+       *  « Collations » — on en crée autant qu'on veut. — */}
       {p.sous === "cotisations" && (
         <>
-          <Block
-            title="Montants de la cantine"
-            icon={<Coins className="h-4 w-4" />}
-            note="Tous les montants démarrent à 0 : c'est vous qui fixez chaque chiffre. Ces montants sont ceux de toute la cantine — chaque membre les voit dans sa page Tontine."
-          >
-            <div className="grid gap-2 p-4 sm:grid-cols-2">
-              <NumField label="Cotisation mensuelle de base" note="Pour les membres sans type particulier" value={brouillonM.montantCotisation} fcfaPreview
-                onChange={(n) => { setBrouillonM({ ...brouillonM, montantCotisation: n }); marquerSale("cotisations"); }} step={500} />
-              <NumField label="Collation" note="Par personne et par réunion" value={brouillonM.montantCollation} fcfaPreview
-                onChange={(n) => { setBrouillonM({ ...brouillonM, montantCollation: n }); marquerSale("cotisations"); }} step={250} />
-              <NumField label="Frais d'adhésion" note="Une seule fois — caisse sociale" value={brouillonM.fraisAdhesion} fcfaPreview
-                onChange={(n) => { setBrouillonM({ ...brouillonM, fraisAdhesion: n }); marquerSale("cotisations"); }} step={500} />
-              <NumField label="Pénalité de retard" note="Versée à la caisse sociale" value={brouillonM.penaliteRetard} fcfaPreview
-                onChange={(n) => { setBrouillonM({ ...brouillonM, penaliteRetard: n }); marquerSale("cotisations"); }} step={100} />
-              <NumField label="Pénalité d'absence non excusée" note="Versée à la caisse sociale" value={brouillonM.penaliteAbsence} fcfaPreview
-                onChange={(n) => { setBrouillonM({ ...brouillonM, penaliteAbsence: n }); marquerSale("cotisations"); }} step={250} />
-            </div>
-            <PiedSection sale={!!sales.cotisations} onClick={enregistrerMontants} label="Enregistrer les montants" />
-          </Block>
-
           <Block
             title="Types de cotisations mensuelles"
             icon={<Layers className="h-4 w-4" />}
@@ -2921,6 +2968,134 @@ function ParametresSection(p: {
                 </div>
               ))}
               <PiedSection sale={!!sales.cotisations} onClick={enregistrerTypes} label="Enregistrer les types de cotisations" />
+            </div>
+          </Block>
+
+          <Block
+            title="Collations"
+            icon={<Coffee className="h-4 w-4" />}
+            note="Ajoutez AUTANT de collations que la cantine en décide : chaque collation a son nom, sa somme par personne et par réunion, et les personnes qui la paient. La part d'un membre = la somme des collations qui lui sont attribuées."
+          >
+            <div className="space-y-3 p-4">
+              <Btn tone="or" onClick={basculerFormColl} aria-expanded={formCollOpen}><Plus className="h-4 w-4" /> Ajouter une collation</Btn>
+              {/* — FORMULAIRE DE CRÉATION : nom + somme + personnes qui la paient —
+                  autant de collations que souhaité : créez, puis recommencez. — */}
+              {formCollOpen && (
+                <div className="rounded-2xl border-2 border-[#C89F62] bg-[#FFF9EC] p-3">
+                  <p className="flex items-center gap-1.5 text-[12px] font-black uppercase tracking-wider text-[#8A6420]"><Coffee className="h-3.5 w-3.5" /> Nouvelle collation</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-[#8A9288]">Renseignez le nom de la collation, la somme par personne et les personnes qui la paient — puis créez. Vous pouvez ajouter autant de collations que vous voulez, l&apos;une après l&apos;autre.</p>
+                  <div className="mt-2.5 space-y-2.5">
+                    <div>
+                      <label htmlFor="fc-coll-nom" className="text-[11.5px] font-bold text-[#2B3530]">Nom de la collation</label>
+                      <input
+                        id="fc-coll-nom"
+                        value={formColl.nom}
+                        onChange={(e) => setFormColl((x) => ({ ...x, nom: e.target.value }))}
+                        autoFocus
+                        placeholder="Ex. Collation ordinaire"
+                        className="mt-1 w-full rounded-lg border border-[#C9B98A] bg-white px-3 py-2 text-[13px] font-semibold text-[#2B3530] placeholder:font-normal placeholder:text-[#8A9288] outline-none focus:border-[#1F5B3F]"
+                      />
+                    </div>
+                    <NumField label="Somme par personne et par réunion" note="Le montant démarre à 0 — c'est vous qui décidez" value={formColl.montant} fcfaPreview step={250}
+                      onChange={(n) => setFormColl((x) => ({ ...x, montant: n }))} />
+                    <div className="rounded-2xl border border-[#E5DCC0] bg-white p-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="flex items-center gap-1.5 text-[11.5px] font-bold text-[#2B3530]">
+                          <ListChecks className="h-3.5 w-3.5 text-[#1E4D2B]" /> Personnes qui paient cette collation — {formColl.membreIds.length} sélectionnée(s)
+                        </p>
+                        <div className="flex gap-1.5">
+                          <Btn small tone="neutre" onClick={() => setFormColl((x) => ({ ...x, membreIds: p.roster.map((m) => m.id) }))}>Tout cocher</Btn>
+                          <Btn small tone="neutre" onClick={() => setFormColl((x) => ({ ...x, membreIds: [] }))}>Tout décocher</Btn>
+                        </div>
+                      </div>
+                      <div className="mt-2 max-h-52 space-y-1 overflow-y-auto rounded-xl bg-[#FBF7EA] p-2">
+                        {p.roster.map((m) => {
+                          const coche = formColl.membreIds.includes(m.id);
+                          return (
+                            <label key={m.id} className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 transition-colors ${coche ? "bg-[#1E4D2B]/8" : "hover:bg-white"}`}>
+                              {coche ? <CheckSquare className="h-4 w-4 shrink-0 text-[#1E4D2B]" /> : <Square className="h-4 w-4 shrink-0 text-[#8A9288]" />}
+                              <input
+                                type="checkbox"
+                                className="sr-only"
+                                checked={coche}
+                                onChange={() => setFormColl((x) => ({ ...x, membreIds: coche ? x.membreIds.filter((id) => id !== m.id) : [...x.membreIds, m.id] }))}
+                              />
+                              <span className={`text-[12px] font-semibold ${coche ? "text-[#1E4D2B]" : "text-[#2B3530]"}`}>{m.name}{m.role !== "membre" ? " — bureau" : ""}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Btn onClick={creerCollation}><CheckCircle2 className="h-4 w-4" /> Créer cette collation</Btn>
+                    <Btn tone="neutre" onClick={() => setFormCollOpen(false)}>Annuler</Btn>
+                  </div>
+                </div>
+              )}
+              {collationsLocales.length === 0 && (
+                <p className="rounded-2xl border border-dashed border-[#C9B98A] bg-[#FBF7EA] px-3 py-2.5 text-[11.5px] leading-relaxed text-[#8A9288]">
+                  Aucune collation pour l&apos;instant — cliquez sur « Ajouter une collation » pour créer la première. Ajoutez-en autant que la cantine en décide.
+                </p>
+              )}
+              {collationsLocales.map((c) => (
+                <div key={c.id} className="rounded-2xl border-2 border-[#C9B98A] bg-[#FFFDF6] p-3">
+                  <div className="flex items-center gap-2">
+                    <Coffee className="h-4 w-4 shrink-0 text-[#8A6420]" />
+                    <input
+                      value={c.nom}
+                      onChange={(e) => { setCollationsLocales((x) => x.map((y) => (y.id === c.id ? { ...y, nom: e.target.value } : y))); marquerSale("collations"); }}
+                      aria-label="Nom de la collation"
+                      className="min-w-0 flex-1 rounded-lg border border-[#E5DCC0] bg-white px-2.5 py-1.5 text-[12.5px] font-bold text-[#2B3530] outline-none focus:border-[#1F5B3F]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => supprimerCollation(c)}
+                      aria-label={`Supprimer ${c.nom}`}
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[#A5473D]/30 bg-[#A5473D]/8 text-[#A5473D] transition hover:bg-[#A5473D]/18"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="mt-2">
+                    <NumField label="Somme par personne et par réunion" note="Le montant démarre à 0 — c'est vous qui décidez" value={c.montant} fcfaPreview step={250}
+                      onChange={(n) => { setCollationsLocales((x) => x.map((y) => (y.id === c.id ? { ...y, montant: n } : y))); marquerSale("collations"); }} />
+                  </div>
+                  <div className="mt-2 rounded-2xl border border-[#E5DCC0] bg-white p-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="flex items-center gap-1.5 text-[11.5px] font-bold text-[#2B3530]">
+                        <ListChecks className="h-3.5 w-3.5 text-[#1E4D2B]" /> {c.membreIds.length} personne(s) doit(vent) payer {fmtMontant(c.montant)} par réunion
+                      </p>
+                      <div className="flex gap-1.5">
+                        <Btn small tone="neutre" onClick={() => { setCollationsLocales((x) => x.map((y) => (y.id === c.id ? { ...y, membreIds: p.roster.map((m) => m.id) } : y))); marquerSale("collations"); }}>Tout cocher</Btn>
+                        <Btn small tone="neutre" onClick={() => { setCollationsLocales((x) => x.map((y) => (y.id === c.id ? { ...y, membreIds: [] } : y))); marquerSale("collations"); }}>Tout décocher</Btn>
+                      </div>
+                    </div>
+                    <div className="mt-2 max-h-52 space-y-1 overflow-y-auto rounded-xl bg-[#FBF7EA] p-2">
+                      {p.roster.map((m) => {
+                        const coche = c.membreIds.includes(m.id);
+                        return (
+                          <label key={m.id} className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 transition-colors ${coche ? "bg-[#1E4D2B]/8" : "hover:bg-white"}`}>
+                            {coche ? <CheckSquare className="h-4 w-4 shrink-0 text-[#1E4D2B]" /> : <Square className="h-4 w-4 shrink-0 text-[#8A9288]" />}
+                            <input
+                              type="checkbox"
+                              className="sr-only"
+                              checked={coche}
+                              onChange={() => { setCollationsLocales((x) => x.map((y) => (y.id === c.id ? { ...y, membreIds: coche ? y.membreIds.filter((id) => id !== m.id) : [...y.membreIds, m.id] } : y))); marquerSale("collations"); }}
+                            />
+                            <span className={`text-[12px] font-semibold ${coche ? "text-[#1E4D2B]" : "text-[#2B3530]"}`}>{m.name}{m.role !== "membre" ? " — bureau" : ""}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                    <Btn small onClick={() => validerCollation(c)}><CheckCircle2 className="h-3.5 w-3.5" /> Valider l&apos;attribution</Btn>
+                    {c.valideLe && <P cls={OK_CLS}><Check className="h-3 w-3" /> Attribution validée — les personnes sont notifiées</P>}
+                  </div>
+                </div>
+              ))}
+              <PiedSection sale={!!sales.collations} onClick={enregistrerCollations} label="Enregistrer les collations" />
             </div>
           </Block>
         </>
