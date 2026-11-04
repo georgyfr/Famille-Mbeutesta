@@ -1317,3 +1317,14 @@ Work Log:
 
 ## Task 49 — « MALIFE+ » — DEMANDE ANNULÉE PAR L'UTILISATEUR (erreur de prompt) ❌
 La demande « malife+ aussi présent » était une erreur ; tout a été annulé (git revert) et redéployé. L'application reste 100 % « Famille.Mbeutetsa / FamilleConnect ».
+
+## Task 50 — Formulaire dédié pour « Ajouter une somme de cotisation mensuelle » ✅ 2026-11-04
+Demande : « Lorsqu'on clique sur Ajouter une somme de cotisation mensuelle, cela doit plutôt ouvrir un nouveau champ où l'on pourra renseigner le type de cotisation mensuelle et les personnes qui sont habilitées à payer cela. »
+Work Log:
+- Avant : le clic créait immédiatement un type auto-nommé « Cotisation N » (montant 0, aucun membre) à éditer ensuite dans la carte.
+- Après : le clic OUVERT un formulaire de création dédié (panneau doré, aria-expanded sur le bouton) : champ « Type de cotisation mensuelle » (placeholder « Ex. Cotisation des fondateurs », autofocus), NumField « Somme mensuelle que ces membres verseront » (0 par défaut, pas de 5 000), liste « Personnes habilitées à payer cela — N sélectionnée(s) » (cases à cocher du roster + Tout cocher/Tout décocher, max-h-52 scroll), boutons « Créer ce type de cotisation » / « Annuler ».
+- À la création : la carte apparaît pré-remplie (nom, montant, membreIds) et le formulaire se referme + se réinitialise à chaque ouverture ; le flux « Valider l'attribution » (notification aux membres, un membre = une seule somme, retrait des autres types) est inchangé ; état formCotisOpen/formCotis local à ParametresSection ; bandeau v5 mis à jour.
+- E2E agent-browser (local + production) : formulaire ouvert au clic ✓ ; création « Cotisation des fondateurs » 50 000 + Joseph + Marie-Louise → carte pré-remplie « 2 membre(s) doit(vent) cotiser 50 000 FCFA » ✓ ; Valider → toast « Attribution validée » + chip « Attribution validée — les membres sont notifiés » + localStorage fc_cotis_types_v1 valideLe ✓ ; Annuler referme ✓ ; réouverture → champs remis à zéro ✓ ; mobile 390 px OK ✓ ; zéro erreur console ✓.
+- Déploiement : build → wrangler → https://6650374b.famille-mbeutetsa.pages.dev (prod famille-mbeutetsa.pages.dev), formulaire vérifié EN PRODUCTION.
+Stage Summary:
+- Le bouton « Ajouter une somme de cotisation mensuelle » ouvre un vrai formulaire : type de cotisation + somme + personnes habilitées à payer — la carte créée arrive pré-remplie, prête à être validée pour notifier les membres.
