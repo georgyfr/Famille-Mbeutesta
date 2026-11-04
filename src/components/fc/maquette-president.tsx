@@ -31,8 +31,9 @@ import { FcCard } from "./ui";
 import {
   MEMBRES_FICTIFS, MOIS_FR, ROLE_META, TONTINE, TAUX_DEFAUT, loadMontants, saveMontants,
   detteParPersonne, potMensuel, secondSunday,
-  type ReglagesTontine,
+  type Member, type ReglagesTontine,
 } from "./tontine-data";
+import { estMembreApp, loadMembresApplication } from "./membres-app";
 import {
   ECHELONS_LABELS, ENCAISSEUR_LABELS, EVENTS_SOLIDAIRES_LABELS, GARANTIES_LABELS,
   INTERETS_EPARGNE_LABELS, INTERETS_PRET_LABELS, MAJORITES_LABELS, METHODES_SOLIDARITE,
@@ -286,6 +287,12 @@ export function MaquettePresident() {
    *    base ; les sommes spécifiques passent par les types de cotisations et
    *    les collations créées dans Paramètres. — */
   const [montants, setMontants] = useState<ReglagesTontine>({ ...TONTINE });
+  /* — MEMBRES AJOUTÉS VIA L'APPLICATION : les personnes inscrites ou
+   *    pré-enregistrées depuis l'espace famille (annuaire réel de l'app)
+   *    rejoignent TOUTES les listes du président — habilitations de cotisation,
+   *    collations, présences, encaissements… — à côté des 10 membres de
+   *    démonstration (Task 55 : « où sont les membres que j'ai ajoutés ? »). — */
+  const [membresApp, setMembresApp] = useState<Member[]>([]);
   const [presences, setPresences] = useState<Record<string, PresenceEtat>>(initPresences);
   const [oj, setOj] = useState<OJPoint[]>([
     { id: "oj1", titre: "Appel des membres & quorum", detail: "Présences, excuses et absences du jour", genre: "appel", statut: "en_attente" },
@@ -345,8 +352,10 @@ export function MaquettePresident() {
   const [moisCourantIdx, setMoisCourantIdx] = useState<number | null>(null);
   const [mesPretsForm, setMesPretsForm] = useState({ montant: "", motif: "", garanties: "", avalisteId: "" });
 
-  /* — dérivés — */
-  const roster = MEMBRES_FICTIFS;
+  /* — dérivés —
+   *    Effectif complet : les 10 membres de démonstration + les membres AJOUTÉS
+   *    via l'application (inscrits / pré-enregistrés dans l'espace famille). */
+  const roster = useMemo(() => [...MEMBRES_FICTIFS, ...membresApp], [membresApp]);
   const parMembre = useMemo(() => new Map(roster.map((m) => [m.id, m])), [roster]);
   const nbPresent = roster.filter((m) => presences[m.id] === "present").length;
   const nbExcuse = roster.filter((m) => presences[m.id] === "excuse").length;
@@ -366,6 +375,7 @@ export function MaquettePresident() {
       setReglement(loadReglement());
       setTypesCotis(loadTypesCotisation());
       setCollations(loadCollations());
+      setMembresApp(loadMembresApplication()); // membres ajoutés via l'application (annuaire réel)
       loadMontants(); // applique les montants persistés (cotisation de base…) à TONTINE
       setMontants({ ...TONTINE });
       const n = new Date();
@@ -523,7 +533,9 @@ export function MaquettePresident() {
   const toutPresent = () => {
     setPresences((prev) => {
       const next = { ...prev };
-      roster.forEach((m) => { if (next[m.id] === "attente") next[m.id] = "present"; });
+      /* ?? "attente" : les membres ajoutés via l'application n'ont pas encore
+       * d'entrée — ils comptent comme « en attente » comme pour tous. */
+      roster.forEach((m) => { if ((next[m.id] ?? "attente") === "attente") next[m.id] = "present"; });
       return next;
     });
     toast("Tous les membres en attente sont marqués présents");
@@ -845,7 +857,7 @@ export function MaquettePresident() {
       <div className="mb-3 flex items-center gap-2 rounded-xl border border-[#C89F62]/50 bg-[#C89F62]/12 px-3 py-2">
         <Sparkles className="h-4 w-4 shrink-0 text-[#8A6420]" />
         <p className="flex-1 text-[11.5px] font-semibold leading-snug text-[#7A5B2E]">
-          MAQUETTE v8 — réglages de cotisation UNIQUEMENT dans Paramètres → Cotisations & collations : « Ajouter une somme de cotisation mensuelle » (type, somme, personnes habilitées), « Ajouter une collation » (autant de collations que souhaité : nom, somme par personne et par réunion, personnes qui la paient) et champ « Cotisation mensuelle de base » · anti-doublon : une personne déjà attribuée à un type de cotisation est signalée « déjà dans… » (type cité) et ne peut pas être cochée dans un autre — un membre ne cotise qu'UNE somme · la page d'accueil « Cotisations & collations » redevient une page de SUIVI : collecte du mois membre par membre, encaissement en un clic · section « Montants de la cantine » retirée — la part collation de chaque membre = la somme de ses collations · calendrier de remboursement EN DIRECT pour tous les prêts · formulaire de prêt simplifié (montant, avaliste, mois) · onglets cockpit, journal et adhésions masqués · prêts personnels retirés · données de démonstration, aucune action réelle.
+          MAQUETTE v9 — les membres AJOUTÉS VIA L'APPLICATION (inscrits avec leur code d'accès ou pré-enregistrés par le secrétariat) rejoignent la console du président : ils figurent dans TOUTES les listes (personnes habilitées à payer un type de cotisation, personnes qui paient une collation, présences, encaissements membre par membre), marqués « via l'app » · réglages de cotisation UNIQUEMENT dans Paramètres → Cotisations & collations : « Ajouter une somme de cotisation mensuelle » (type, somme, personnes habilitées), « Ajouter une collation » (autant de collations que souhaité) et champ « Cotisation mensuelle de base » · anti-doublon : une personne déjà attribuée à un type est signalée « déjà dans… » (type cité) et ne peut pas être cochée ailleurs — un membre ne cotise qu'UNE somme · la page d'accueil « Cotisations & collations » reste une page de SUIVI · onglets cockpit, journal et adhésions masqués · données de démonstration, aucune action réelle.
         </p>
       </div>
 
@@ -1064,6 +1076,8 @@ export function MaquettePresident() {
 
       <p className="mt-6 text-center text-[11px] leading-relaxed text-[#8A9288]">
         Maquette interactive — les noms, montants et situations sont fictifs.
+        <br />
+        v9 : les membres ajoutés via l'application (inscription avec code d'accès, pré-enregistrement du secrétariat) rejoignent la console du président — présents dans toutes les listes (habilitations de cotisation, collations, présences, encaissements) et marqués « via l'app » ; carte d'information dans Paramètres → Cotisations & collations.
         <br />
         v8 : anti-doublon dans les types de cotisations — une personne déjà cochée dans un type est signalée « déjà dans « type » » (badge avec le nom du type) et ne peut pas être cochée dans un autre ; « Tout cocher » ne coche que les personnes libres ; formulaire de création ET cartes de types concernés.
         <br />
@@ -2511,7 +2525,7 @@ function CotisationsCollationsSection(p: {
                   <td className="px-2.5 py-2">
                     <p className="font-bold text-[#2B3530]">{l.m.name}{l.m.id === MOI ? " (vous)" : ""}</p>
                     <p className="text-[10.5px] text-[#8A9288]">
-                      {ROLE_META[l.m.role]?.short ?? l.m.role}{l.typeNom ? ` · ${l.typeNom}` : l.attenduCotis > 0 ? " · montant de base" : " · à fixer par le bureau"}
+                      {ROLE_META[l.m.role]?.short ?? l.m.role}{estMembreApp(l.m) ? " · via l’app" : ""}{l.typeNom ? ` · ${l.typeNom}` : l.attenduCotis > 0 ? " · montant de base" : " · à fixer par le bureau"}
                     </p>
                   </td>
                   <td className="px-2.5 py-2 text-center">
@@ -2743,6 +2757,11 @@ function ParametresSection(p: {
   const typeOccupant = (membreId: string, editeId?: string): TypeCotisation | null =>
     typesLocaux.find((t) => t.id !== editeId && t.membreIds.includes(membreId)) ?? null;
 
+  /* — MEMBRES AJOUTÉS VIA L'APPLICATION (annuaire réel de l'app, fusionné dans
+   *    le roster par le composant parent) — repérés par leur identifiant pour
+   *    la pastille « via l’app » et la carte d'information ci-dessous. — */
+  const membresApp = p.roster.filter(estMembreApp);
+
   /* — types de cotisations : le bouton OUVRIT un formulaire (type + somme +
    *    personnes habilitées) ; à la création, le type apparaît rempli ci-
    *    dessous — la validation (« Valider l'attribution ») notifie ensuite les
@@ -2874,6 +2893,33 @@ function ParametresSection(p: {
        *  rien à ajouter depuis la page d'accueil « Cotisations & collations »). — */}
       {p.sous === "cotisations" && (
         <>
+          {/* — MEMBRES AJOUTÉS VIA L'APPLICATION : l'annuaire réel de l'app
+           *    (inscrits / pré-enregistrés) est fusionné dans toutes les listes
+           *    — réponse directe à « où sont les membres que j'ai ajoutés ? ». — */}
+          <FcCard className="border-[#3D6B72]/30 bg-[#3D6B72]/6 p-4">
+            <div className="flex items-start gap-2.5">
+              <UserPlus className="mt-0.5 h-4.5 w-4.5 shrink-0 text-[#3D6B72]" />
+              <div className="min-w-0">
+                {membresApp.length > 0 ? (
+                  <>
+                    <p className="text-[13px] font-bold text-[#2B3530]">
+                      {membresApp.length} membre{membresApp.length > 1 ? "s" : ""} ajouté{membresApp.length > 1 ? "s" : ""} via l’application — présent{membresApp.length > 1 ? "s" : ""} dans toutes les listes
+                    </p>
+                    <p className="mt-0.5 text-[11.5px] leading-snug text-[#8A9288]">
+                      {membresApp.map((m) => m.name).join(" · ")} — inscrits ou pré-enregistrés depuis l’espace famille, ils participent aux cotisations, collations, présences et encaissements comme les autres (repérables à la pastille « via l’app »).
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[13px] font-bold text-[#2B3530]">Les membres ajoutés via l’application apparaissent automatiquement ici</p>
+                    <p className="mt-0.5 text-[11.5px] leading-snug text-[#8A9288]">
+                      Toute personne inscrite avec son code d’accès ou pré-enregistrée par le secrétariat rejoint aussitôt ces listes (habilitations, collations, présences, encaissements), marquée « via l’app ». Aucun membre ajouté sur cet appareil pour l’instant.
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+          </FcCard>
           {/* — COTISATION DE BASE : la somme de TOUS les membres sans type
            *    particulier — réglage ramené ICI depuis l'accueil (les réglages
            *    de cotisation vivent UNIQUEMENT dans Paramètres). 0 = « à fixer
@@ -2952,6 +2998,9 @@ function ParametresSection(p: {
                                 }}
                               />
                               <span className={`text-[12px] font-semibold ${coche ? "text-[#1E4D2B]" : bloque ? "text-[#A5473D]" : "text-[#2B3530]"}`}>{m.name}{m.role !== "membre" ? " — bureau" : ""}</span>
+                              {estMembreApp(m) && (
+                                <span className="shrink-0 rounded-full bg-[#3D6B72]/12 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#3D6B72]">via l’app</span>
+                              )}
                               {bloque && (
                                 <span className="ml-auto flex min-w-0 items-center gap-1 rounded-full bg-[#C89F62]/15 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-[#8A6420]">
                                   <Ban className="h-2.5 w-2.5 shrink-0" />
@@ -3038,6 +3087,9 @@ function ParametresSection(p: {
                               }}
                             />
                             <span className={`text-[12px] font-semibold ${coche ? "text-[#1E4D2B]" : bloque ? "text-[#A5473D]" : "text-[#2B3530]"}`}>{m.name}{m.role !== "membre" ? " — bureau" : ""}</span>
+                            {estMembreApp(m) && (
+                              <span className="shrink-0 rounded-full bg-[#3D6B72]/12 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#3D6B72]">via l’app</span>
+                            )}
                             {bloque && (
                               <span className="ml-auto flex min-w-0 items-center gap-1 rounded-full bg-[#C89F62]/15 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-[#8A6420]">
                                 <Ban className="h-2.5 w-2.5 shrink-0" />
@@ -3109,6 +3161,9 @@ function ParametresSection(p: {
                                 onChange={() => setFormColl((x) => ({ ...x, membreIds: coche ? x.membreIds.filter((id) => id !== m.id) : [...x.membreIds, m.id] }))}
                               />
                               <span className={`text-[12px] font-semibold ${coche ? "text-[#1E4D2B]" : "text-[#2B3530]"}`}>{m.name}{m.role !== "membre" ? " — bureau" : ""}</span>
+                              {estMembreApp(m) && (
+                                <span className="shrink-0 rounded-full bg-[#3D6B72]/12 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#3D6B72]">via l’app</span>
+                              )}
                             </label>
                           );
                         })}
@@ -3172,6 +3227,9 @@ function ParametresSection(p: {
                               onChange={() => { setCollationsLocales((x) => x.map((y) => (y.id === c.id ? { ...y, membreIds: coche ? y.membreIds.filter((id) => id !== m.id) : [...y.membreIds, m.id] } : y))); marquerSale("collations"); }}
                             />
                             <span className={`text-[12px] font-semibold ${coche ? "text-[#1E4D2B]" : "text-[#2B3530]"}`}>{m.name}{m.role !== "membre" ? " — bureau" : ""}</span>
+                            {estMembreApp(m) && (
+                              <span className="shrink-0 rounded-full bg-[#3D6B72]/12 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#3D6B72]">via l’app</span>
+                            )}
                           </label>
                         );
                       })}

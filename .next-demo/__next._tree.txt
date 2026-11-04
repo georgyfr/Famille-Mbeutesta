@@ -1,3 +1,3 @@
-:HL["/_next/static/chunks/c649f571355a3223.css","style"]
+:HL["/_next/static/chunks/b8bf03381c822068.css","style"]
 :HL["/logo-famille.webp","image"]
-0:{"buildId":"aLJdES3fwy8Uc43fk6zHF","tree":{"name":"","paramType":null,"paramKey":"","hasRuntimePrefetch":false,"slots":{"children":{"name":"__PAGE__","paramType":null,"paramKey":"__PAGE__","hasRuntimePrefetch":false,"slots":null,"isRootLayout":false}},"isRootLayout":true},"staleTime":300}
+0:{"buildId":"v6AZrQ1DM-tbKlmD77pl5","tree":{"name":"","paramType":null,"paramKey":"","hasRuntimePrefetch":false,"slots":{"children":{"name":"__PAGE__","paramType":null,"paramKey":"__PAGE__","hasRuntimePrefetch":false,"slots":null,"isRootLayout":false}},"isRootLayout":true},"staleTime":300}
