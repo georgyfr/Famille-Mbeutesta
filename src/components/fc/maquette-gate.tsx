@@ -1,12 +1,13 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BASCULE MAQUETTE ⇄ APPLICATION — Famille.Mbeutetsa (v21)
+// BASCULE MAQUETTE ⇄ APPLICATION — Famille.Mbeutetsa (v22)
 //
 // Trois consoles de gestion sont présentées en vue de validation, routées par
 // le hash de l'URL :
 //   · #president/…    → Poste de commandement du Président
-//   · #secretaire/…   → Console du Secrétaire (v19)
+//   · #secretaire/…   → Console du Secrétaire (v22 : 16 onglets, moteur
+//                       d'amendes, convocations à réponse, export Excel)
 //   · #commissaire/…  → Console du Commissaire aux comptes (v19)
 // v20 : le switcher « Mon poste au bureau » du tableau de bord (application)
 // pointe vers ces hashes — quand le hash cible explicitement une console, la
@@ -117,7 +118,7 @@ export function MaquetteGate() {
         <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#C89F62]" />
         <p className="hidden min-w-0 truncate text-[11px] font-semibold sm:block">
           {mode === "maquette"
-            ? `Maquette v21 — ${CONSOLES[console_]}`
+            ? `Maquette v22 — ${CONSOLES[console_]}`
             : "Application actuelle — consultation"}
         </p>
         {/* v21 — sélecteur de consoles : VISIBLE EN PERMANENCE (maquette comme

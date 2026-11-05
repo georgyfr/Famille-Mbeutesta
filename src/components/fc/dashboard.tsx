@@ -17,6 +17,7 @@ import { LocationWizard } from "./location-wizard";
 import { TontinePage } from "./tontine-page";
 import { loadVousRole, saveVousRole } from "./tontine-bureau";
 import { ROLE_META, ROLES_BUREAU, type RoleKey } from "./tontine-data";
+import { loadNotifs, saveNotifs, type NotifBureau } from "./secretaire-bureau";
 import { formatPlace, type LocationDraft } from "@/lib/fc-geo";
 import {
   enablePush, hasDeferredInstallPrompt, promptInstall, pushState as getPushState, startInAppNotificationPolling, testPush,
@@ -336,6 +337,11 @@ function HomeTab({
       {/* Mon poste au bureau — switcher (v20) : le membre bascule vers son poste,
           la page du bureau correspondante s'ouvre immédiatement. */}
       <PosteBureauSwitcher />
+
+      {/* Notifications du bureau (v22) : le moteur du secrétariat notifie le
+          membre SUR SA PAGE — avertissements d'absences, amendes automatiques,
+          rachats, visas de la secrétaire, convocations à confirmer. */}
+      <NotificationsBureau vousName={session.user.fullName} />
 
       {/* Annonce du conseil — uniquement si une vraie annonce existe */}
       {stats?.announcement && (
@@ -808,6 +814,71 @@ function naviguerHash(cible: string): void {
   } catch {
     window.location.hash = cible;
   }
+}
+
+/* ─── Notifications du bureau (v22) — la page DU MEMBRE reçoit ce que le
+       secrétariat lui notifie : avertissements d'absences, amendes
+       automatiques, rachats, visas, convocations à confirmer. Lecture seule :
+       c'est le journal du membre ; « tout marquer lu » est le seul geste. ─── */
+function NotificationsBureau({ vousName }: { vousName: string }) {
+  const [notifs, setNotifs] = useState<NotifBureau[]>([]);
+  useEffect(() => {
+    const t0 = setTimeout(() => setNotifs(loadNotifs()), 0);
+    return () => clearTimeout(t0);
+  }, []);
+  const pourMembre = notifs.filter((n) => n.destinataire !== "president");
+  if (pourMembre.length === 0) return null;
+  const nonLues = pourMembre.filter((n) => !n.lu).length;
+  const marquerToutLu = () => {
+    saveNotifs(loadNotifs().map((n) => ({ ...n, lu: true })));
+    setNotifs(loadNotifs());
+    toast.success("Notifications marquées comme lues");
+  };
+  return (
+    <FcCard className="p-4">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="relative">
+            <Bell className="h-4 w-4 text-[#C89F62]" />
+            {nonLues > 0 && <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#A5473D] px-1 text-[9px] font-black text-white">{nonLues}</span>}
+          </span>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-[#8A9288]">Notifications du bureau</p>
+        </div>
+        {nonLues > 0 && (
+          <button type="button" onClick={marquerToutLu} className="rounded-full border border-[#C7A9CA] bg-white px-2.5 py-1 text-[10.5px] font-bold text-[#5A3E5D] hover:border-[#C89F62]">
+            Tout marquer lu
+          </button>
+        )}
+      </div>
+      <div className="space-y-2">
+        {pourMembre.slice(0, 4).map((n) => {
+          const estVous = n.destinataireNom.toLowerCase() === vousName.toLowerCase();
+          return (
+            <div key={n.id} className={`rounded-xl border px-3 py-2 ${n.lu ? "border-[#E5DCC0] bg-[#FBF7EA] opacity-80" : "border-[#C89F62]/45 bg-[#FFF8EC]"}`}>
+              <div className="flex flex-wrap items-center justify-between gap-1.5">
+                <p className="text-[12.5px] font-bold text-[#2B3530]">{n.titre}</p>
+                <span className="flex items-center gap-1">
+                  {estVous && (
+                    <span className="rounded-full bg-[#C89F62] px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wide text-[#2B2416]">Vous</span>
+                  )}
+                  {!estVous && n.destinataire !== "tous" && (
+                    <span className="rounded-full border border-[#E5DCC0] bg-white px-2 py-0.5 text-[9.5px] font-bold text-[#8A9288]">{n.destinataireNom}</span>
+                  )}
+                </span>
+              </div>
+              <p className="mt-0.5 text-[11.5px] leading-snug text-[#5C6B60]">{n.message}</p>
+              <p className="mt-0.5 text-[9.5px] font-bold uppercase tracking-wide text-[#8A9288]">{n.le} · secrétariat de la famille</p>
+            </div>
+          );
+        })}
+      </div>
+      {pourMembre.length > 4 && (
+        <p className="mt-2 px-1 text-[10.5px] font-semibold text-[#8A9288]">
+          + {pourMembre.length - 4} autre(s) notification(s) — journal complet : bandeau → console Secrétaire → onglet Notifications.
+        </p>
+      )}
+    </FcCard>
+  );
 }
 
 function PosteBureauSwitcher() {
