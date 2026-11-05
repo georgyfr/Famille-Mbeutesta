@@ -1,13 +1,16 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BASCULE MAQUETTE ⇄ APPLICATION — Famille.Mbeutetsa (v19)
+// BASCULE MAQUETTE ⇄ APPLICATION — Famille.Mbeutetsa (v20)
 //
 // Trois consoles de gestion sont présentées en vue de validation, routées par
 // le hash de l'URL :
 //   · #president/…    → Poste de commandement du Président
 //   · #secretaire/…   → Console du Secrétaire (v19)
 //   · #commissaire/…  → Console du Commissaire aux comptes (v19)
+// v20 : le switcher « Mon poste au bureau » du tableau de bord (application)
+// pointe vers ces hashes — quand le hash cible explicitement une console, la
+// vue bascule AUTOMATIQUEMENT de l'application vers la maquette.
 // L'administrateur compare la maquette à l'application actuelle ; après son
 // accord, la maquette disparaîtra et ses outils rejoindront les pages des
 // acteurs dans le projet Cloudflare.
@@ -37,6 +40,18 @@ function consoleFromHash(): ConsoleKey {
   return "president";
 }
 
+/** Le hash vise EXPLICITEMENT une console — contrairement à consoleFromHash,
+ *  qui renvoie « president » par défaut pour tout hash inconnu (#tontine,
+ *  #admin, vide…) : ce repère sert à la bascule automatique ci-dessous. */
+function hashConsoleExplicite(): boolean {
+  try {
+    const h = (window.location.hash || "").toLowerCase();
+    return h.startsWith("#president") || h.startsWith("#secretaire") || h.startsWith("#commissaire");
+  } catch {
+    return false;
+  }
+}
+
 export function MaquetteGate() {
   // Navigateurs 2015 (classe fc-legacy posée par le browser gate) : l'app Lite
   // ES5 reste maîtresse — la maquette React ne s'y affiche pas.
@@ -47,8 +62,15 @@ export function MaquetteGate() {
   const [console_, setConsole_] = useState<ConsoleKey>(() => "president");
 
   useEffect(() => {
-    const t0 = setTimeout(() => setConsole_(consoleFromHash()), 0);
-    const onHash = () => setConsole_(consoleFromHash());
+    const sync = () => {
+      setConsole_(consoleFromHash());
+      // v20 — switcher « Mon poste au bureau » : quand le hash vise une
+      // console, la vue bascule d'elle-même de l'application vers la maquette
+      // (le membre qui bascule vers son poste tombe directement dessus).
+      if (hashConsoleExplicite()) setMode("maquette");
+    };
+    const t0 = setTimeout(sync, 0);
+    const onHash = () => sync();
     window.addEventListener("hashchange", onHash);
     return () => {
       clearTimeout(t0);
@@ -64,7 +86,7 @@ export function MaquetteGate() {
         <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#C89F62]" />
         <p className="truncate text-[11px] font-semibold">
           {mode === "maquette"
-            ? `Maquette v19 — ${CONSOLES[console_]}`
+            ? `Maquette v20 — ${CONSOLES[console_]}`
             : "Application actuelle — consultation"}
         </p>
         <button

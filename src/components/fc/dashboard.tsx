@@ -8,9 +8,9 @@ import { PhoneCountrySelect, usePhoneCountry } from "./phone-country-select";
 import { FcButton, FcCard, PriorityBadge } from "./ui";
 import { roleLabel } from "./auth-flow";
 import {
-  Bell, BellOff, CalendarDays, Check, CheckCheck, Copy, Download, Fingerprint, HeartHandshake, Home, KeyRound, LifeBuoy,
-  LocateFixed, LogOut, MapPinned, Megaphone, Navigation, PiggyBank, RefreshCw, ScrollText, Send, ShieldCheck,
-  Smartphone, Trash2, UserPlus, Users, Vote, X,
+  Bell, BellOff, CalendarDays, Check, CheckCheck, Coins, Copy, Crown, Download, Eye, Fingerprint, HeartHandshake, Home,
+  KeyRound, Landmark, LifeBuoy, LocateFixed, LogOut, MapPinned, Megaphone, Navigation, PenLine, PiggyBank, RefreshCw,
+  ScrollText, Send, ShieldCheck, Smartphone, Trash2, User, UserPlus, Users, Vote, X,
 } from "lucide-react";
 import { FamilyTab } from "./family-tab";
 import { LocationWizard } from "./location-wizard";
@@ -332,6 +332,10 @@ function HomeTab({
           ici au fur et à mesure.
         </p>
       </div>
+
+      {/* Mon poste au bureau — switcher (v20) : le membre bascule vers son poste,
+          la page du bureau correspondante s'ouvre immédiatement. */}
+      <PosteBureauSwitcher />
 
       {/* Annonce du conseil — uniquement si une vraie annonce existe */}
       {stats?.announcement && (
@@ -753,6 +757,126 @@ function InstallCard({ isIOS }: { isIOS: boolean }) {
           </a>
         </p>
       )}
+    </FcCard>
+  );
+}
+
+/* ─── « Mon poste au bureau » — switcher de poste (v20) ─────────────────────
+   Demande (2026-11-05) : sur le tableau de bord, un membre doit pouvoir
+   basculer vers un poste du bureau. Le poste est enregistré dans la MÊME
+   source que la carte « Mon rôle dans la cantine » (fc_tontine_role_v1) et
+   la page du poste s'ouvre immédiatement :
+   · président / secrétaire / commissaire aux comptes → leur console dédiée
+     (#president, #secretaire, #commissaire — la porte maquette bascule toute
+     seule vers la maquette) ;
+   · vice-président / trésorier / censeur → la page Finances (tontine) qui
+     porte déjà leurs outils — une console dédiée suivra si le besoin se
+     présente ;
+   · membre simple → reste sur l'accueil (aucune page du bureau).
+   ──────────────────────────────────────────────────────────────────────── */
+
+const PAGE_POSTE: Record<RoleKey, { hash: string | null; libelle: string }> = {
+  president: { hash: "president", libelle: "Console du président" },
+  vice_president: { hash: "tontine", libelle: "Outils dans Finances" },
+  secretariat: { hash: "secretaire", libelle: "Console du secrétaire" },
+  commissaire: { hash: "commissaire", libelle: "Console du commissaire" },
+  tresorier: { hash: "tontine", libelle: "Outils dans Finances" },
+  censeur: { hash: "tontine", libelle: "Outils dans Finances" },
+  membre: { hash: null, libelle: "Vue membre" },
+};
+
+const ICONES_POSTE: Record<RoleKey, React.ReactNode> = {
+  president: <Crown className="h-4 w-4" />,
+  vice_president: <Users className="h-4 w-4" />,
+  secretariat: <PenLine className="h-4 w-4" />,
+  commissaire: <Landmark className="h-4 w-4" />,
+  tresorier: <Coins className="h-4 w-4" />,
+  censeur: <Eye className="h-4 w-4" />,
+  membre: <User className="h-4 w-4" />,
+};
+
+/** Change le hash en notifiant même à valeur identique : au retour d'une
+ *  console le hash peut déjà être #president — le hashchange natif ne se
+ *  déclenche pas alors, il faut prévenir la porte maquette à la main. */
+function naviguerHash(cible: string): void {
+  try {
+    if ((window.location.hash || "").toLowerCase() === `#${cible}`) {
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    } else {
+      window.location.hash = cible;
+    }
+  } catch {
+    window.location.hash = cible;
+  }
+}
+
+function PosteBureauSwitcher() {
+  const [role, setRole] = useState<RoleKey | null>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setRole(loadVousRole() ?? "membre"), 0);
+    return () => clearTimeout(t);
+  }, []);
+
+  const basculer = (r: RoleKey) => {
+    const page = PAGE_POSTE[r];
+    if (r !== role) {
+      setRole(r);
+      saveVousRole(r);
+      toast.success(`Poste activé : ${ROLE_META[r].label} 🎉`);
+    }
+    if (!page.hash) return; // membre simple → rien à ouvrir, reste à l'accueil
+    naviguerHash(page.hash);
+  };
+
+  const ordre: RoleKey[] = [...ROLES_BUREAU, "membre"];
+
+  return (
+    <FcCard className="p-5">
+      <div className="mb-1 flex items-center gap-2">
+        <ShieldCheck className="h-5 w-5 text-[#C89F62]" />
+        <h3 className="fc-serif text-lg font-bold text-[#1E4D2B]">Mon poste au bureau</h3>
+      </div>
+      <p className="mb-3 text-[12.5px] leading-relaxed text-[#5C6B60]">
+        Basculez vers un poste : votre rôle est enregistré et la page du poste s&apos;ouvre
+        immédiatement — console dédiée pour le président, la secrétaire et le commissaire aux comptes.
+      </p>
+      <div className="grid grid-cols-2 gap-2.5">
+        {ordre.map((r) => {
+          const meta = ROLE_META[r];
+          const actif = role === r;
+          return (
+            <button
+              key={r}
+              type="button"
+              onClick={() => basculer(r)}
+              aria-pressed={actif}
+              className={`flex min-h-[56px] items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-all active:scale-[0.98] ${
+                actif
+                  ? "border-[#C89F62] bg-[#FFF7E6] shadow-sm"
+                  : "border-[#E5DCC0] bg-[#FFFDF6] hover:border-[#C89F62]/60 hover:bg-[#FBF7EA]"
+              } ${r === "membre" ? "col-span-2" : ""}`}
+            >
+              <span
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+                style={{ background: `${meta.accent}1A` }}
+                aria-hidden="true"
+              >
+                <span style={{ color: meta.accent }}>{ICONES_POSTE[r]}</span>
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13.5px] font-bold leading-tight text-[#2B3530]">{meta.label}</span>
+                <span className="mt-0.5 block text-[11px] leading-tight text-[#8A9288]">{PAGE_POSTE[r].libelle}</span>
+              </span>
+              {actif && (
+                <span className="shrink-0 rounded-full bg-[#C89F62] px-2 py-0.5 text-[10px] font-bold text-[#2B2416]">
+                  Actuel
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
     </FcCard>
   );
 }
