@@ -9,8 +9,9 @@
 // président (qui garde ses propres copies).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import type { ReactNode, RefObject } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ChevronsUp } from "lucide-react";
 import { toast } from "sonner";
 import { FcCard } from "./ui";
 
@@ -189,9 +190,52 @@ export function useOngletsVus<T extends string>(cle: string, tab: T, badges: Par
   return (t: T) => Math.max(0, (badges[t] ?? 0) - (vus[t] ?? 0));
 }
 
-/* — navigation d'onglets : même boîte collante que le président, accent par rôle.
+/* — v25 : NAV NON COLLANTE + PASTILLE « ONGLETS » — retour des retours terrain :
+ *    la barre d'onglets COLLANTE masquait le contenu de la page dès qu'on
+ *    scollait (elle occupait jusqu'à 72 vh). Désormais la nav DÉFILE avec la
+ *    page (statique, mobile comme desktop) ; dès qu'elle sort de l'écran, une
+ *    pastille flottante discrète apparaît en bas à droite : un clic et la nav
+ *    REMONTE (scrollIntoView doux ; scroll-mt pour passer sous le bandeau). — */
+/* Le ref RESTE dans le composant (créé avec useRef là-bas) — ce hook ne gère
+ * que l'observation : true dès que l'élément n'est plus visible à l'écran. */
+export function useHorsEcranNav(ref: RefObject<HTMLElement | null>) {
+  const [horsEcran, setHorsEcran] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) setHorsEcran(!e.isIntersecting);
+    }, { threshold: 0 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [ref]);
+  return horsEcran;
+}
+
+/* pastille flottante « Onglets » — n'apparaît QUE quand la nav est sortie de
+ * l'écran (opacity + translation, pointer-events off à zéro : elle ne masque
+ * jamais le contenu, elle ne bloque jamais un clic). */
+export function PastilleOnglets({ visible, couleurPoint, onClick }: { visible: boolean; couleurPoint: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Revenir aux onglets"
+      aria-hidden={!visible}
+      tabIndex={visible ? 0 : -1}
+      className={`fixed bottom-4 right-4 z-40 inline-flex items-center gap-1.5 rounded-full border-2 border-[#B8A87E] bg-white py-2 pl-2.5 pr-3.5 text-[12px] font-bold text-[#2A4A3A] shadow-[0_8px_24px_rgba(42,74,58,0.28)] transition-all duration-200 sm:bottom-16 ${visible ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-3 opacity-0"}`}
+    >
+      <span aria-hidden className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: couleurPoint }} />
+      <ChevronsUp aria-hidden className="h-3.5 w-3.5" />
+      Onglets
+    </button>
+  );
+}
+
+/* — navigation d'onglets : accent par rôle.
  *    v24 : les onglets peuvent être RÉPARTIS EN SECTIONS (groupes libellés,
- *    chacun teinté de sa couleur) au lieu d'un seul rang mélangé. — */
+ *    chacun teinté de sa couleur) au lieu d'un seul rang mélangé.
+ *    v25 : nav STATIQUE (plus de sticky) + pastille « Onglets » de retour. — */
 export type OngletItem<T extends string> = { key: T; label: string; icon: ReactNode; badge?: number };
 export type GroupeOnglets<T extends string> = { label: string; note?: string; couleur: string; onglets: OngletItem<T>[] };
 
@@ -202,11 +246,15 @@ export function NavOnglets<T extends string>({ ariaLabel, etiquette, etiquetteCo
   actif: T; goTab: (t: T) => void;
   render: (t: OngletItem<T>, actif: boolean) => ReactNode;
 }) {
+  const navRef = useRef<HTMLElement | null>(null);
+  const navHorsEcran = useHorsEcranNav(navRef);
+  const remonterOnglets = () => navRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   return (
-    /* v24 : MOBILE = nav STATIQUE (les 4 sections défilent avec la page — une
-     *    barre collante de 4 sections dévorerait l'écran du téléphone) ;
-     *    sm+ = COLLANTE avec garde-fou max-h + défilement interne. */
-    <nav aria-label={ariaLabel} className="fc-scroll relative -mx-3 mt-3 bg-[#F6EFE2]/95 px-3 py-2 backdrop-blur sm:sticky sm:top-0 sm:z-20 sm:-mx-4 sm:max-h-[72vh] sm:overflow-y-auto sm:overscroll-contain sm:px-4">
+    <>
+    {/* v25 : nav STATIQUE sur tous les écrans — elle défile avec la page et
+     *    ne reste plus figée au-dessus du contenu ; scroll-mt pour que la
+     *    pastille la fasse remonter SOUS le bandeau des consoles. */}
+    <nav ref={navRef} aria-label={ariaLabel} className="fc-scroll relative -mx-3 mt-3 bg-[#F6EFE2]/95 px-3 py-2 backdrop-blur scroll-mt-14 sm:-mx-4 sm:px-4">
       <div className="rounded-2xl border-2 border-[#B8A87E] bg-white p-2 shadow-[0_10px_30px_rgba(42,74,58,0.14)] sm:p-2.5">
         <p className="flex items-center gap-1.5 px-1 pb-2 text-[10px] font-black uppercase tracking-[0.16em]" style={{ color: couleurPoint }}>
           <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: couleurPoint }} />
@@ -241,6 +289,8 @@ export function NavOnglets<T extends string>({ ariaLabel, etiquette, etiquetteCo
         )}
       </div>
     </nav>
+    <PastilleOnglets visible={navHorsEcran} couleurPoint={couleurPoint} onClick={remonterOnglets} />
+    </>
   );
 }
 

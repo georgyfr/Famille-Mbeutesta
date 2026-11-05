@@ -28,7 +28,7 @@ import {
   Trash2, Ticket, Undo2, UserCheck, UserPlus, Users, Vote, Wallet, XCircle,
 } from "lucide-react";
 import { FcCard } from "./ui";
-import { useOngletsVus } from "./maquette-ui";
+import { useOngletsVus, useHorsEcranNav, PastilleOnglets } from "./maquette-ui";
 import {
   MEMBRES_FICTIFS, MOIS_FR, ROLE_META, TONTINE, TAUX_DEFAUT, loadMontants, saveMontants,
   detteParPersonne, potMensuelDynamique, secondSunday,
@@ -984,6 +984,12 @@ export function MaquettePresident() {
     );
   };
 
+  /* v25 : nav d'onglets NON collante — elle défile avec la page ; la pastille
+   *    flottante la fait remonter dès qu'elle sort de l'écran. */
+  const navRef = useRef<HTMLElement | null>(null);
+  const navHorsEcran = useHorsEcranNav(navRef);
+  const remonterOnglets = () => navRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+
   return (
     <div className="mx-auto w-full max-w-3xl px-3 pb-10 pt-3 sm:px-4">
       {/* ── en-tête du poste ── */}
@@ -1012,8 +1018,10 @@ export function MaquettePresident() {
 
       {/* ── onglets — TOUS visibles (pas de coupure), GRANDS et CONTRASTÉS :
               arrière-plan blanc, bordure épaisse, texte 14px — chaque onglet a
-              son URL : #president/<onglet> — partageable, rafraîchissable ── */}
-      <nav aria-label="Sections du poste de commandement" className="sticky top-0 z-20 -mx-3 mt-3 bg-[#F6EFE2]/95 px-3 py-2 backdrop-blur sm:-mx-4 sm:px-4">
+              son URL : #president/<onglet> — partageable, rafraîchissable.
+              v25 : nav STATIQUE (plus de sticky — elle ne masque plus le
+              contenu en scollant) + pastille « Onglets » pour la remonter ── */}
+      <nav ref={navRef} aria-label="Sections du poste de commandement" className="relative -mx-3 mt-3 bg-[#F6EFE2]/95 px-3 py-2 backdrop-blur scroll-mt-14 sm:-mx-4 sm:px-4">
         <div className="rounded-2xl border-2 border-[#B8A87E] bg-white p-2.5 shadow-[0_10px_30px_rgba(42,74,58,0.14)]">
           {/* v17 : DEUX FAMILLES DE COULEURS — vert = gestion du bureau,
            *    sarcelle = espace membre personnel ; le président voit du premier
@@ -1028,6 +1036,7 @@ export function MaquettePresident() {
           <div className="flex flex-wrap gap-2">{tabsMembre.map(renderTab)}</div>
         </div>
       </nav>
+      <PastilleOnglets visible={navHorsEcran} couleurPoint="#1E4D2B" onClick={remonterOnglets} />
 
       {/* ── contenu ── */}
       <div className="mt-3 space-y-3.5">
