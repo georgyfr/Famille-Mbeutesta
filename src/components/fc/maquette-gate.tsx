@@ -118,7 +118,7 @@ export function MaquetteGate() {
         <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#C89F62]" />
         <p className="hidden min-w-0 truncate text-[11px] font-semibold sm:block">
           {mode === "maquette"
-            ? `Maquette v23 — ${CONSOLES[console_]}`
+            ? `Maquette v24 — ${CONSOLES[console_]}`
             : "Application actuelle — consultation"}
         </p>
         {/* v21 — sélecteur de consoles : VISIBLE EN PERMANENCE (maquette comme

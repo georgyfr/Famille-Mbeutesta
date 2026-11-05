@@ -10,7 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { FcCard } from "./ui";
 
@@ -154,22 +154,91 @@ export function EnteteConsole({ accent, accentClair, surtitre, titre, sousTitre,
   );
 }
 
-/* — navigation d'onglets : même boîte collante que le président, accent par rôle — */
-export function NavOnglets<T extends string>({ ariaLabel, etiquette, couleurPoint, onglets, actif, goTab, render }: {
-  ariaLabel: string; etiquette: string; couleurPoint: string;
-  onglets: { key: T; label: string; icon: ReactNode; badge?: number }[];
+/* — v24 : MÉMOIRE DES BADGES VUS — le chiffre d'un onglet indique qu'une action
+ *    a été menée ; quand on OUVRE l'onglet, le chiffre doit disparaître. On
+ *    mémorise donc (localStorage, une clé par console) l'effectif déjà vu de
+ *    chaque onglet : le badge n'affiche plus que le NOUVEAU (delta = actuel −
+ *    vu). Une nouvelle action fait réapparaître le chiffre, ouvrir l'onglet le
+ *    referme — exactement le réflexe « naturel » attendu. — */
+export function useOngletsVus<T extends string>(cle: string, tab: T, badges: Partial<Record<T, number>>, autorise = true) {
+  const [vus, setVus] = useState<Partial<Record<T, number>>>({});
+  useEffect(() => {
+    /* différé (pattern du projet) : on lit localStorage HORS du rendu */
+    const t0 = setTimeout(() => {
+      try { setVus(JSON.parse(window.localStorage.getItem(cle) || "{}")); } catch { /* rien */ }
+    }, 0);
+    return () => clearTimeout(t0);
+  }, [cle]);
+  useEffect(() => {
+    /* autorise = drapeau « données initiales chargées + onglet synchronisé
+     * avec l'URL » : sans lui, le premier enregistrement écraserait la mémoire
+     * avec des compteurs vides (artefact du montage). */
+    if (!autorise) return;
+    const n = badges[tab];
+    if (n == null) return;
+    const t0 = setTimeout(() => {
+      setVus((v) => {
+        if (v[tab] === n) return v;
+        const next = { ...v, [tab]: n };
+        try { window.localStorage.setItem(cle, JSON.stringify(next)); } catch { /* rien */ }
+        return next;
+      });
+    }, 0);
+    return () => clearTimeout(t0);
+  }, [tab, badges, cle, autorise]);
+  return (t: T) => Math.max(0, (badges[t] ?? 0) - (vus[t] ?? 0));
+}
+
+/* — navigation d'onglets : même boîte collante que le président, accent par rôle.
+ *    v24 : les onglets peuvent être RÉPARTIS EN SECTIONS (groupes libellés,
+ *    chacun teinté de sa couleur) au lieu d'un seul rang mélangé. — */
+export type OngletItem<T extends string> = { key: T; label: string; icon: ReactNode; badge?: number };
+export type GroupeOnglets<T extends string> = { label: string; note?: string; couleur: string; onglets: OngletItem<T>[] };
+
+export function NavOnglets<T extends string>({ ariaLabel, etiquette, etiquetteCourte, couleurPoint, onglets, groupes, actif, goTab, render }: {
+  ariaLabel: string; etiquette: string; etiquetteCourte?: string; couleurPoint: string;
+  onglets?: OngletItem<T>[];
+  groupes?: GroupeOnglets<T>[];
   actif: T; goTab: (t: T) => void;
-  render: (t: { key: T; label: string; icon: ReactNode; badge?: number }, actif: boolean) => ReactNode;
+  render: (t: OngletItem<T>, actif: boolean) => ReactNode;
 }) {
   return (
-    <nav aria-label={ariaLabel} className="sticky top-0 z-20 -mx-3 mt-3 bg-[#F6EFE2]/95 px-3 py-2 backdrop-blur sm:-mx-4 sm:px-4">
-      <div className="rounded-2xl border-2 border-[#B8A87E] bg-white p-2.5 shadow-[0_10px_30px_rgba(42,74,58,0.14)]">
+    /* v24 : MOBILE = nav STATIQUE (les 4 sections défilent avec la page — une
+     *    barre collante de 4 sections dévorerait l'écran du téléphone) ;
+     *    sm+ = COLLANTE avec garde-fou max-h + défilement interne. */
+    <nav aria-label={ariaLabel} className="fc-scroll relative -mx-3 mt-3 bg-[#F6EFE2]/95 px-3 py-2 backdrop-blur sm:sticky sm:top-0 sm:z-20 sm:-mx-4 sm:max-h-[72vh] sm:overflow-y-auto sm:overscroll-contain sm:px-4">
+      <div className="rounded-2xl border-2 border-[#B8A87E] bg-white p-2 shadow-[0_10px_30px_rgba(42,74,58,0.14)] sm:p-2.5">
         <p className="flex items-center gap-1.5 px-1 pb-2 text-[10px] font-black uppercase tracking-[0.16em]" style={{ color: couleurPoint }}>
-          <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: couleurPoint }} /> {etiquette}
+          <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: couleurPoint }} />
+          <span className="sm:hidden">{etiquetteCourte ?? etiquette}</span>
+          <span className="hidden sm:inline">{etiquette}</span>
         </p>
-        <div className="flex flex-wrap gap-2">
-          {onglets.map((t) => render(t, actif === t.key))}
-        </div>
+        {groupes ? (
+          <div className="space-y-2">
+            {groupes.map((g) => (
+              <div key={g.label} className="rounded-xl border px-2 pb-2 pt-1.5 sm:px-2.5 sm:pb-2.5 sm:pt-2" style={{ borderColor: `${g.couleur}4D`, backgroundColor: `${g.couleur}0A` }}>
+                <p className="flex items-center gap-1.5 px-0.5 pb-1.5 text-[9.5px] font-black uppercase tracking-[0.14em] sm:pb-2" style={{ color: g.couleur }}>
+                  <span aria-hidden className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: g.couleur }} />
+                  {g.label}
+                  <span className="ml-auto rounded-full px-1.5 py-0.5 text-[9px] font-bold normal-case tracking-normal" style={{ backgroundColor: `${g.couleur}1A` }}>
+                    {g.onglets.length} onglet{g.onglets.length > 1 ? "s" : ""}
+                  </span>
+                </p>
+                {g.note && <p className="hidden px-0.5 pb-2 text-[10.5px] leading-snug sm:block" style={{ color: g.couleur }}>{g.note}</p>}
+                {/* v24 mobile : rangée à DÉFILEMENT HORIZONTAL (une ligne par
+                 *    section — la barre collante ne dévore plus l'écran) ; dès
+                 *    sm, retour à l'enveloppement classique. */}
+                <div className="fc-scroll -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 *:shrink-0 sm:mx-0 sm:flex-wrap sm:gap-2 sm:overflow-x-visible sm:px-0 sm:pb-0">
+                  {g.onglets.map((t) => render(t, actif === t.key))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="fc-scroll -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 *:shrink-0 sm:mx-0 sm:flex-wrap sm:gap-2 sm:overflow-x-visible sm:px-0 sm:pb-0">
+            {(onglets ?? []).map((t) => render(t, actif === t.key))}
+          </div>
+        )}
       </div>
     </nav>
   );

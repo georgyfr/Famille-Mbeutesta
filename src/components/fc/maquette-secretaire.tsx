@@ -1,11 +1,12 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MAQUETTE v23 — CONSOLE DU SECRÉTAIRE (Tontine Mbeutetsa)
+// MAQUETTE v24 — CONSOLE DU SECRÉTAIRE (Tontine Mbeutetsa)
 //
 // Françoise Mbeutetsa tient la MÉMOIRE et désormais AUSSI la GESTION de la
 // tontine (demande du président : le président peut ne pas maîtriser l'outil).
-// VINGT onglets, chacun avec sa PROPRE URL (#secretaire/<onglet>) :
+// VINGT onglets répartis en 4 SECTIONS, chacun avec sa PROPRE URL
+// (#secretaire/<onglet>) :
 //   1.  #secretaire/pv           — Procès-verbaux
 //   2.  #secretaire/seances      — Séances & ordres du jour
 //   3.  #secretaire/presences    — Présences (appel auto-sauvegardé + moteur)
@@ -33,6 +34,20 @@
 //                                  et s'attribue un prêt, registre partagé — v23)
 //   16. #secretaire/parametres   — Paramètres du secrétariat
 //
+// v24 — LES 4 SECTIONS DE LA NAVIGATION (fini le rang unique « mélangé ») :
+//   • Mémoire de la réunion (violet)     : pv · séances · présences ·
+//     convocations · décisions · archives
+//   • Gestion de la tontine (or)         : cotisations · épargnes · prêts ·
+//     solidarité · registre · taux
+//   • Membres & suivi (terracotta)       : membres · notifications · statistiques
+//   • Mon espace membre & outils (sarcelle) : MES cotisations/épargnes/prêts +
+//     CRÉER UN MEMBRE (onglet VERT plein, identifiable au premier coup d'œil)
+//     + paramètres.
+// v24 — BADGES INTELLIGENTS : le chiffre d'un onglet indique qu'une action a
+//   été menée ; OUVRIR l'onglet referme le chiffre (mémoire « vu » par
+//   console), il ne revient que pour du NOUVEAU. Les notifications, elles,
+//   sont marquées LUES à l'ouverture de leur onglet (état de lecture réel),
+//   et cliquer le titre d'une notification la marque lue.
 // MOTEUR AUTOMATIQUE (v22) : chaque clic d'appel est ENREGISTRÉ AUTOMATIQUEMENT
 // (localStorage) et déclenche les règles configurées dans Paramètres :
 // avertissement au membre dès N absences, AMENDE automatique (consécutives,
@@ -50,7 +65,7 @@ import {
   Ticket, Trash2, UserCheck, Users, Wallet, X,
 } from "lucide-react";
 import {
-  Block, Btn, BtnConfirme, P, KpiCard, EnteteConsole, NavOnglets,
+  Block, Btn, BtnConfirme, P, KpiCard, EnteteConsole, NavOnglets, useOngletsVus,
   fmt, fcfa, heure, nid, dateCourte, OK_CLS, OR_CLS, RJ_CLS, TE_CLS, VI_CLS, toast,
 } from "./maquette-ui";
 import { MEMBRES_FICTIFS, MOIS_FR, ROLE_META, TONTINE, secondSunday } from "./tontine-data";
@@ -108,6 +123,63 @@ const TABS: { key: TabKey; label: string; icon: ReactNode }[] = [
   { key: "parametres", label: "Paramètres", icon: <Settings className="h-3.5 w-3.5" /> },
 ];
 
+/* — v24 : les 20 onglets répartis en 4 SECTIONS (l'ordre = le quotidien du
+ *    secrétariat) ; chaque section a SA couleur, l'espace membre se reconnaît
+ *    au premier coup d'œil et « Créer un membre » est le seul onglet VERT. — */
+const GROUPES: { label: string; note?: string; couleur: string; keys: TabKey[] }[] = [
+  {
+    label: "Mémoire de la réunion",
+    couleur: "#6E4B71",
+    keys: ["pv", "seances", "presences", "convocations", "decisions", "archives"],
+  },
+  {
+    label: "Gestion de la tontine",
+    couleur: "#8A6420",
+    keys: ["cotisations", "epargnes", "prets", "solidarite", "registre", "taux"],
+  },
+  {
+    label: "Membres & suivi",
+    couleur: "#A5473D",
+    keys: ["membres", "notifications", "statistiques"],
+  },
+  {
+    label: "Mon espace membre & outils",
+    couleur: "#3D6B72",
+    note: "Françoise est aussi une membre : elle cotise, épargne et emprunte comme tout le monde — et crée les nouveaux membres par code d'invitation.",
+    keys: ["m-cotis", "m-epargne", "m-prets", "codes", "parametres"],
+  },
+];
+const TABS_PAR_CLE = Object.fromEntries(TABS.map((t) => [t.key, t])) as Record<TabKey, (typeof TABS)[number]>;
+
+/* — v24 : TROIS familles de couleurs d'onglets — VIOLET = onglets du bureau,
+ *    SARCELLE = espace membre personnel (Mes… + Paramètres), VERT PLEIN =
+ *    « Créer un membre » (repérable au premier coup d'œil dans la section). — */
+type ThemeOnglet = "bureau" | "membre" | "creer";
+const THEME_ONGLETS: Record<ThemeOnglet, { inactif: string; actif: string; badgeInactif: string; badgeActif: string }> = {
+  bureau: {
+    inactif: "border-[#C7A9CA] bg-[#F7F1F8] text-[#5A3E5D] hover:border-[#6E4B71] hover:bg-[#F0E4F1]",
+    actif: "border-[#4A334C] bg-[#6E4B71] text-white shadow-[0_6px_18px_rgba(110,75,113,0.45)]",
+    badgeInactif: "bg-[#A5473D] text-white",
+    badgeActif: "bg-[#C89F62] text-[#2B2416]",
+  },
+  membre: {
+    inactif: "border-[#8FB5BA] bg-[#EDF4F5] text-[#2A5259] hover:border-[#3D6B72] hover:bg-[#DFEDEB]",
+    actif: "border-[#22484F] bg-[#3D6B72] text-white shadow-[0_6px_18px_rgba(61,107,114,0.5)]",
+    badgeInactif: "bg-[#A5473D] text-white",
+    badgeActif: "bg-[#C89F62] text-[#2B2416]",
+  },
+  creer: {
+    inactif: "border-[#153F2C] bg-[#1F5B3F] text-white shadow-[0_4px_14px_rgba(31,91,63,0.35)] hover:bg-[#184A33]",
+    actif: "border-[#8A6420] bg-[#C89F62] text-[#2B2416] shadow-[0_6px_18px_rgba(200,159,98,0.5)]",
+    badgeInactif: "bg-[#C89F62] text-[#2B2416]",
+    badgeActif: "bg-[#1F5B3F] text-white",
+  },
+};
+const themeOnglet = (key: TabKey): ThemeOnglet =>
+  key === "codes" ? "creer"
+  : key === "m-cotis" || key === "m-epargne" || key === "m-prets" || key === "parametres" ? "membre"
+  : "bureau";
+
 function tabFromHash(): TabKey {
   try {
     const h = (window.location.hash || "").toLowerCase();
@@ -141,6 +213,10 @@ export function MaquetteSecretaire() {
   const [epargnes, setEpargnes] = useState<AttributionReunion[]>([]);
   const [regl, setRegl] = useState<Reglement | null>(null);
   const [derniereSauvegarde, setDerniereSauvegarde] = useState<string | null>(null);
+  /* v24 : drapeau « chargement initial terminé » — les badges vus ne sont
+   * enregistrés qu'APRÈS (sinon les compteurs vides du montage écrasent la
+   * mémoire « vu » persistée). */
+  const [donneesPretes, setDonneesPretes] = useState(false);
 
   const moisKey = useMemo(() => (annee != null && moisIdx != null ? moisKeyOf(annee, moisIdx) : null), [annee, moisIdx]);
 
@@ -172,6 +248,7 @@ export function MaquetteSecretaire() {
       for (const m of rosterInitial) syncMembre(h, m.id, m.name, mk, p.presences);
       setAmendes(loadAmendes());
       setNotifs(loadNotifs());
+      setDonneesPretes(true); // v24 : dernière pose du chargement — badges fiables
     }, 0);
     const onHash = () => setTab(tabFromHash());
     window.addEventListener("hashchange", onHash);
@@ -481,8 +558,9 @@ export function MaquetteSecretaire() {
     toast("Amende retirée du registre");
   };
 
-  /* — badges des onglets — */
-  const badges: Partial<Record<TabKey, number>> = {
+  /* — badges des onglets (valeurs BRUTES ; l'affichage ne montre que le NOUVEAU
+   *    depuis la dernière ouverture — cf. useOngletsVus) — */
+  const badges = useMemo<Partial<Record<TabKey, number>>>(() => ({
     pv: pvs.filter((x) => x.statut === "brouillon").length,
     seances: seanceCourante?.points.filter((pt) => pt.statut === "en_attente").length ?? 0,
     presences: nbAttente,
@@ -491,26 +569,43 @@ export function MaquetteSecretaire() {
     convocations: convos.reduce((s, c) => s + Object.values(c.destinataires).filter((r) => r.statut === "envoyee").length, 0),
     membres: amendes.filter((a) => a.statut === "due").length,
     notifications: notifs.filter((n) => !n.lu).length,
-  };
+  }), [pvs, seanceCourante, nbAttente, decisions, epargnes, visas, convos, amendes, notifs]);
+
+  /* — v24 : BADGES INTELLIGENTS — ouvrir l'onglet referme son chiffre : le
+   *    badge ne compte plus que le NOUVEAU (mémoire « vu » par console). — */
+  const badgeVu = useOngletsVus<TabKey>("fc_onglets_vus_secretaire_v1", tab, badges, donneesPretes);
+  const badgeDe = (t: TabKey): number => (t === "notifications" ? (badges[t] ?? 0) : badgeVu(t));
+
+  /* — EXCEPTION Notifications : état de lecture RÉEL — à l'ouverture de l'onglet,
+   *    tout est marqué LU (silencieusement) : le chiffre tombe à zéro comme sur
+   *    un téléphone, et les points rouges de la liste s'éteignent. — */
+  useEffect(() => {
+    if (tab !== "notifications") return;
+    const t0 = setTimeout(() => {
+      const toutes = loadNotifs();
+      if (toutes.some((n) => !n.lu)) {
+        saveNotifs(toutes.map((n) => ({ ...n, lu: true })));
+        setNotifs(loadNotifs());
+      }
+    }, 0);
+    return () => clearTimeout(t0);
+  }, [tab]);
 
   const renderTab = (t: (typeof TABS)[number], actif: boolean) => {
-    const badge = badges[t.key] ?? 0;
+    const badge = badgeDe(t.key);
+    const th = THEME_ONGLETS[themeOnglet(t.key)];
     return (
       <button
         key={t.key}
         type="button"
         onClick={() => goTab(t.key)}
         aria-current={actif ? "page" : undefined}
-        className={`inline-flex min-h-[46px] items-center gap-2 rounded-xl border-2 px-3.5 py-2.5 text-[13px] font-bold transition-all sm:min-h-[48px] sm:text-[14px] ${
-          actif
-            ? "border-[#4A334C] bg-[#6E4B71] text-white shadow-[0_6px_18px_rgba(110,75,113,0.45)]"
-            : "border-[#C7A9CA] bg-[#F7F1F8] text-[#5A3E5D] hover:border-[#6E4B71] hover:bg-[#F0E4F1]"
-        }`}
+        className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border-2 px-3 py-2 text-[12.5px] font-bold transition-all sm:min-h-[48px] sm:gap-2 sm:px-3.5 sm:py-2.5 sm:text-[14px] ${actif ? th.actif : th.inactif}`}
       >
         {t.icon}
         {t.label}
         {badge > 0 && (
-          <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-black ${actif ? "bg-[#C89F62] text-[#2B2416]" : "bg-[#A5473D] text-white"}`}>
+          <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-black ${actif ? th.badgeActif : th.badgeInactif}`}>
             {badge}
           </span>
         )}
@@ -547,17 +642,23 @@ export function MaquetteSecretaire() {
             <P cls={amendesMois.length > 0 ? "border-[#C89F62] bg-[#C89F62]/25 text-[#FFEBD2]" : "border-white/25 bg-white/10 text-white"}>
               <Ban className="h-3 w-3" /> {amendesMois.filter((a) => a.statut === "due").length} amende(s) due(s)
             </P>
-            <P cls="border-white/25 bg-white/10 text-white"><Bell className="h-3 w-3" /> {notifs.filter((n) => !n.lu).length} notif. non lues</P>
+            {(badges.notifications ?? 0) > 0 && <P cls="border-[#C89F62] bg-[#C89F62]/25 text-[#FFEBD2]"><Bell className="h-3 w-3" /> {badges.notifications} notif. non lues</P>}
           </>
         }
       />
 
-      {/* ── onglets ── */}
+      {/* ── onglets (v24 : 4 SECTIONS libellées — fini le rang mélangé) ── */}
       <NavOnglets
         ariaLabel="Sections du secrétariat"
-        etiquette={`Secrétariat — ${TABS.length} onglets, chacun avec son URL`}
+        etiquette={`Secrétariat — ${GROUPES.length} sections · ${TABS.length} onglets, chacun avec son URL`}
+        etiquetteCourte={`Secrétariat — ${GROUPES.length} sections · ${TABS.length} onglets`}
         couleurPoint="#6E4B71"
-        onglets={TABS.map((t) => ({ ...t, badge: badges[t.key] ?? 0 }))}
+        groupes={GROUPES.map((g) => ({
+          label: g.label,
+          note: g.note,
+          couleur: g.couleur,
+          onglets: g.keys.map((k) => ({ key: k, label: TABS_PAR_CLE[k].label, icon: TABS_PAR_CLE[k].icon, badge: badgeDe(k) })),
+        }))}
         actif={tab}
         goTab={goTab}
         render={renderTab}
@@ -1324,7 +1425,7 @@ function NotificationsSection(p: {
     <>
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         <KpiCard icon={<Bell className="h-4 w-4" />} label="Notifications" value={String(p.notifs.length)} sub="journal complet" accent="#6E4B71" />
-        <KpiCard icon={<Mail className="h-4 w-4" />} label="Non lues" value={String(p.notifs.filter((n) => !n.lu).length)} sub="badge des onglets" accent="#A5473D" />
+        <KpiCard icon={<Mail className="h-4 w-4" />} label="Non lues" value={String(p.notifs.filter((n) => !n.lu).length)} sub="vidées à l'ouverture de l'onglet" accent="#A5473D" />
         <KpiCard icon={<Users className="h-4 w-4" />} label="Aux membres" value={String(p.notifs.filter((n) => n.destinataire !== "president" && n.destinataire !== "tous").length)} sub="sur leur page" accent="#2F6B45" />
         <KpiCard icon={<ShieldCheck className="h-4 w-4" />} label="Au bureau" value={String(p.notifs.filter((n) => n.destinataire === "president" || n.destinataire === "tous").length)} sub="président + tous" accent="#3D6B72" />
       </div>
@@ -1332,7 +1433,7 @@ function NotificationsSection(p: {
         title="Notifications du secrétariat"
         icon={<Bell className="h-4 w-4" />}
         accent="#6E4B71"
-        note="Tout ce que le moteur et la secrétaire ont notifié : avertissements d'absences, amendes automatiques, rachats, visas, convocations et décisions. Les membres voient les leurs SUR LEUR page (tableau de bord) ; le président est informé des actions du secrétariat."
+        note="Tout ce que le moteur et la secrétaire ont notifié : avertissements d'absences, amendes automatiques, rachats, visas, convocations et décisions. Les membres voient les leurs SUR LEUR page (tableau de bord) ; le président est informé des actions du secrétariat. Ouvrir cet onglet marque tout LU — le badge retombe ; cliquer le titre d'une notification la marque lue aussi."
       >
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E5DCC0] bg-[#F7F1F8] px-4 py-2.5">
           <div className="flex flex-wrap gap-1.5">
@@ -1354,10 +1455,15 @@ function NotificationsSection(p: {
               return (
                 <div key={n.id} className={`px-4 py-2.5 ${n.lu ? "opacity-70" : ""}`}>
                   <div className="flex flex-wrap items-center justify-between gap-1.5">
-                    <p className="text-[12.5px] font-bold text-[#2B3530]">
+                    <button
+                      type="button"
+                      onClick={() => { if (!n.lu) p.onBasculerLu(n.id); }}
+                      title={n.lu ? "Déjà lue" : "Cliquer pour marquer comme lue"}
+                      className="text-left text-[12.5px] font-bold text-[#2B3530] transition hover:text-[#6E4B71] hover:underline"
+                    >
                       {!n.lu && <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-[#A5473D]" aria-hidden="true" />}
                       {n.titre}
-                    </p>
+                    </button>
                     <span className="flex items-center gap-1">
                       <P cls={n.destinataire === "president" ? TE_CLS : n.destinataire === "tous" ? OR_CLS : VI_CLS}>
                         {n.destinataire === "president" ? "Président" : n.destinataire === "tous" ? "Tous" : (m?.name ?? n.destinataireNom)}

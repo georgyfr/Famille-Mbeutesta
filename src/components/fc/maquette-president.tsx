@@ -28,6 +28,7 @@ import {
   Trash2, Ticket, Undo2, UserCheck, UserPlus, Users, Vote, Wallet, XCircle,
 } from "lucide-react";
 import { FcCard } from "./ui";
+import { useOngletsVus } from "./maquette-ui";
 import {
   MEMBRES_FICTIFS, MOIS_FR, ROLE_META, TONTINE, TAUX_DEFAUT, loadMontants, saveMontants,
   detteParPersonne, potMensuelDynamique, secondSunday,
@@ -465,13 +466,17 @@ export function MaquettePresident() {
   /* — onglets = URL partageable : #president/<onglet> — chaque sous-onglet du
    *    président a sa propre adresse (collable, rafraîchissable, partageable),
    *    y compris les sections de Paramètres : #president/parametres/prets. */
+  /* v24 : drapeau « données chargées + onglet synchronisé avec l'URL » — les
+   * badges vus ne s'enregistrent qu'après (sinon le montage écrase la mémoire
+   * avec des compteurs vides). */
+  const [pretOnglets, setPretOnglets] = useState(false);
   useEffect(() => {
     const sync = () => {
       const x = tabFromHash();
       setTab(x.tab);
       if (x.tab === "parametres" && x.sous) setSousParam(x.sous);
     };
-    const t0 = setTimeout(sync, 0);
+    const t0 = setTimeout(() => { sync(); setPretOnglets(true); }, 0);
     window.addEventListener("hashchange", sync);
     return () => {
       clearTimeout(t0);
@@ -921,6 +926,10 @@ export function MaquettePresident() {
     "m-cotis": cotisCeMois ? 0 : 1,
     "m-prets": mesPrets.filter((x) => x.statut === "en_attente").length,
   };
+  /* — v24 : BADGES VUS — ouvrir un onglet referme son chiffre ; il ne revient
+   *    que si une NOUVELLE action arrive (mémoire par console, localStorage,
+   *    même comportement que la console secrétaire). — */
+  const badgeVu = useOngletsVus<TabKey>("fc_onglets_vus_president_v1", tab, badges, pretOnglets);
 
   const TABS: { key: TabKey; label: string; icon: ReactNode; membre?: boolean }[] = [
     { key: "cotisations", label: "Cotisations & collations", icon: <Coins className="h-3.5 w-3.5" /> },
@@ -951,7 +960,7 @@ export function MaquettePresident() {
   const tabsMembre = tabsVisibles.filter((t) => t.membre);
   const renderTab = (t: (typeof TABS)[number]) => {
     const actif = tab === t.key;
-    const badge = badges[t.key] ?? 0;
+    const badge = badgeVu(t.key);
     return (
       <button
         key={t.key}
