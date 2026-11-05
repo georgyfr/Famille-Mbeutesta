@@ -1554,3 +1554,20 @@ Work Log:
 Stage Summary:
 - v23 déployable : la secrétaire et le président créent les membres AVANT leur arrivée et partagent un code d'invitation qui ne périme JAMAIS ; l'inscription par code ouvre DIRECTEMENT la page du rôle attribué avec la cotisation fixée ; la secrétaire dispose de son espace membre complet (cotisation choisie, épargne, prêts) sur les mêmes registres partagés que le président ; les registres épargnes/prêts montrent l'Attribution EN PREMIER et le nombre de versements par membre ; le mot « cantine » a disparu de toute l'application au profit de « Tontine ».
 - Build Cloudflare : bash scripts/build-cloudflare.sh puis wrangler pages deploy (déployé juste après — cf. entrée suivante).
+
+---
+Task ID: 67-bis
+Agent: Z.ai Code (orchestrateur)
+Task: Déploiement v23 en production Cloudflare Pages
+
+Work Log:
+- Build : bash scripts/build-cloudflare.sh → marqueurs v23 vérifiés dans .next-demo/_next/static/chunks/.
+- Deploy : wrangler pages deploy .next-demo --project-name famille-mbeutetsa --branch main → https://e312cbc5.famille-mbeutetsa.pages.dev
+- Vérifications production (https://famille-mbeutetsa.pages.dev) :
+  · #secretaire/epargnes — bandeau « Maquette v23 », Attribution AVANT Registre, colonne « Versements », zéro « cantine » ;
+  · #secretaire/codes — génération FCM-LZKEAF réussie en production, toast « Le code n'expire jamais », lien WhatsApp wa.me présent ;
+  · #president/codes — section Créer un membre du président en ligne ;
+  · 20 onglets secrétariat visibles (Mes cotisations / Mes épargnes / Mes prêts inclus).
+
+Stage Summary:
+- Production famille-mbeutetsa.pages.dev mise à jour v22 → v23 : création de membres par codes d'invitation (secrétaire + président), inscription par code avec page de rôle directe, espace membre de la secrétaire, registres réordonnés avec nombre de versements, « Tontine » partout.
