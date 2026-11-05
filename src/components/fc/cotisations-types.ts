@@ -69,5 +69,49 @@ export function cotisationDuMembre(idMembre: string, types: TypeCotisation[], ba
   return t ? t.montant : base;
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+ * RÈGLE DU BUREAU — demande du président (novembre 2026) :
+ * « Lorsqu'on attribue un type de cotisation à un membre, qu'il soit du bureau
+ * ou membre simple, c'est cette cotisation qu'il devra obligatoirement payer
+ * sur TOUTE L'ANNÉE et les calculs sont faits sur ces bases. Cela n'empêche pas
+ * qu'il reçoive la réunion. » — Exemple : Aurélie (type 50 000) et Patrick
+ * (type 30 000) : quand Aurélie reçoit, Patrick verse 30 000, les membres du
+ * type 50 000 versent 50 000, et la somme remise est l'ADDITION DE TOUS LES
+ * MEMBRES — bénéficiaire INCLUS (quand Patrick reçoit, il cotise aussi ses
+ * 30 000 comme tout le monde).
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * POT DU MOIS — l'addition des cotisations de TOUS les membres : chacun verse
+ * SON taux (le montant de son type attribué, ou la cotisation de base s'il
+ * n'a pas de type), TOUTE L'ANNÉE, y compris le mois où il reçoit la réunion.
+ * Le bénéficiaire reçoit donc la somme des taux de tous les membres.
+ */
+export function sommeCotisationsDuMois(membres: { id: string }[], types: TypeCotisation[], base: number): number {
+  return membres.reduce((s, m) => s + cotisationDuMembre(m.id, types, base), 0);
+}
+
+/**
+ * Détail lisible des taux du mois, groupé par montant (du plus élevé au plus
+ * bas) — ex. « 2 × 50 000 + 9 × 25 000 » ou « 11 à fixer » quand aucune somme
+ * n'a encore été réglée par le bureau.
+ */
+export function detailTauxDuMois(membres: { id: string }[], types: TypeCotisation[], base: number): string {
+  const groupes = new Map<number, number>();
+  membres.forEach((m) => {
+    const taux = cotisationDuMembre(m.id, types, base);
+    groupes.set(taux, (groupes.get(taux) ?? 0) + 1);
+  });
+  if (groupes.size === 0) return "—";
+  return [...groupes.entries()]
+    .sort((a, b) => b[0] - a[0])
+    .map(([taux, nb]) =>
+      taux > 0
+        ? `${nb} × ${String(taux).replace(/\B(?=(\d{3})+(?!\d))/g, " ")}`
+        : `${nb} à fixer`,
+    )
+    .join(" + ");
+}
+
 export const fmtMontant = (n: number) =>
   `${String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, " ")} FCFA`;

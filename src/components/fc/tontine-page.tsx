@@ -63,9 +63,9 @@ import {
 import {
   ANOMALIES, MEMBRES_FICTIFS, MOIS_FR_SHORT, MISSIONS, ROLE_META, SUPPLEANCES, TAUX_DEFAUT, TONTINE,
   buildAnnee, buildRoster, caissesDuMoment, classementCotisants, collationMensuelle,
-  detteParPersonne, dettePretAuMois, etatReunion, interetEpargneMois, isoDate,
+  dettePretAuMois, etatReunion, interetEpargneMois, isoDate,
   journalDeCaisse, joursAvant, loadEpargnes, loadMontants, loadPayes, loadPrets, loadTaux, moisDuTour,
-  moisCourantAnnee, moisEcoules, potMensuel, projectionAnnee, saveEpargnes, saveMontants, savePrets, saveTaux,
+  moisCourantAnnee, moisEcoules, potMensuelDynamique, projectionAnnee, saveEpargnes, saveMontants, savePrets, saveTaux,
   soldeEpargneAuMois, statutMembreDuMois, uid,
   type Epargne, type Member, type Payes, type Pret, type ReglagesTontine, type RoleKey, type TourMois,
 } from "./tontine-data";
@@ -302,9 +302,15 @@ export function TontinePage({ onBack, vousName, vousPhone }: { onBack: () => voi
   const roster = useMemo(() => buildRoster(vousName, vousRole), [vousName, vousRole]);
   // Le calendrier est reconstruit quand les montants du bureau changent : les
   // sommes du mois, les collations et les totaux reflètent le nouveau réglage.
+  // TAUX PERSONNELS (demande du président) : chaque mois, le pot = addition des
+  // cotisations de TOUS les membres — chacun verse le montant de SON type
+  // attribué (ou la base), bénéficiaire INCLUS. Recalculé aussi quand les
+  // types de cotisations du bureau changent.
   const annee = useMemo(
-    () => (mounted ? (loadMontants(), buildAnnee(new Date().getFullYear(), roster)) : []),
-    [mounted, roster, montVersion],
+    () => (mounted
+      ? (loadMontants(), buildAnnee(new Date().getFullYear(), roster, new Date(), { types: typesCotis, base: TONTINE.montantCotisation }))
+      : []),
+    [mounted, roster, montVersion, typesCotis],
   );
   const roleActif: RoleKey = vousRole ?? "membre";
   const ouverts = signalementsOuverts(signalements);
@@ -386,7 +392,7 @@ export function TontinePage({ onBack, vousName, vousPhone }: { onBack: () => voi
           sigVersion={sigVersion} onSignaler={(c) => setSignaler(c)}
         />
       )}
-      {page === "stats" && <StatsPage annee={annee} roster={roster} payes={payes} />}
+      {page === "stats" && <StatsPage annee={annee} roster={roster} payes={payes} typesCotis={typesCotis} />}
 
       <FcButton variant="outline" onClick={onBack} className="w-full">
         <ArrowLeft className="h-4 w-4" /> Retour à l&apos;accueil
@@ -733,14 +739,14 @@ function ReunionPage({ annee, roster, vousPhone, typesCotis, vousRole }: { annee
   const courant = annee.find((t) => t.etat === "courant") ?? annee[0];
   const er = etatReunion(courant);
   const jr = joursAvant(courant);
-  const pot = potMensuel(roster.length);
+  const pot = potMensuelDynamique(roster, { types: typesCotis, base: TONTINE.montantCotisation });
 
   const regles: [string, string][] = [
-    ["Cotisation mensuelle", `${fmtN(TONTINE.montantCotisation)} FCFA par membre et par réunion`],
+    ["Cotisation de base", `${fmtN(TONTINE.montantCotisation)} FCFA pour les membres sans type particulier — le bureau peut fixer une somme propre à certains membres (types de cotisation)`],
     ["Collation", `${fmtN(TONTINE.montantCollation)} FCFA par personne et par réunion`],
     ["Jour de réunion", cap(TONTINE.jourLabel)],
     ["Lieu", "Chez le bénéficiaire du mois"],
-    ["Somme du mois", `${fmtN(pot)} FCFA — ${roster.length - 1} cotisants × ${fmtN(TONTINE.montantCotisation)}`],
+    ["Somme du mois", `${fmtN(pot)} FCFA — l'addition des cotisations de TOUS les membres : chacun verse SON taux (type attribué ou base), bénéficiaire inclus, toute l'année`],
     ["Frais d'adhésion", `${fmtN(TONTINE.fraisAdhesion)} FCFA une seule fois — caisse sociale`],
     ["Tours de l'année", "11 tours (janvier → novembre) + assemblée générale en décembre"],
     ["Pénalités", `Retard ${fmtN(TONTINE.penaliteRetard)} · Absence non excusée ${fmtN(TONTINE.penaliteAbsence)} — versées à la caisse sociale`],
@@ -832,7 +838,7 @@ function ReunionPage({ annee, roster, vousPhone, typesCotis, vousRole }: { annee
       <Block
         title="Qui reçoit la réunion, mois par mois"
         icon={<Gift className="h-4.5 w-4.5" />}
-        note="Une personne par mois : elle reçoit la somme des 10 autres cotisants et accueille la réunion chez elle. Touchez une ligne pour ouvrir sa fiche — téléphone, lieu et cotisation de chacun."
+        note="Une personne par mois : elle reçoit l'ADDITION des cotisations de tous les membres (chacun verse SON taux — type attribué ou base — bénéficiaire inclus) et accueille la réunion chez elle. Touchez une ligne pour ouvrir sa fiche — téléphone, lieu et cotisation de chacun."
       >
         <TableWrap label="Bénéficiaires de l'année">
           <thead>
@@ -1038,21 +1044,30 @@ function FicheReunion({ t, vousId, maCotisPerso, onFermer }: { t: TourMois; vous
     };
   }, [onFermer]);
 
-  // La part de chacun : le bénéficiaire du mois ne cotise pas (il ne verse que la collation).
+  // RÈGLE DU BUREAU (demande du président) : le bénéficiaire du mois COTISE
+  // AUSSI son taux — être celui qui reçoit n'exempte de rien et n'empêche rien :
+  // il reçoit l'addition des cotisations de tous les membres, la sienne incluse.
   // Cotisation PERSONNALISÉE : si le bureau a fixé une somme pour moi (type de
-  // cotisation attribué), c'est CETTE somme que je verse — comme tout membre.
+  // cotisation attribué), c'est CETTE somme que je verse — comme tout membre,
+  // TOUTE L'ANNÉE, quel que soit le bénéficiaire du mois.
   const estBeneficiaire = !t.ag && b?.id === vousId;
   const maCotisation = maCotisPerso ? maCotisPerso.montant : TONTINE.montantCotisation;
-  const partCotis = estBeneficiaire ? 0 : maCotisation;
+  const partCotis = maCotisation;
   const partColla = t.ag ? 0 : TONTINE.montantCollation;
   const partTotale = partCotis + partColla;
 
   const parts: [string, string, string][] = t.ag
     ? []
     : [
-        ["Cotisation", estBeneficiaire ? "—" : fmtFcfa(maCotisation), estBeneficiaire ? "Vous ne cotisez pas — vous recevez la réunion" : maCotisPerso ? `Somme fixée pour vous par le bureau (« ${maCotisPerso.nom} »)` : "Remise au trésorier pour la réunion"],
+        ["Cotisation", fmtFcfa(maCotisation), estBeneficiaire
+          ? maCotisPerso
+            ? `Vous recevez la réunion — vous cotisez aussi votre somme (« ${maCotisPerso.nom} »), comme tous`
+            : "Vous recevez la réunion — vous cotisez aussi, comme tous les membres"
+          : maCotisPerso
+            ? `Somme fixée pour vous par le bureau (« ${maCotisPerso.nom} ») — toute l'année, quel que soit le bénéficiaire`
+            : "Remise au trésorier pour la réunion"],
         ["Collation", fmtFcfa(TONTINE.montantCollation), "Payée par tout le monde, y compris le bénéficiaire"],
-        ["Total par personne", fmtFcfa(partTotale), estBeneficiaire ? "Votre seule part ce mois-ci" : "À remettre au trésorier à la réunion"],
+        ["Total par personne", fmtFcfa(partTotale), "À remettre au trésorier à la réunion"],
       ];
 
   return (
@@ -1214,17 +1229,19 @@ function FicheReunion({ t, vousId, maCotisPerso, onFermer }: { t: TourMois; vous
               </tbody>
             </TableWrap>
 
-            {/* L'argent du mois — dérivé des règles, jamais codé en dur */}
+            {/* L'argent du mois — dérivé des règles, jamais codé en dur :
+                « Somme du mois » = addition des taux de TOUS les membres
+                (bénéficiaire inclus) — le détail s'affiche sous le montant. */}
             <div className="grid grid-cols-3 divide-x divide-[#E5DCC0] rounded-2xl border border-[#E5DCC0] bg-[#FFFDF6] text-center">
               <div className="px-1.5 py-2.5">
                 <p className="text-[9.5px] font-bold uppercase tracking-wide text-[#8A9288]">Somme du mois</p>
                 <p className="text-[13px] font-bold text-[#1E4D2B]">{fmtN(t.pot)}</p>
-                <p className="mt-0.5 text-[9px] leading-tight text-[#8A9288]">{fmtN(t.pot / TONTINE.montantCotisation)} cotisants × {fmtN(TONTINE.montantCotisation)}</p>
+                <p className="mt-0.5 text-[9px] leading-tight text-[#8A9288]">{t.potDetail || "chacun son taux"}</p>
               </div>
               <div className="px-1.5 py-2.5">
                 <p className="text-[9.5px] font-bold uppercase tracking-wide text-[#8A9288]">Collation</p>
                 <p className="text-[13px] font-bold text-[#B85C33]">{fmtN(t.collation)}</p>
-                <p className="mt-0.5 text-[9px] leading-tight text-[#8A9288]">{fmtN(t.collation / TONTINE.montantCollation)} × {fmtN(TONTINE.montantCollation)}</p>
+                <p className="mt-0.5 text-[9px] leading-tight text-[#8A9288]">{TONTINE.montantCollation > 0 ? `${fmtN(t.collation / TONTINE.montantCollation)} × ${fmtN(TONTINE.montantCollation)}` : "à fixer par le bureau"}</p>
               </div>
               <div className="px-1.5 py-2.5">
                 <p className="text-[9.5px] font-bold uppercase tracking-wide text-[#8A9288]">Total collecté</p>
@@ -1649,7 +1666,9 @@ function FicheBeneficiaire({ t, vousPhone, onFermer }: { t: TourMois; vousPhone?
               )}
             </div>
 
-            {/* Rappel des sommes — dérivées du paramétrage du bureau */}
+            {/* Rappel des sommes — dérivées du paramétrage du bureau.
+                « Cotisation de chacun » : chacun verse SON taux (type attribué
+                ou base) — bénéficiaire inclus, toute l'année. */}
             <div className="grid grid-cols-3 divide-x divide-[#E5DCC0] rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] text-center">
               <div className="px-1.5 py-2.5">
                 <p className="text-[9.5px] font-bold uppercase tracking-wide text-[#8A9288]">Somme reçue</p>
@@ -1659,9 +1678,10 @@ function FicheBeneficiaire({ t, vousPhone, onFermer }: { t: TourMois; vousPhone?
                 <p className="text-[9.5px] font-bold uppercase tracking-wide text-[#8A9288]">Collation</p>
                 <p className="text-[13px] font-bold text-[#B85C33]">{fmtN(t.collation)}</p>
               </div>
-              <div className="px-1.5 py-2.5">
-                <p className="text-[9.5px] font-bold uppercase tracking-wide text-[#8A9288]">Chacun verse</p>
-                <p className="text-[13px] font-bold text-[#2F6B45]">{fmtN(detteParPersonne())}</p>
+              <div className="min-w-0 px-1.5 py-2.5">
+                <p className="text-[9.5px] font-bold uppercase tracking-wide text-[#8A9288]">Cotisation de chacun</p>
+                <p className="break-words text-[11.5px] font-bold leading-snug text-[#2F6B45]">{t.potDetail || "—"}</p>
+                <p className="text-[9px] leading-tight text-[#8A9288]">bénéficiaire inclus</p>
               </div>
             </div>
           </div>
@@ -1819,10 +1839,14 @@ function PanneauMembre({ m, annee, typesCotis, onGoRole, onFermer }: {
         <div className="rounded-xl bg-[#FFFDF6] p-3">
           <p className="text-[10px] font-bold uppercase tracking-wide text-[#8A9288]">À cotiser ce mois</p>
           <p className="text-[13.5px] font-bold text-[#1E4D2B]">
-            {!courant || courant.ag ? "—" : estBenef ? fmtN(TONTINE.montantCollation) : fmtN(saCotisation + TONTINE.montantCollation)}
+            {!courant || courant.ag ? "—" : fmtN(saCotisation + TONTINE.montantCollation)}
           </p>
           <p className="text-[10.5px] text-[#8A9288]">
-            {!courant || courant.ag ? "Assemblée générale" : estBenef ? "collation seulement (son tour)" : `cotisation${sonType ? ` (« ${sonType.nom} »)` : " de base"} + collation`}
+            {!courant || courant.ag
+              ? "Assemblée générale"
+              : estBenef
+                ? `cotisation${sonType ? ` (« ${sonType.nom} »)` : " de base"} + collation — son tour, il cotise aussi`
+                : `cotisation${sonType ? ` (« ${sonType.nom} »)` : " de base"} + collation`}
           </p>
         </div>
         <div className="rounded-xl bg-[#FFFDF6] p-3">
@@ -2442,7 +2466,7 @@ function MontantsParametrable({ editable = false, vousRole, onAppliquer, onSigna
 }) {
   // Champs contrôlés localement, réinitialisés quand le réglage global change.
   const [champs, setChamps] = useState<{ k: Exclude<keyof ReglagesTontine, "jourLabel">; label: string; aide: string }[]>(() => [
-    { k: "montantCotisation", label: "Cotisation mensuelle", aide: "par membre et par réunion" },
+    { k: "montantCotisation", label: "Cotisation mensuelle de base", aide: "pour les membres sans type particulier" },
     { k: "montantCollation", label: "Collation", aide: "par personne et par réunion" },
     { k: "fraisAdhesion", label: "Frais d'adhésion", aide: "une seule fois — caisse sociale" },
     { k: "penaliteRetard", label: "Pénalité de retard", aide: "versée à la caisse sociale" },
@@ -3637,12 +3661,15 @@ function CartePret({ p, annee, taux, bureauMode, onValider, onSupprimer, onRembo
 
 /* ══════════════════════════ page STATISTIQUES ══════════════════════════ */
 
-function StatsPage({ annee, roster, payes }: { annee: TourMois[]; roster: Member[]; payes: Payes }) {
+function StatsPage({ annee, roster, payes, typesCotis }: { annee: TourMois[]; roster: Member[]; payes: Payes; typesCotis: TypeCotisation[] }) {
+  /* TAUX PERSONNELS : chaque membre verse SON taux (type attribué ou base),
+   * bénéficiaire inclus — toutes les statistiques en découlent. */
+  const cotis = { types: typesCotis, base: TONTINE.montantCotisation };
   const caisses = caissesDuMoment(annee, roster);
-  const proj = projectionAnnee(annee, roster);
-  const classement = classementCotisants(annee, roster, payes, "vous");
+  const proj = projectionAnnee(annee, roster, cotis);
+  const classement = classementCotisants(annee, roster, payes, "vous", new Date(), cotis);
   const tenus = annee.filter((t) => !t.ag && t.iso <= isoDate(new Date())).length;
-  const potM = potMensuel(roster.length);
+  const potM = potMensuelDynamique(roster, cotis);
   const collaM = collationMensuelle(roster.length);
   const adhesions = roster.length * TONTINE.fraisAdhesion;
 
@@ -3665,7 +3692,7 @@ function StatsPage({ annee, roster, payes }: { annee: TourMois[]; roster: Member
       {/* Chiffres clés */}
       <div className="grid grid-cols-2 gap-2">
         <MiniKpi label="Membres actifs" value={`${roster.length}`} sub="1 tour chacun + AG en décembre" tone="text-[#1E4D2B]" />
-        <MiniKpi label="Somme mensuelle" value={fmtFcfa(potM)} sub={`${roster.length - 1} cotisants × ${fmtN(TONTINE.montantCotisation)} FCFA`} tone="text-[#8A6420]" />
+        <MiniKpi label="Somme mensuelle" value={fmtFcfa(potM)} sub={`addition des taux de tous — ${roster.length} cotisants, bénéficiaire inclus`} tone="text-[#8A6420]" />
         <MiniKpi label={`Collecté en ${annee[0].annee}`} value={fmtFcfa(caisses.collecte)} sub={`${tenus} réunion(s) arrivée(s)`} tone="text-[#2F6B45]" />
         <MiniKpi label="Caisse sociale" value={fmtFcfa(caisses.caisseSociale)} sub="adhésions + pénalités" tone="text-[#3D6B72]" />
       </div>

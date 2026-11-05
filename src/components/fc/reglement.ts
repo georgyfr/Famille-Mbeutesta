@@ -160,6 +160,15 @@ export type Reglement = {
     };
     carenceMois: number; // ancienneté minimale avant droit au prêt
     majorityPresident: "ok" | "tiers" | "deuxtiers" | "unanime"; // vote quand le président est récusé
+    /* — RECONDUCTION DU CAPITAL NON REMBOURSÉ (demande du président, v12) :
+     *    quand un prêt n'est pas remboursé à sa date d'échéance, la somme due
+     *    (capital + intérêts courus) devient un NOUVEAU CAPITAL — les intérêts
+     *    repartent de cette nouvelle somme pour une nouvelle période, et ainsi
+     *    de suite. L'évolution reste visible MOIS PAR MOIS dans les calendriers.
+     *    Exemple : 10 000 FCFA prêtés en janvier à 3 %/mois → mars : 10 900 ;
+     *    si non remboursé, 10 900 devient le nouveau capital → juin : ≈ 11 881. */
+    reconductionCapital: boolean; // activer la reconduction en nouveau capital
+    periodeCapitalisationMois: number; // mois entre deux reconductions (0 = jamais)
     /* — TYPES DE PRÊTS : la nature choisie + ses propres réglages — */
     typeChoisi: string | null; // id du TYPES_PRET_CATALOGUE choisi par le président
     types: Record<string, TypePretConfig>; // réglages par nature de prêt
@@ -191,6 +200,15 @@ export type Reglement = {
   /* — épargne — */
   epargne: {
     tauxMensuel: number; // % par mois
+    /** true = le bureau a FIXÉ son propre taux (même 0 = « intérêts retirés ») ;
+     *  false = le taux de la maison reste en vigueur (TAUX_DEFAUT, 3 %/mois). */
+    tauxFixe: boolean;
+    /** COMMENT LES INTÉRÊTS SONT COLLECTÉS — peut changer par décision du bureau :
+     *  capitalise = crédités chaque mois sur le solde (tableau du membre),
+     *  reunion    = remis en espèces au membre à chaque réunion,
+     *  finAnnee   = accumulés puis versés en une seule fois en décembre,
+     *  caisse     = versés à la caisse sociale (la rémunération profite à tous). */
+    collecteInterets: "capitalise" | "reunion" | "finAnnee" | "caisse";
     preavisJours: number; // préavis avant tout retrait
     depotMinFcfa: number; // dépôt minimum
     retraitMaxMois: number; // retrait maximal par mois (% du solde)
@@ -239,6 +257,12 @@ export const REGLEMENT_DEFAUT: Reglement = {
     garanties: { commerce: false, salaire: false, terrain: false, materiel: false, epargne: false },
     carenceMois: 0,
     majorityPresident: "ok",
+    /* v13 — la reconduction du capital non remboursé (demande du président :
+     * « si l'intérêt n'a pas été remboursé, la somme totale de ce mois devient
+     * l'élément sur lequel le pourcentage est de nouveau recalculé ») est
+     * ACTIVE PAR DÉFAUT, tous les 3 mois — désactivable dans Paramètres. */
+    reconductionCapital: true,
+    periodeCapitalisationMois: 3,
     typeChoisi: null,
     types: TYPES_PRET_DEFAUT(),
   },
@@ -258,6 +282,8 @@ export const REGLEMENT_DEFAUT: Reglement = {
   },
   epargne: {
     tauxMensuel: 0,
+    tauxFixe: false,
+    collecteInterets: "capitalise" as const,
     preavisJours: 0,
     depotMinFcfa: 0,
     retraitMaxMois: 0,
@@ -309,10 +335,42 @@ export function loadReglement(): Reglement {
   try {
     const raw = window.localStorage.getItem(CLE);
     if (!raw) return { ...REGLEMENT_DEFAUT };
-    return fusion(JSON.parse(raw) as Partial<Reglement>);
+    return migrerReconduction(fusion(JSON.parse(raw) as Partial<Reglement>));
   } catch {
     return { ...REGLEMENT_DEFAUT };
   }
+}
+
+/* MIGRATION v13 — la reconduction du capital non remboursé (la règle du
+ * président : « après le nombre de mois fixé dans les paramètres, si l'intérêt
+ * n'a pas été remboursé, la somme totale de ce mois devient l'élément sur
+ * lequel le pourcentage est de nouveau recalculé ») est désormais appliquée
+ * AUSSI aux prêts faits à la réunion. Pour qu'elle soit active d'emblée chez
+ * les bureaux qui n'avaient pas encore touché au réglage (la v12 l'expédiait
+ * à false), on l'active UNE SEULE FOIS au premier chargement, puis on note
+ * la migration : si le bureau la désactive volontairement ensuite, on ne la
+ * réactive jamais. */
+const CLE_MIG_RECONDUCTION = "fc_reconduction_mig_v13";
+
+function migrerReconduction(r: Reglement): Reglement {
+  if (typeof window === "undefined") return r;
+  if (window.localStorage.getItem(CLE_MIG_RECONDUCTION)) return r;
+  try {
+    window.localStorage.setItem(CLE_MIG_RECONDUCTION, "1");
+  } catch {
+    /* navigation privée — la migration reste en mémoire pour cette session */
+  }
+  if (r.prets.reconductionCapital) return r;
+  const mig: Reglement = {
+    ...r,
+    prets: {
+      ...r.prets,
+      reconductionCapital: true,
+      periodeCapitalisationMois: r.prets.periodeCapitalisationMois > 0 ? r.prets.periodeCapitalisationMois : 3,
+    },
+  };
+  saveReglement(mig);
+  return mig;
 }
 
 /** Enregistre le règlement (brouillon du bureau — pas encore publié). */
@@ -383,6 +441,22 @@ export const GARANTIES_LABELS: Record<keyof Reglement["prets"]["garanties"], str
   terrain: "Terrain / parcelle",
   materiel: "Matériel & équipement",
   epargne: "Épargne bloquée",
+};
+
+/** Manières de collecter les intérêts d'épargne — libellés courts (Seg). */
+export const COLLECTE_INTERETS_LABELS: Record<Reglement["epargne"]["collecteInterets"], string> = {
+  capitalise: "Crédités chaque mois sur le solde",
+  reunion: "Remis au membre à chaque réunion",
+  finAnnee: "Versés en une fois en fin d'année",
+  caisse: "Versés à la caisse sociale",
+};
+
+/** Manières de collecter les intérêts — explication complète affichée sous le choix. */
+export const COLLECTE_INTERETS_NOTES: Record<Reglement["epargne"]["collecteInterets"], string> = {
+  capitalise: "Le trésorier crédite les intérêts en fin de mois sur le solde de chacun : le tableau « Mes intérêts mois par mois » du membre grossit mois après mois, et l'argent reste dans la caisse jusqu'au retrait.",
+  reunion: "À chaque réunion, le trésorier remet en espèces au membre les intérêts du mois : le solde d'épargne ne bouge que par les dépôts, mais le membre repart chaque fois avec sa rémunération en poche.",
+  finAnnee: "Les intérêts s'accumulent au registre sans toucher au solde, puis sont versés EN UNE SEULE FOIS à la réunion de décembre — bonne surprise de fin d'année.",
+  caisse: "Les intérêts de toutes les épargnes alimentent la caisse sociale : chaque membre récupère son capital intégralement, la rémunération, elle, profite à toute la famille.",
 };
 
 export const EVENTS_SOLIDAIRES_LABELS: Record<keyof Reglement["solidarite"]["events"], string> = {

@@ -10,6 +10,8 @@
 // DÉRIVÉS de ces données — rien n'est codé en dur dans l'interface.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { cotisationDuMembre, detailTauxDuMois, sommeCotisationsDuMois, type TypeCotisation } from "./cotisations-types";
+
 /* ══════════════════════════ règles de la tontine ══════════════════════════ */
 
 export type ReglagesTontine = {
@@ -98,10 +100,36 @@ export const MOIS_FR = [
 ];
 export const MOIS_FR_SHORT = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Aoû", "Sep", "Oct", "Nov", "Déc"];
 
-/** Somme remise au bénéficiaire : tout le monde cotise sauf le bénéficiaire. */
+/** ⚠ ANCIENNE formule (le bénéficiaire était exempté) — conservée pour
+ *  compatibilité mais REMPLACÉE par potMensuelDynamique : depuis la demande du
+ *  président (novembre 2026), le bénéficiaire cotise AUSSI son taux, et le pot
+ *  est l'addition des taux personnels de tous les membres (types de cotisations). */
 export const potMensuel = (effectif: number) => (effectif - 1) * TONTINE.montantCotisation;
 /** Collation : tout le monde y contribue, y compris le bénéficiaire. */
 export const collationMensuelle = (effectif: number) => effectif * TONTINE.montantCollation;
+
+/** Données de cotisation DYNAMIQUES : les types de cotisations fixés par le
+ *  bureau (typesCotis) + la cotisation de base pour les membres sans type. */
+export type CotisDynamiques = { types: TypeCotisation[]; base: number };
+
+/**
+ * POT DU MOIS — règle du bureau (demande du président, novembre 2026) :
+ * CHAQUE membre cotise SON taux (le montant de son type de cotisation attribué,
+ * ou la cotisation de base s'il n'a pas de type) TOUS LES MOIS DE L'ANNÉE —
+ * Y COMPRIS le mois où il reçoit la réunion : être bénéficiaire n'exempte de
+ * rien et n'empêche rien, il reçoit l'addition des taux de TOUS les membres.
+ * Ex. Aurélie (type 50 000) + Patrick (type 30 000) : quand Aurélie reçoit,
+ * Patrick verse 30 000, les 50 000 versent 50 000 — la somme = addition de tous.
+ */
+export function potMensuelDynamique(roster: Member[], cotis?: CotisDynamiques): number {
+  if (!cotis) return potMensuel(roster.length); // sans données de types — ancienne base
+  return sommeCotisationsDuMois(roster, cotis.types, cotis.base);
+}
+
+/** Détail lisible des cotisants du mois — ex. « 2 × 50 000 + 9 × 25 000 ». */
+export function detailCotisantsDuMois(roster: Member[], cotis?: CotisDynamiques): string {
+  return detailTauxDuMois(roster, cotis?.types ?? [], cotis?.base ?? TONTINE.montantCotisation);
+}
 
 /* ══════════════════════════ rôles du bureau ══════════════════════════ */
 
@@ -235,13 +263,20 @@ export type TourMois = {
   beneficiary: Member | null; // null en décembre (AG)
   ag: boolean; // assemblée générale
   pot: number;
+  /** Détail des cotisants — ex. « 2 × 50 000 + 9 × 25 000 » (chacun son taux,
+   *  bénéficiaire inclus) ; vide pour l'AG. */
+  potDetail: string;
   collation: number;
   total: number;
   etat: EtatMois; // le nom du bénéficiaire n'apparaît que passé/courant (le moment venu)
 };
 
-/** Construit les 12 mois de l'année : 11 tours + l'AG de décembre. */
-export function buildAnnee(year: number, roster: Member[], today = new Date()): TourMois[] {
+/** Construit les 12 mois de l'année : 11 tours + l'AG de décembre.
+ *  `cotis` (optionnel) active les TAUX PERSONNELS : le pot de chaque mois
+ *  devient l'addition des taux de tous les membres (types de cotisations
+ *  attribués par le bureau, cotisation de base pour les autres) — bénéficiaire
+ *  inclus. Sans `cotis`, l'ancienne formule plate s'applique. */
+export function buildAnnee(year: number, roster: Member[], today = new Date(), cotis?: CotisDynamiques): TourMois[] {
   const byTour = new Map<number, Member>();
   roster.forEach((m) => byTour.set(m.tour, m));
   const moisCourant = today.getMonth();
@@ -250,13 +285,14 @@ export function buildAnnee(year: number, roster: Member[], today = new Date()): 
     const date = new Date(year, m0, jour);
     const ag = m0 === 11;
     const beneficiary = ag ? null : byTour.get(m0 + 1) ?? null;
-    const pot = ag ? 0 : potMensuel(roster.length);
+    const pot = ag ? 0 : potMensuelDynamique(roster, cotis);
+    const potDetail = ag ? "" : detailCotisantsDuMois(roster, cotis);
     const collation = ag ? 0 : collationMensuelle(roster.length);
     const etat: EtatMois = m0 < moisCourant ? "passe" : m0 === moisCourant ? "courant" : "futur";
     return {
       month0: m0, mois, annee: year, jour, date,
       iso: `${year}-${String(m0 + 1).padStart(2, "0")}-${String(jour).padStart(2, "0")}`,
-      tour: ag ? null : m0 + 1, beneficiary, ag, pot, collation, total: pot + collation, etat,
+      tour: ag ? null : m0 + 1, beneficiary, ag, pot, potDetail, collation, total: pot + collation, etat,
     };
   });
 }
@@ -441,24 +477,33 @@ export type ClassementRow = {
   totalVerse: number;
 };
 
-/** Classement des cotisants — les fictifs selon le registre, « Vous » selon votre suivi. */
-export function classementCotisants(annee: TourMois[], roster: Member[], payes: Payes, vousId: string, today = new Date()): ClassementRow[] {
+/** Classement des cotisants — les fictifs selon le registre, « Vous » selon votre suivi.
+ *  `cotis` (taux personnels actifs) : chaque part vaut le taux DU membre (son
+ *  type attribué ou la base) + la collation, et son propre tour compte aussi
+ *  dans ses parts — le bénéficiaire cotise aussi son taux le mois de sa levée. */
+export function classementCotisants(annee: TourMois[], roster: Member[], payes: Payes, vousId: string, today = new Date(), cotis?: CotisDynamiques): ClassementRow[] {
   const todayIso = isoDate(today);
   const toursEcoules = annee.filter((t) => !t.ag && t.iso <= todayIso);
   return roster.map((m) => {
-    const mes = toursEcoules.filter((t) => t.beneficiary?.id !== m.id);
+    /* Nouvelle règle (bénéficiaire inclus) : son tour compte parmi ses parts
+     * dès que les taux personnels sont actifs ; sinon, ancien comportement. */
+    const mes = cotis ? toursEcoules : toursEcoules.filter((t) => t.beneficiary?.id !== m.id);
     const parts = mes.length;
     const anoms = ANOMALIES.filter((a) => a.memberId === m.id && mes.some((t) => t.month0 === a.month0));
     const versees = m.isVous
       ? mes.filter((t) => payes[payeKey(m.id, t.annee, t.month0)]).length
       : parts; // registre officiel : versé, même avec pénalité de retard
     const ponctualite = parts > 0 ? Math.round((versees / parts) * 100) : null;
+    /* Sa part par réunion : SON taux (type attribué ou base) + la collation. */
+    const partParReunion = cotis
+      ? cotisationDuMembre(m.id, cotis.types, cotis.base) + TONTINE.montantCollation
+      : detteParPersonne();
     return {
       member: m, parts, versees,
       retards: anoms.length,
       penalites: anoms.reduce((s, a) => s + a.montant, 0),
       ponctualite,
-      totalVerse: versees * detteParPersonne(),
+      totalVerse: versees * partParReunion,
     };
   }).sort((a, b) => {
     const pa = a.ponctualite ?? -1;
@@ -469,11 +514,13 @@ export function classementCotisants(annee: TourMois[], roster: Member[], payes: 
   });
 }
 
-/** Projection de fin d'année — tous les montants dérivés des règles. */
-export function projectionAnnee(annee: TourMois[], roster: Member[]) {
+/** Projection de fin d'année — tous les montants dérivés des règles.
+ *  `cotis` (taux personnels) : le pot annuel = 11 × l'addition des taux de
+ *  tous les membres (bénéficiaire inclus), pas une formule plate. */
+export function projectionAnnee(annee: TourMois[], roster: Member[], cotis?: CotisDynamiques) {
   const tours = annee.filter((t) => !t.ag);
   const nbTours = tours.length;
-  const pot = potMensuel(roster.length);
+  const pot = potMensuelDynamique(roster, cotis);
   const colla = collationMensuelle(roster.length);
   const penalites = ANOMALIES.reduce((s, a) => s + a.montant, 0);
   return {
