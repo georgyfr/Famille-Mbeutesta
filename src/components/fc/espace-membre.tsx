@@ -81,6 +81,7 @@ import {
 } from "./tontine-bureau";
 import { GARANTIES_LABELS, loadReglement, type Reglement } from "./reglement";
 import { loadMembresApplication } from "./membres-app";
+import { futursMembres } from "./premembres";
 import { loadPostes, posteDeMembre, POSTES_BUREAU, type PostesMap } from "./postes-bureau";
 import { loadTypesSolidarite, loadVisitesSolidarite, type TypeSolidarite, type VisiteSolidarite } from "./solidarite-bureau";
 
@@ -157,9 +158,11 @@ function chargerDossiers(): DossierPret[] {
 }
 
 /** Résout QUI est le membre : compte réel (fc_uid → annuaire), sinon nom,
- *  sinon l'aperçu de démonstration (Patrick Talla, membre simple). */
+ *  sinon l'aperçu de démonstration (Patrick Talla, membre simple).
+ *  v27 — les FUTURS MEMBRES (codes en attente) figurent dans le roster : le
+ *  bureau les voit partout et peut déjà travailler pour eux. */
 function resoudreMoi(): { moi: Moi; roster: Member[] } {
-  const roster = [...MEMBRES_FICTIFS, ...loadMembresApplication()];
+  const roster = [...MEMBRES_FICTIFS, ...loadMembresApplication(), ...futursMembres()];
   try {
     const uid = window.localStorage.getItem("fc_uid");
     if (uid) {

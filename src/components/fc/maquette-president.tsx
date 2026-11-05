@@ -35,6 +35,7 @@ import {
   type Member, type ReglagesTontine,
 } from "./tontine-data";
 import { estMembreApp, loadMembresApplication } from "./membres-app";
+import { futursMembres } from "./premembres";
 import {
   COLLECTE_INTERETS_LABELS, COLLECTE_INTERETS_NOTES, EVENTS_SOLIDAIRES_LABELS,
   INTERETS_EPARGNE_LABELS, MAJORITES_LABELS, METHODES_SOLIDARITE,
@@ -390,7 +391,10 @@ export function MaquettePresident() {
   /* — dérivés —
    *    Effectif complet : les 10 membres de démonstration + les membres AJOUTÉS
    *    via l'application (inscrits / pré-enregistrés dans l'espace famille). */
-  const roster = useMemo(() => [...MEMBRES_FICTIFS, ...membresApp], [membresApp]);
+  /* v27 — les FUTURS MEMBRES (codes non utilisés) rejoignent la liste : le
+   * président peut déjà leur allouer cotisations, épargnes et prêts AVANT
+   * leur inscription — à l'activation du code, tout rejoint leur compte. */
+  const roster = useMemo(() => [...MEMBRES_FICTIFS, ...membresApp, ...futursMembres()], [membresApp]);
   const parMembre = useMemo(() => new Map(roster.map((m) => [m.id, m])), [roster]);
   /* — v18 : COMPTE D'ÉPARGNE PERSONNEL DU PRÉSIDENT — le bloc « Déposer ou
    *    retirer » de « Mes épargnes » a été SUPPRIMÉ (demande du président : il

@@ -1,18 +1,22 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CRÉER UN MEMBRE DE LA RÉUNION — génération de codes d'invitation
+// CRÉER UN MEMBRE DE LA RÉUNION — génération de codes d'invitation (v27)
 //
-// Section PARTAGÉE par les deux consoles du bureau (demande de
-// l'administrateur, Task 67) : le président (#president/codes) et la
-// secrétaire (#secretaire/codes) créent des membres de la réunion AVANT leur
-// arrivée et leur remettent un CODE d'invitation — partageable par WhatsApp,
-// copiable en un geste — que la personne collera à son inscription pour voir
-// SA page s'ouvrir directement avec le rôle et la cotisation attribués.
-//
-// Champs du code (cahier des charges) : numéro de téléphone, type de
-// cotisation (selon les paramétrages du bureau), type de membre
-// (Membre simple / Membre du bureau — si bureau, liste déroulante du poste).
+// Demande de l'administrateur (Task 71) :
+//   1. « lorsqu'un code est généré, celui qui a généré le code n'est pas
+//      obligé de le partager tout de suite » → une SECTION dédiée « Codes
+//      générés » (TABLEAU : numéro de téléphone · ville · code · statut)
+//      garde chaque code avec ses boutons de PARTAGE (WhatsApp, copier).
+//   2. Le champ NOM est RETIRÉ du formulaire : la personne donne son nom
+//      ELLE-MÊME quand elle insère son code dans l'application.
+//   3. Le champ VILLE est ajouté juste après le téléphone — Yaoundé par
+//      défaut, et à côté le bouton « Ajouter une nouvelle ville » : on
+//      sélectionne d'abord la RÉGION parmi les régions du Cameroun, puis la
+//      ville appropriée. Chaque ville = une tontine (page Finances).
+//   4. Pré-allocation : dès le code généré, le bureau peut attribuer
+//      cotisations, épargnes et prêts au futur membre (il apparaît dans les
+//      listes) — à l'inscription, la personne retrouve TOUT sur sa page.
 //
 // Un code n'expire JAMAIS : tant qu'il n'est pas utilisé il reste « en
 // attente », une fois utilisé il reste dans la liste marqué « utilisé ».
@@ -22,10 +26,10 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 import {
-  Check, Copy, KeyRound, MessageCircle, Phone, ShieldCheck, Ticket, Trash2, UserPlus, Users,
+  Check, Copy, KeyRound, MapPin, MessageCircle, Phone, PlusCircle, ShieldCheck, Ticket, Trash2, UserPlus, Users,
 } from "lucide-react";
 import { FcCard } from "./ui";
-import { Block, Btn, BtnConfirme, P, dateCourte, heure, fcfa } from "./maquette-ui";
+import { Block, Btn, BtnConfirme, P, fcfa } from "./maquette-ui";
 import { PhoneCountrySelect, usePhoneCountry } from "./phone-country-select";
 import { TONTINE, loadMontants } from "./tontine-data";
 import type { RoleKey } from "./tontine-data";
@@ -34,6 +38,19 @@ import {
   LIBELLES_BUREAU, POSTES_BUREAU_CODES, chargerCodes, genererCodeMembre,
   messageWhatsApp, sauverCodes, type CodeMembre, type TypeMembreCode,
 } from "./codes-membres";
+import {
+  REGIONS_CAMEROUN, REGIONS_VILLES_CAMEROUN, VILLE_DEFAUT, ajouterVille, loadVilles,
+  type Ville,
+} from "./villes";
+
+/** Date ISO → « 5 nov. 2026, 14:03 » — fidèle à la date réelle du code. */
+function dateIso(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString("fr-FR", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return iso;
+  }
+}
 
 export function CodesMembresSection(p: {
   /** Qui crée le membre — l'auteur est écrit dans le code. */
@@ -47,6 +64,7 @@ export function CodesMembresSection(p: {
   /* — chargements réservés au client (localStorage) — zéro mismatch — */
   const [codes, setCodes] = useState<CodeMembre[]>([]);
   const [typesCotis, setTypesCotis] = useState<TypeCotisation[]>([]);
+  const [villes, setVilles] = useState<Ville[]>([]);
   /** Cotisation de base RÉELLE : les montants persistés (loadMontants) sont
    *  appliqués à TONTINE avant lecture — sinon le libellé affiche 0 FCFA. */
   const [montantBase, setMontantBase] = useState(0);
@@ -54,19 +72,49 @@ export function CodesMembresSection(p: {
     const t0 = setTimeout(() => {
       setCodes(chargerCodes());
       setTypesCotis(loadTypesCotisation());
+      setVilles(loadVilles());
       loadMontants();
       setMontantBase(TONTINE.montantCotisation);
     }, 0);
     return () => clearTimeout(t0);
   }, []);
 
-  /* — formulaire : téléphone, cotisation, type de membre — */
+  /* — formulaire : téléphone, ville, cotisation, type de membre — */
   const { country, setCountry } = usePhoneCountry();
   const [digits, setDigits] = useState("");
-  const [nom, setNom] = useState("");
+  const [ville, setVille] = useState<string>(VILLE_DEFAUT);
   const [cotisChoix, setCotisChoix] = useState<string>("base"); // "base" | id de type
   const [typeMembre, setTypeMembre] = useState<TypeMembreCode>("simple");
   const [bureauRole, setBureauRole] = useState<RoleKey>("president");
+
+  /* — ajout d'une nouvelle ville : région d'abord, puis la ville — */
+  const [panneauVille, setPanneauVille] = useState(false);
+  const [regionChoisie, setRegionChoisie] = useState<string>(REGIONS_CAMEROUN[1] ?? REGIONS_CAMEROUN[0] ?? "Centre");
+  const [villeRegion, setVilleRegion] = useState<string>("");
+  const [villeAutre, setVilleAutre] = useState<string>("");
+  const villesDeRegion = REGIONS_VILLES_CAMEROUN[regionChoisie] ?? [];
+
+  const confirmerNouvelleVille = () => {
+    const nom = (villeRegion === "__autre__" ? villeAutre : villeRegion).trim();
+    if (!nom) {
+      toast.error("Sélectionnez la ville appropriée — ou « Autre… » pour la saisir vous-même.");
+      return;
+    }
+    const { villes: maj, ajoutee } = ajouterVille(nom, regionChoisie);
+    setVilles(maj);
+    setPanneauVille(false);
+    setVilleRegion("");
+    setVilleAutre("");
+    if (ajoutee) {
+      setVille(nom);
+      toast.success(`Ville ajoutée : ${nom} (${regionChoisie})`, {
+        description: `Les codes et membres de ${nom} constituent désormais UNE tontine — cotisations et prêts additionnés entre eux.`,
+      });
+    } else {
+      setVille(nom);
+      toast.info(`${nom} figure déjà dans la liste des villes.`);
+    }
+  };
 
   const telPlein = `+${country.dial}${digits.replace(/\D/g, "")}`;
   const telOk = digits.replace(/\D/g, "").length >= 6;
@@ -100,22 +148,22 @@ export function CodesMembresSection(p: {
     }
     const c = genererCodeMembre({
       telephone: telPlein,
-      nomOptionnel: nom.trim(),
+      nomOptionnel: "", // le nom est donné par la PERSONNE à l'inscription (v27)
       cotisationTypeId: typeChoisi?.id ?? null,
       cotisationNom: cotisNom,
       cotisationMontant: cotisMontant,
       typeMembre,
       bureauRole: typeMembre === "bureau" ? bureauRole : null,
+      ville: villes.some((v) => v.nom === ville) ? ville : VILLE_DEFAUT,
       creePar: p.creePar,
       creeParNom: p.creeParNom,
     });
     setCodes(chargerCodes());
     setDernier(c);
-    setNom("");
     setDigits("");
     setTypeMembre("simple");
-    toast.success(`Code généré pour ${c.nomOptionnel || "le futur membre"}`, {
-      description: `${c.code} — partagez-le par WhatsApp ou copiez-le : la personne le collera à son inscription et SA page s'ouvrira avec le rôle attribué. Le code n'expire jamais.`,
+    toast.success(`Code généré pour le futur membre de ${c.ville}`, {
+      description: `${c.code} — pas besoin de le partager tout de suite : il est gardé dans la section « Codes générés » ci-dessous. La personne peut déjà recevoir cotisations, épargnes et prêts.`,
     });
   };
 
@@ -130,9 +178,12 @@ export function CodesMembresSection(p: {
   const cartePartage = (c: CodeMembre): ReactNode => (
     <div className="rounded-2xl border-2 p-3.5" style={{ borderColor: `${p.accent}55`, backgroundColor: `${p.accent}0D` }}>
       <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: p.accent }}>
-        {c === dernier ? "Code tout juste généré — à partager maintenant" : "Code d'invitation"}
+        {c === dernier ? "Code tout juste généré — partagez-le quand vous voulez" : "Code d'invitation"}
       </p>
       <p className="mt-1 select-all font-mono text-[26px] font-black tracking-[0.14em] text-[#2B3530]">{c.code}</p>
+      <p className="mt-0.5 text-[11.5px] font-semibold text-[#5C6B60]">
+        {c.telephone} · {c.ville} · {c.typeMembre === "bureau" ? LIBELLES_BUREAU[c.bureauRole ?? "membre"] : "Membre simple"}
+      </p>
       <div className="mt-2 flex flex-wrap gap-2">
         <Btn small tone="or" onClick={() => void copier(c.code)}>
           {copie && c === dernier ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
@@ -149,9 +200,10 @@ export function CodesMembresSection(p: {
         </a>
       </div>
       <p className="mt-2 text-[10.5px] leading-relaxed text-[#5C6B60]">
-        La personne s'inscrit avec son numéro, <strong>colle ce code</strong> à l'étape du téléphone : sa page
-        s'ouvre directement avec {c.typeMembre === "bureau" ? `le poste « ${c.bureauRole ? LIBELLES_BUREAU[c.bureauRole] : "bureau"} »` : "le rôle de membre simple"}
-        {c.cotisationTypeId ? ` et sa cotisation « ${c.cotisationNom} » (${fcfa(c.cotisationMontant)}/mois)` : ` et la cotisation de base (${fcfa(c.cotisationMontant)}/mois)`}.
+        La personne ouvre l&apos;application, <strong>colle ce code</strong>, donne SON NOM : sa page
+        s&apos;ouvre avec {c.typeMembre === "bureau" ? `le poste « ${c.bureauRole ? LIBELLES_BUREAU[c.bureauRole] : "bureau"} »` : "le rôle de membre simple"}
+        {c.cotisationTypeId ? ` et sa cotisation « ${c.cotisationNom} » (${fcfa(c.cotisationMontant)}/mois)` : ` et la cotisation de base (${fcfa(c.cotisationMontant)}/mois)`} —
+        et TOUT ce que le bureau lui a déjà alloué (épargnes, prêts, cotisations) apparaît sur sa page.
       </p>
     </div>
   );
@@ -161,25 +213,14 @@ export function CodesMembresSection(p: {
       title={p.titre ?? "Créer un membre de la réunion — générer un code d'invitation"}
       icon={<Ticket className="h-4.5 w-4.5" />}
       accent={p.accent}
-      note="Le président, la secrétaire et l'administrateur du site créent les membres AVANT leur arrivée : remplissez le numéro de téléphone, le type de cotisation (selon vos paramétrages) et le type de membre — puis générez le code et partagez-le (WhatsApp ou copier-coller). La personne s'inscrit, colle le code, et SA page apparaît avec le rôle choisi. Un code n'expire jamais : tant qu'il n'est pas utilisé, il reste valable."
+      note="Le président et la secrétaire créent les membres AVANT leur arrivée : numéro de téléphone, VILLE (Yaoundé par défaut — une nouvelle ville s'ajoute en choisissant sa région), type de cotisation et type de membre. Pas besoin de partager le code tout de suite : il est gardé dans la section « Codes générés », prêt à être partagé quand vous voulez. Dès la génération, la personne peut recevoir cotisations, épargnes et prêts."
     >
       <div className="space-y-3 p-4">
         {/* ─── formulaire ─── */}
         <div className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3.5">
           <p className="flex items-center gap-1.5 text-[12px] font-black uppercase tracking-wide" style={{ color: p.accent }}>
-            <UserPlus className="h-4 w-4" /> Le futur membre — ce que le bureau connaît de lui
+            <UserPlus className="h-4 w-4" /> Le futur membre — téléphone, ville, cotisation
           </p>
-
-          <label className="mt-3 block">
-            <span className="block text-[11.5px] font-bold text-[#2B3530]">Nom (facultatif — la personne confirme à l&apos;inscription)</span>
-            <input
-              value={nom}
-              onChange={(e) => setNom(e.target.value)}
-              placeholder="Ex. : Georges Mbeutetsa"
-              aria-label="Nom du futur membre (facultatif)"
-              className="mt-1 w-full rounded-lg border border-[#C9B98A] bg-white px-3 py-2.5 text-[13px] font-semibold text-[#2B3530] outline-none placeholder:text-[#8A9288]"
-            />
-          </label>
 
           <label className="mt-3 block">
             <span className="flex items-center gap-1.5 text-[11.5px] font-bold text-[#2B3530]">
@@ -200,6 +241,93 @@ export function CodesMembresSection(p: {
             </span>
             <span className="mt-1 block text-[10.5px] text-[#8A9288]">Numéro complet : {telPlein || `+${country.dial}…`}</span>
           </label>
+
+          {/* — VILLE (v27) : Yaoundé par défaut + ajout d'une nouvelle ville — */}
+          <div className="mt-3">
+            <span className="flex items-center gap-1.5 text-[11.5px] font-bold text-[#2B3530]">
+              <MapPin className="h-3.5 w-3.5" /> Ville de la tontine — la personne rejoint SA ville
+            </span>
+            <span className="mt-1 flex flex-wrap items-stretch gap-2">
+              <select
+                value={ville}
+                onChange={(e) => setVille(e.target.value)}
+                aria-label="Ville du futur membre"
+                className="min-h-[42px] min-w-0 flex-1 rounded-lg border-2 border-[#E5DCC0] bg-white px-2.5 py-2 text-[13px] font-bold text-[#2B3530] outline-none"
+              >
+                {villes.map((v) => (
+                  <option key={v.nom} value={v.nom}>
+                    {v.nom}{v.region ? ` — ${v.region}` : ""}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setPanneauVille((x) => !x)}
+                className="inline-flex min-h-[42px] shrink-0 items-center gap-1.5 rounded-lg border-2 px-2.5 text-[11.5px] font-bold transition active:scale-[0.97]"
+                style={{ borderColor: `${p.accent}66`, color: p.accent, backgroundColor: `${p.accent}0A` }}
+                aria-expanded={panneauVille}
+              >
+                <PlusCircle className="h-4 w-4" /> Ajouter une nouvelle ville
+              </button>
+            </span>
+            <p className="mt-1 text-[10.5px] text-[#8A9288]">
+              Tous les membres d&apos;une même ville forment UNE tontine — leurs cotisations, prêts et épargnes sont additionnés entre eux.
+            </p>
+
+            {panneauVille && (
+              <div className="mt-2 rounded-xl border-2 p-3" style={{ borderColor: `${p.accent}55`, backgroundColor: `${p.accent}0A` }}>
+                <p className="text-[11.5px] font-black uppercase tracking-wide" style={{ color: p.accent }}>
+                  Nouvelle ville — la région d&apos;abord, puis la ville
+                </p>
+                <label className="mt-2 block">
+                  <span className="block text-[11px] font-bold text-[#2B3530]">1. Région du Cameroun</span>
+                  <select
+                    value={regionChoisie}
+                    onChange={(e) => {
+                      setRegionChoisie(e.target.value);
+                      setVilleRegion("");
+                    }}
+                    aria-label="Région de la nouvelle ville"
+                    className="mt-1 w-full rounded-lg border-2 border-[#E5DCC0] bg-white px-2.5 py-2.5 text-[13px] font-bold text-[#2B3530] outline-none"
+                  >
+                    {REGIONS_CAMEROUN.map((r) => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="mt-2 block">
+                  <span className="block text-[11px] font-bold text-[#2B3530]">2. Ville appropriée</span>
+                  <select
+                    value={villeRegion}
+                    onChange={(e) => setVilleRegion(e.target.value)}
+                    aria-label="Ville à ajouter"
+                    className="mt-1 w-full rounded-lg border-2 border-[#E5DCC0] bg-white px-2.5 py-2.5 text-[13px] font-bold text-[#2B3530] outline-none"
+                  >
+                    <option value="">— Sélectionnez la ville —</option>
+                    {villesDeRegion.map((v) => (
+                      <option key={v} value={v}>{v}</option>
+                    ))}
+                    <option value="__autre__">Autre… (saisir la ville)</option>
+                  </select>
+                </label>
+                {villeRegion === "__autre__" && (
+                  <input
+                    value={villeAutre}
+                    onChange={(e) => setVilleAutre(e.target.value)}
+                    placeholder={`Nom de la ville (${regionChoisie})`}
+                    aria-label="Nom de la ville à saisir"
+                    className="mt-2 w-full rounded-lg border border-[#C9B98A] bg-white px-3 py-2.5 text-[13px] font-bold text-[#2B3530] outline-none placeholder:text-[#8A9288]"
+                  />
+                )}
+                <div className="mt-2.5 flex flex-wrap gap-2">
+                  <Btn small tone={p.creePar === "secretariat" ? "violet" : "vert"} onClick={confirmerNouvelleVille}>
+                    <Check className="h-3.5 w-3.5" /> Ajouter la ville
+                  </Btn>
+                  <Btn small tone="neutre" onClick={() => setPanneauVille(false)}>Annuler</Btn>
+                </div>
+              </div>
+            )}
+          </div>
 
           <label className="mt-3 block">
             <span className="block text-[11.5px] font-bold text-[#2B3530]">Type de cotisation qu&apos;il effectuera</span>
@@ -276,52 +404,82 @@ export function CodesMembresSection(p: {
         {/* ─── carte de partage du dernier code ─── */}
         {dernier && cartePartage(dernier)}
 
-        {/* ─── liste des codes ─── */}
+        {/* ─── SECTION « CODES GÉNÉRÉS » — tableau téléphone · ville · code, partageable ─── */}
         <div>
           <p className="flex items-center gap-1.5 text-[12px] font-black uppercase tracking-wide" style={{ color: p.accent }}>
-            <Users className="h-4 w-4" /> Codes générés par le bureau ({codes.length})
+            <Users className="h-4 w-4" /> Codes générés — à partager quand vous voulez ({codes.length})
+          </p>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-[#8A9288]">
+            Pas besoin de partager un code dès sa création : il est gardé ici, avec le numéro de la personne, sa ville
+            et ses boutons de partage (WhatsApp ou copier-coller). Un code en attente attend son propriétaire sans limite de temps.
           </p>
           {codes.length === 0 ? (
             <p className="mt-2 rounded-2xl border border-dashed border-[#C9B98A] bg-[#FBF7EA] px-3 py-3 text-[12px] leading-relaxed text-[#8A9288]">
               Aucun code pour l&apos;instant — remplissez le formulaire ci-dessus puis cliquez « Générer le code d&apos;invitation ».
             </p>
           ) : (
-            <div className="mt-2 max-h-96 space-y-2 overflow-y-auto pr-1">
-              {codes.map((c) => (
-                <div key={c.id} className="rounded-2xl border border-[#E5DCC0] bg-white p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-mono text-[15px] font-black tracking-[0.12em] text-[#2B3530]">{c.code}</p>
-                    {c.utiliseLe ? (
-                      <P cls="bg-[#2F6B45]/12 text-[#2F6B45] border-[#2F6B45]/30">
-                        <ShieldCheck className="h-3 w-3" /> Utilisé le {dateCourte()} à {heure()} par {c.utiliseNom ?? "—"}
-                      </P>
-                    ) : (
-                      <P cls="bg-[#C89F62]/18 text-[#8A6420] border-[#C89F62]/45">En attente d&apos;inscription — valable sans limite</P>
-                    )}
-                  </div>
-                  <p className="mt-1 text-[11.5px] leading-relaxed text-[#5C6B60]">
-                    {c.nomOptionnel ? <><strong>{c.nomOptionnel}</strong> · </> : null}
-                    {c.telephone} · {c.typeMembre === "bureau" ? `Membre du bureau — ${c.bureauRole ? LIBELLES_BUREAU[c.bureauRole] : "poste à préciser"}` : "Membre simple"}
-                    {" "}· {c.cotisationNom} ({fcfa(c.cotisationMontant)}/mois)
-                    {" "}· créé par {c.creeParNom}
-                  </p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <Btn small tone="neutre" onClick={() => void copier(c.code)}><Copy className="h-3.5 w-3.5" /> Copier</Btn>
-                    <a
-                      href={`https://wa.me/?text=${encodeURIComponent(messageWhatsApp(c))}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex min-h-[34px] items-center justify-center gap-1.5 rounded-lg bg-[#25D366] px-2.5 text-[11.5px] font-bold text-white transition hover:bg-[#1fb857]"
-                      aria-label={`Partager à nouveau le code ${c.code} via WhatsApp`}
-                    >
-                      <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
-                    </a>
-                    <BtnConfirme tone="rouge" labelConfirmer="Supprimer ?" onConfirmer={() => supprimer(c.id)}>
-                      <Trash2 className="h-3.5 w-3.5" /> Retirer
-                    </BtnConfirme>
-                  </div>
-                </div>
-              ))}
+            <div className="mt-2 max-h-96 overflow-y-auto rounded-2xl border border-[#E5DCC0] bg-white pr-0.5 fc-scroll">
+              <table className="w-full border-collapse text-left">
+                <caption className="sr-only">Tableau des codes d&apos;invitation générés — numéro, ville, code et statut</caption>
+                <thead>
+                  <tr className="sticky top-0 bg-[#FBF7EA] text-[10px] font-black uppercase tracking-wide text-[#8A9288]">
+                    <th scope="col" className="px-2.5 py-2">Numéro de la personne</th>
+                    <th scope="col" className="px-2.5 py-2">Ville</th>
+                    <th scope="col" className="px-2.5 py-2">Code</th>
+                    <th scope="col" className="px-2.5 py-2">Statut</th>
+                    <th scope="col" className="px-2.5 py-2 text-right">Partage</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {codes.map((c) => (
+                    <tr key={c.id} className="border-t border-[#F0E9D6] align-top">
+                      <td className="px-2.5 py-2.5">
+                        <p className="text-[12px] font-bold text-[#2B3530]">{c.telephone}</p>
+                        <p className="text-[10px] leading-snug text-[#8A9288]">
+                          {c.typeMembre === "bureau" ? `Bureau — ${c.bureauRole ? LIBELLES_BUREAU[c.bureauRole] : "poste à préciser"}` : "Membre simple"}
+                          {" "}· {c.cotisationNom} ({fcfa(c.cotisationMontant)}/mois)
+                        </p>
+                        {c.utiliseNom && <p className="text-[10px] font-semibold text-[#2F6B45]">Inscrit(e) : {c.utiliseNom}</p>}
+                      </td>
+                      <td className="px-2.5 py-2.5">
+                        <span className="inline-flex items-center gap-1 rounded-full border border-[#C9B98A]/60 bg-[#FBF7EA] px-2 py-0.5 text-[10.5px] font-bold text-[#5C6B60]">
+                          <MapPin className="h-3 w-3" /> {c.ville}
+                        </span>
+                      </td>
+                      <td className="px-2.5 py-2.5">
+                        <p className="select-all font-mono text-[13.5px] font-black tracking-[0.1em] text-[#2B3530]">{c.code}</p>
+                        <p className="text-[10px] text-[#8A9288]">créé le {dateIso(c.creeLe)} par {c.creeParNom}</p>
+                      </td>
+                      <td className="px-2.5 py-2.5">
+                        {c.utiliseLe ? (
+                          <P cls="bg-[#2F6B45]/12 text-[#2F6B45] border-[#2F6B45]/30">
+                            <ShieldCheck className="h-3 w-3" /> Utilisé le {dateIso(c.utiliseLe)}
+                          </P>
+                        ) : (
+                          <P cls="bg-[#C89F62]/18 text-[#8A6420] border-[#C89F62]/45">En attente</P>
+                        )}
+                      </td>
+                      <td className="px-2.5 py-2.5">
+                        <div className="flex flex-wrap items-center justify-end gap-1.5">
+                          <Btn small tone="neutre" onClick={() => void copier(c.code)}><Copy className="h-3.5 w-3.5" /> Copier</Btn>
+                          <a
+                            href={`https://wa.me/?text=${encodeURIComponent(messageWhatsApp(c))}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex min-h-[30px] items-center justify-center gap-1 rounded-lg bg-[#25D366] px-2 text-[10.5px] font-bold text-white transition hover:bg-[#1fb857]"
+                            aria-label={`Partager le code ${c.code} de ${c.telephone} via WhatsApp`}
+                          >
+                            <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+                          </a>
+                          <BtnConfirme tone="rouge" labelConfirmer="Supprimer ?" onConfirmer={() => supprimer(c.id)}>
+                            <Trash2 className="h-3.5 w-3.5" /> Retirer
+                          </BtnConfirme>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
@@ -330,10 +488,10 @@ export function CodesMembresSection(p: {
         <p className="flex items-start gap-2 rounded-xl border border-[#C89F62]/45 bg-[#C89F62]/10 px-3 py-2.5 text-[11.5px] leading-relaxed text-[#7A5B2E]">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            <strong>Comment ça marche :</strong> la personne reçoit le code (WhatsApp, SMS, e-mail…) → elle s&apos;inscrit
-            dans l&apos;application avec son numéro → à l&apos;étape du téléphone elle <strong>colle le code</strong> →
-            l&apos;assistant de rôle est sauté et <strong>SA page s&apos;ouvre directement</strong> avec le rôle et la
-            cotisation fixés ici. Aucune expiration : même partagé aujourd&apos;hui, il marchera encore dans six mois.
+            <strong>Comment ça marche :</strong> générez le code — il reste ICI, prêt à être partagé plus tard. Pendant ce
+            temps, allouez déjà cotisations, épargnes et prêts au futur membre (il figure dans vos listes). Quand la personne
+            reçoit le code, elle ouvre l&apos;application, le colle, donne son nom : <strong>sa page s&apos;ouvre avec tout</strong> —
+            son rôle, sa ville ({VILLE_DEFAUT} par défaut), sa cotisation et l&apos;historique de ce que le bureau a préparé.
           </span>
         </p>
       </div>
@@ -353,4 +511,3 @@ export function RappelCodesMembres({ accent, children }: { accent: string; child
     </FcCard>
   );
 }
-

@@ -71,6 +71,7 @@ import {
 import { MEMBRES_FICTIFS, MOIS_FR, ROLE_META, TONTINE, secondSunday } from "./tontine-data";
 import type { Member } from "./tontine-data";
 import { loadMembresApplication } from "./membres-app";
+import { futursMembres } from "./premembres";
 import { loadReglement } from "./reglement";
 import type { Reglement } from "./reglement";
 import { loadEpargnesReunion, type AttributionReunion } from "./registres-bureau";
@@ -277,7 +278,10 @@ export function MaquetteSecretaire() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const roster = useMemo(() => [...MEMBRES_FICTIFS, ...membresApp], [membresApp]);
+  /* v27 — les FUTURS MEMBRES (codes non utilisés) rejoignent la liste : le
+   * bureau peut déjà leur allouer cotisations, épargnes et prêts AVANT leur
+   * inscription — à l'activation du code, tout rejoint leur compte. */
+  const roster = useMemo(() => [...MEMBRES_FICTIFS, ...membresApp, ...futursMembres()], [membresApp]);
   const parMembre = useMemo(() => new Map(roster.map((m) => [m.id, m])), [roster]);
   const MOI = "f06"; // Françoise Mbeutetsa — la secrétaire est AUSSI une membre
 
