@@ -18,7 +18,7 @@
 //     somme différente de la base (« tout le monde ne paie pas pareil ») ;
 //   · MainLevee       — un type de main levée (vote à main levée) nommé ;
 //   · VisiteSolidarite — une visite du calendrier : membre concerné, type de
-//     solidarité, MOIS, délégation (qui représente la cantine), note.
+//     solidarité, MOIS, délégation (qui représente la Tontine), note.
 //
 // Persistance locale (gratuit, hors ligne, zéro serveur) :
 //   · fc_solidarite_types_v1  — les types de solidarité + leurs variables ;
@@ -59,7 +59,7 @@ export type MainLevee = {
   note: string;
 };
 
-/** Une visite du calendrier de visites de solidarité : la cantine rend visite
+/** Une visite du calendrier de visites de solidarité : la Tontine rend visite
  *  à un membre concerné par un type de solidarité (deuil, mariage, maladie…). */
 export type VisiteSolidarite = {
   id: string;
@@ -69,7 +69,7 @@ export type VisiteSolidarite = {
   typeId: string | null;
   /** Mois (0-11) de la visite. */
   moisIdx: number;
-  /** Qui représente la cantine (délégation — libellé libre). */
+  /** Qui représente la Tontine (délégation — libellé libre). */
   delegation: string;
   /** Note libre (lieu, appui prévu…). */
   note: string;
@@ -102,7 +102,7 @@ const MAINS_LEVEES_DEMO: MainLevee[] = [
 ];
 
 const VISITES_DEMO: VisiteSolidarite[] = [
-  { id: "vs-demo-1", membreId: "f09", typeId: "ts-demo-1", moisIdx: 5, delegation: "Vice-présidente + 2 membres", note: "Domicile du membre — apporter le soutien de la cantine" },
+  { id: "vs-demo-1", membreId: "f09", typeId: "ts-demo-1", moisIdx: 5, delegation: "Vice-présidente + 2 membres", note: "Domicile du membre — apporter le soutien de la Tontine" },
   { id: "vs-demo-2", membreId: "f10", typeId: null, moisIdx: 8, delegation: "Secrétaire + Trésorier", note: "Visite d'encouragement après l'hospitalisation" },
 ];
 

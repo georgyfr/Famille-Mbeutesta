@@ -1003,7 +1003,120 @@ function RegistreReunionSection(p: {
 
   return (
     <>
-      {/* — 1. REGISTRE : les personnes, les mois, les intérêts, les sommes globales — */}
+      {/* — 1. ATTRIBUTION (v23 : l'élément le plus important — remonté au-dessus du registre) : le tableau de TOUS les membres, recherche dynamique — */}
+      <Block title={L.attrib} icon={L.icone} note={L.noteAttrib} accent="#6E4B71">
+        <div className="px-4 pt-4">
+          <div className="rounded-2xl border-2 border-[#B8A87E] bg-[#FFFDF6] p-3">
+            <label className="block">
+              <span className="flex items-center gap-1.5 text-[12.5px] font-black uppercase tracking-wide text-[#6E4B71]">
+                <Search className="h-4 w-4" /> Rechercher un nom — {L.nomPluriel}
+              </span>
+              <span className="mt-0.5 block text-[11.5px] font-semibold text-[#4A554E]">
+                Tapez les premières lettres : le tableau ne garde que les membres correspondants.
+              </span>
+              <span className="relative mt-1.5 block">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8A9288]" />
+                <input
+                  value={recherche}
+                  onChange={(e) => setRecherche(e.target.value)}
+                  type="search"
+                  placeholder="Ex. : Aurélie, Patrick, Marie-Louise…"
+                  aria-label={`Rechercher un membre dans la section ${L.attrib}`}
+                  className="w-full rounded-xl border-2 border-[#C9B98A] bg-white py-2.5 pl-9 pr-3 text-[14px] font-bold text-[#2B3530] outline-none placeholder:font-semibold placeholder:text-[#8A9288] focus:border-[#6E4B71]"
+                />
+              </span>
+            </label>
+            {q && (
+              <p className="mt-1.5 text-[11.5px] font-bold text-[#4A554E]">
+                {rosterFiltre.length === 0
+                  ? `Aucun membre ne correspond à « ${recherche.trim()} »`
+                  : `${rosterFiltre.length} membre${rosterFiltre.length > 1 ? "s" : ""} trouvé${rosterFiltre.length > 1 ? "s" : ""}`}
+                {rosterFiltre.length !== p.roster.length && rosterFiltre.length > 0 && (
+                  <button type="button" onClick={() => setRecherche("")} className="ml-2 underline decoration-dotted underline-offset-2 hover:text-[#6E4B71]">
+                    afficher tout le monde
+                  </button>
+                )}
+              </p>
+            )}
+          </div>
+        </div>
+        {rosterFiltre.length === 0 ? (
+          <p className="mx-4 mb-4 mt-3 rounded-2xl border border-dashed border-[#C9B98A] bg-[#FBF7EA] px-3 py-3 text-[12.5px] font-semibold text-[#4A554E]">
+            Aucun membre ne correspond à « {recherche.trim()} » — vérifiez l’orthographe ou effacez la recherche.
+          </p>
+        ) : (
+          <div className="max-h-96 overflow-y-auto rounded-2xl border border-[#E5DCC0] bg-white mx-4 mb-4 mt-3">
+            <table className="w-full min-w-[560px] border-collapse text-[12px]">
+              <thead className="sticky top-0">
+                <tr className="bg-[#6E4B71] text-white">
+                  <th className="px-2.5 py-2 text-left font-black">Membre</th>
+                  <th className="px-2.5 py-2 text-left font-black">Somme {p.genre === "prets" ? "prêtée à la réunion" : "épargnée"} (FCFA)</th>
+                  <th className="px-2.5 py-2 text-left font-black">Mois réel</th>
+                  <th className="px-2.5 py-2 text-left font-black">Intérêts / mois</th>
+                  <th className="px-2.5 py-2" aria-label="Attribuer" />
+                </tr>
+              </thead>
+              <tbody>
+                {rosterFiltre.map((m) => {
+                  const ligne = form[m.id];
+                  const montant = Number(ligne?.montant ?? 0);
+                  const mois = ligne?.mois ?? p.moisCourantIdx;
+                  const interetMois = montant > 0 ? Math.round(montant * (p.taux / 100)) : 0;
+                  const deja = itemsActifs.filter((x) => x.membreId === m.id);
+                  const totalDeja = deja.reduce((s, x) => s + x.montant, 0);
+                  return (
+                    <tr key={m.id} className="border-b border-[#E5DCC0] bg-[#FFFDF6]">
+                      <td className="px-2.5 py-2">
+                        <p className="font-bold text-[#2B3530]">
+                          {m.name}{m.role !== "membre" ? <span className="ml-1 text-[10px] font-black uppercase tracking-wide text-[#8A6420]"> — bureau</span> : null}
+                          {estMembreApp(m) && <span className="ml-1.5 rounded-full bg-[#3D6B72]/12 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#3D6B72]">via l’app</span>}
+                        </p>
+                        {deja.length > 0 && (
+                          <p className="text-[10px] text-[#8A9288]">
+                            déjà au registre : {deja.length} {deja.length > 1 ? L.nomPluriel : L.nom} — {fcfa(totalDeja)}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-2.5 py-2">
+                        <input
+                          value={ligne?.montant ?? ""}
+                          onChange={(e) => majForm(m.id, { montant: e.target.value.replace(/[^\d]/g, "") })}
+                          inputMode="numeric"
+                          placeholder="0"
+                          aria-label={`Somme ${p.genre === "prets" ? "prêtée" : "épargnée"} de ${m.name} en FCFA`}
+                          className="w-28 rounded-lg border border-[#C9B98A] bg-white px-2.5 py-1.5 text-[12.5px] font-bold text-[#2B3530] outline-none focus:border-[#6E4B71]"
+                        />
+                      </td>
+                      <td className="px-2.5 py-2">
+                        <select
+                          value={mois ?? ""}
+                          onChange={(e) => majForm(m.id, { mois: Number(e.target.value) })}
+                          aria-label={`Mois réel du ${L.nom} de ${m.name}`}
+                          className="rounded-lg border-2 border-[#E5DCC0] bg-white px-2 py-1.5 text-[12px] font-bold text-[#2B3530] outline-none focus:border-[#6E4B71]"
+                        >
+                          {MOIS_FR.map((nom, mi) => (
+                            <option key={nom} value={mi}>
+                              {nom}{p.moisCourantIdx != null && mi === p.moisCourantIdx ? " — en cours" : p.moisCourantIdx != null && mi > p.moisCourantIdx ? " — à venir" : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-2.5 py-2 text-right font-bold text-[#8A6420]">{interetMois > 0 ? `+${fmt(interetMois)}` : "—"}</td>
+                      <td className="px-2.5 py-2 text-right">
+                        <Btn small tone="violet" disabled={!montant || montant <= 0} onClick={() => attribuer(m.id)}>
+                          <CheckCircle2 className="h-3.5 w-3.5" /> {L.action}
+                        </Btn>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Block>
+
+      {/* — 2. REGISTRE : les personnes, les mois, les intérêts, les sommes globales — */}
       <Block title={L.registre} icon={L.icone} note={L.noteRegistre} accent="#6E4B71">
         <div className="p-4">
           <div className="grid gap-2 sm:grid-cols-3">
@@ -1032,14 +1145,15 @@ function RegistreReunionSection(p: {
 
           {lignes.length === 0 ? (
             <p className="mt-3 rounded-2xl border border-dashed border-[#C9B98A] bg-[#FBF7EA] px-3 py-3 text-[12px] leading-relaxed text-[#8A9288]">
-              Aucun {L.nom} enregistré pour l’instant — attribuez le premier dans la section « {L.attrib} » ci-dessous.
+              Aucun {L.nom} enregistré pour l’instant — attribuez le premier dans la section « {L.attrib} » ci-dessus.
             </p>
           ) : (
             <div className="mt-3 max-h-96 overflow-y-auto overflow-x-auto rounded-2xl border border-[#E5DCC0] bg-white">
-              <table className="w-full min-w-[620px] border-collapse text-[12px]">
+              <table className="w-full min-w-[680px] border-collapse text-[12px]">
                 <thead className="sticky top-0">
                   <tr className="bg-[#6E4B71] text-white">
                     <th className="px-2.5 py-2 text-left font-black">Membre</th>
+                    {!estPrets && <th className="px-2.5 py-2 text-center font-black">Versements</th>}
                     <th className="px-2.5 py-2 text-left font-black">Mois</th>
                     <th className="px-2.5 py-2 text-right font-black">Somme</th>
                     <th className="px-2.5 py-2 text-right font-black">Intérêts / mois</th>
@@ -1119,9 +1233,21 @@ function RegistreReunionSection(p: {
                               {m && estMembreApp(m) && <span className="ml-1.5 rounded-full bg-[#3D6B72]/12 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#3D6B72]">via l’app</span>}
                               {plusieurs && (
                                 <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#8A6420]">
-                                  {g.items.length} versements regroupés — la poubelle d’un mois retire CETTE épargne
+                                  versements regroupés — la poubelle d’un mois retire CETTE épargne
                                 </p>
                               )}
+                            </td>
+                            {/* v23 — NOMBRE DE VERSEMENTS : à côté des noms des membres, le
+                             *    nombre de versements que la personne a faits — il augmente à
+                             *    chaque épargne inscrite à son nom, quel que soit le mois. */}
+                            <td className="px-2.5 py-2 text-center">
+                              <span
+                                className="inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-[#6E4B71]/12 px-2 text-[13px] font-black text-[#6E4B71]"
+                                title={`Nombre de versements de ${m?.name ?? g.membreId} au registre`}
+                              >
+                                {g.items.length}
+                              </span>
+                              <p className="mt-0.5 text-[9px] font-bold uppercase tracking-wide text-[#8A9288]">{g.items.length > 1 ? "versements" : "versement"}</p>
                             </td>
                             <td className="px-2.5 py-2 font-semibold text-[#5C6B60]">
                               {plusieurs ? (
@@ -1170,7 +1296,7 @@ function RegistreReunionSection(p: {
                           </tr>
                           {detailOuvert && (
                             <tr className="border-b border-[#E5DCC0] bg-[#FBF7EA]">
-                              <td colSpan={8} className="px-3 pb-3 pt-1">
+                              <td colSpan={estPrets ? 8 : 9} className="px-3 pb-3 pt-1">
                                 <PanneauDetailEpargne
                                   items={g.items}
                                   nom={m?.name ?? g.membreId}
@@ -1186,7 +1312,7 @@ function RegistreReunionSection(p: {
                     })
                   )}
                   <tr className="bg-[#C89F62]/15">
-                    <td className="px-2.5 py-2.5 font-black text-[#2B2416]" colSpan={2}>Sommes globales</td>
+                    <td className="px-2.5 py-2.5 font-black text-[#2B2416]" colSpan={estPrets ? 2 : 3}>Sommes globales</td>
                     <td className="px-2.5 py-2.5 text-right font-black text-[#2B2416]">{fmt(totalMontant)}</td>
                     <td className="px-2.5 py-2.5" />
                     <td className="px-2.5 py-2.5 text-right font-black text-[#2F6B45]">{fmt(totalRealise)}</td>
@@ -1352,118 +1478,6 @@ function RegistreReunionSection(p: {
         </Block>
       )}
 
-      {/* — 2. ATTRIBUTION : le tableau de TOUS les membres, recherche dynamique — */}
-      <Block title={L.attrib} icon={L.icone} note={L.noteAttrib} accent="#6E4B71">
-        <div className="px-4 pt-4">
-          <div className="rounded-2xl border-2 border-[#B8A87E] bg-[#FFFDF6] p-3">
-            <label className="block">
-              <span className="flex items-center gap-1.5 text-[12.5px] font-black uppercase tracking-wide text-[#6E4B71]">
-                <Search className="h-4 w-4" /> Rechercher un nom — {L.nomPluriel}
-              </span>
-              <span className="mt-0.5 block text-[11.5px] font-semibold text-[#4A554E]">
-                Tapez les premières lettres : le tableau ne garde que les membres correspondants.
-              </span>
-              <span className="relative mt-1.5 block">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8A9288]" />
-                <input
-                  value={recherche}
-                  onChange={(e) => setRecherche(e.target.value)}
-                  type="search"
-                  placeholder="Ex. : Aurélie, Patrick, Marie-Louise…"
-                  aria-label={`Rechercher un membre dans la section ${L.attrib}`}
-                  className="w-full rounded-xl border-2 border-[#C9B98A] bg-white py-2.5 pl-9 pr-3 text-[14px] font-bold text-[#2B3530] outline-none placeholder:font-semibold placeholder:text-[#8A9288] focus:border-[#6E4B71]"
-                />
-              </span>
-            </label>
-            {q && (
-              <p className="mt-1.5 text-[11.5px] font-bold text-[#4A554E]">
-                {rosterFiltre.length === 0
-                  ? `Aucun membre ne correspond à « ${recherche.trim()} »`
-                  : `${rosterFiltre.length} membre${rosterFiltre.length > 1 ? "s" : ""} trouvé${rosterFiltre.length > 1 ? "s" : ""}`}
-                {rosterFiltre.length !== p.roster.length && rosterFiltre.length > 0 && (
-                  <button type="button" onClick={() => setRecherche("")} className="ml-2 underline decoration-dotted underline-offset-2 hover:text-[#6E4B71]">
-                    afficher tout le monde
-                  </button>
-                )}
-              </p>
-            )}
-          </div>
-        </div>
-        {rosterFiltre.length === 0 ? (
-          <p className="mx-4 mb-4 mt-3 rounded-2xl border border-dashed border-[#C9B98A] bg-[#FBF7EA] px-3 py-3 text-[12.5px] font-semibold text-[#4A554E]">
-            Aucun membre ne correspond à « {recherche.trim()} » — vérifiez l’orthographe ou effacez la recherche.
-          </p>
-        ) : (
-          <div className="max-h-96 overflow-y-auto rounded-2xl border border-[#E5DCC0] bg-white mx-4 mb-4 mt-3">
-            <table className="w-full min-w-[560px] border-collapse text-[12px]">
-              <thead className="sticky top-0">
-                <tr className="bg-[#6E4B71] text-white">
-                  <th className="px-2.5 py-2 text-left font-black">Membre</th>
-                  <th className="px-2.5 py-2 text-left font-black">Somme {p.genre === "prets" ? "prêtée à la réunion" : "épargnée"} (FCFA)</th>
-                  <th className="px-2.5 py-2 text-left font-black">Mois réel</th>
-                  <th className="px-2.5 py-2 text-left font-black">Intérêts / mois</th>
-                  <th className="px-2.5 py-2" aria-label="Attribuer" />
-                </tr>
-              </thead>
-              <tbody>
-                {rosterFiltre.map((m) => {
-                  const ligne = form[m.id];
-                  const montant = Number(ligne?.montant ?? 0);
-                  const mois = ligne?.mois ?? p.moisCourantIdx;
-                  const interetMois = montant > 0 ? Math.round(montant * (p.taux / 100)) : 0;
-                  const deja = itemsActifs.filter((x) => x.membreId === m.id);
-                  const totalDeja = deja.reduce((s, x) => s + x.montant, 0);
-                  return (
-                    <tr key={m.id} className="border-b border-[#E5DCC0] bg-[#FFFDF6]">
-                      <td className="px-2.5 py-2">
-                        <p className="font-bold text-[#2B3530]">
-                          {m.name}{m.role !== "membre" ? <span className="ml-1 text-[10px] font-black uppercase tracking-wide text-[#8A6420]"> — bureau</span> : null}
-                          {estMembreApp(m) && <span className="ml-1.5 rounded-full bg-[#3D6B72]/12 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#3D6B72]">via l’app</span>}
-                        </p>
-                        {deja.length > 0 && (
-                          <p className="text-[10px] text-[#8A9288]">
-                            déjà au registre : {deja.length} {deja.length > 1 ? L.nomPluriel : L.nom} — {fcfa(totalDeja)}
-                          </p>
-                        )}
-                      </td>
-                      <td className="px-2.5 py-2">
-                        <input
-                          value={ligne?.montant ?? ""}
-                          onChange={(e) => majForm(m.id, { montant: e.target.value.replace(/[^\d]/g, "") })}
-                          inputMode="numeric"
-                          placeholder="0"
-                          aria-label={`Somme ${p.genre === "prets" ? "prêtée" : "épargnée"} de ${m.name} en FCFA`}
-                          className="w-28 rounded-lg border border-[#C9B98A] bg-white px-2.5 py-1.5 text-[12.5px] font-bold text-[#2B3530] outline-none focus:border-[#6E4B71]"
-                        />
-                      </td>
-                      <td className="px-2.5 py-2">
-                        <select
-                          value={mois ?? ""}
-                          onChange={(e) => majForm(m.id, { mois: Number(e.target.value) })}
-                          aria-label={`Mois réel du ${L.nom} de ${m.name}`}
-                          className="rounded-lg border-2 border-[#E5DCC0] bg-white px-2 py-1.5 text-[12px] font-bold text-[#2B3530] outline-none focus:border-[#6E4B71]"
-                        >
-                          {MOIS_FR.map((nom, mi) => (
-                            <option key={nom} value={mi}>
-                              {nom}{p.moisCourantIdx != null && mi === p.moisCourantIdx ? " — en cours" : p.moisCourantIdx != null && mi > p.moisCourantIdx ? " — à venir" : ""}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-2.5 py-2 text-right font-bold text-[#8A6420]">{interetMois > 0 ? `+${fmt(interetMois)}` : "—"}</td>
-                      <td className="px-2.5 py-2 text-right">
-                        <Btn small tone="violet" disabled={!montant || montant <= 0} onClick={() => attribuer(m.id)}>
-                          <CheckCircle2 className="h-3.5 w-3.5" /> {L.action}
-                        </Btn>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Block>
     </>
   );
 }
@@ -1549,7 +1563,7 @@ export function SecCotisationsCollations(p: {
     toast.success("Trésorier notifié", { description: "Émile Tchoumi reçoit l’état de la collecte tenue par la secrétaire — les reçus s’inscrivent au journal de caisse." });
   };
 
-  /* — règles de la cantine : un membre ne cotise qu'UNE seule somme mensuelle — */
+  /* — règles de la Tontine : un membre ne cotise qu'UNE seule somme mensuelle — */
   const typeOccupant = (membreId: string, editeId?: string): TypeCotisation | null =>
     typesCotis.find((t) => t.id !== editeId && t.membreIds.includes(membreId)) ?? null;
 
@@ -1896,7 +1910,7 @@ export function SecCotisationsCollations(p: {
           <div className="rounded-2xl border-2 border-[#B8A87E] bg-[#FFFDF6] p-3">
             <p className="text-[12.5px] font-black uppercase tracking-wide text-[#6E4B71]">Collations</p>
             <p className="mt-0.5 text-[11px] leading-snug text-[#8A9288]">
-              Ajoutez AUTANT de collations que la cantine en décide : chaque collation a son nom, sa somme par personne et par réunion, et les personnes qui la paient. La part d’un membre = la somme des collations qui lui sont attribuées.
+              Ajoutez AUTANT de collations que la Tontine en décide : chaque collation a son nom, sa somme par personne et par réunion, et les personnes qui la paient. La part d’un membre = la somme des collations qui lui sont attribuées.
             </p>
             <div className="mt-2">
               <Btn small tone="violet" onClick={() => setFormCollOpen((x) => !x)} aria-expanded={formCollOpen}><Plus className="h-3.5 w-3.5" /> Ajouter une collation</Btn>
@@ -2034,7 +2048,17 @@ export function SecEpargnes(p: {
 
   useEffect(() => {
     const t0 = setTimeout(() => setEpargnes(loadEpargnesReunion()), 0);
-    return () => clearTimeout(t0);
+    /* SYNC CROSS-ONGLET (v23) : une épargne ajoutée depuis la page du président
+     * (autre onglet du navigateur) apparaît ici à la seconde — même clé de
+     * stockage fc_epargnes_reunion_v1, échange via l'événement « storage ». */
+    const onSync = (e: StorageEvent) => {
+      if (!e.key || e.key === "fc_epargnes_reunion_v1") setEpargnes(loadEpargnesReunion());
+    };
+    window.addEventListener("storage", onSync);
+    return () => {
+      clearTimeout(t0);
+      window.removeEventListener("storage", onSync);
+    };
   }, []);
 
   /* resynchronisation du brouillon quand le règlement change (pattern React :
@@ -2156,7 +2180,7 @@ export function SecEpargnes(p: {
           </div>
 
           <label className="block rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] px-3 py-2.5">
-            <span className="block text-[11.5px] font-bold text-[#2B3530]">Type d’épargne proposé par la cantine</span>
+            <span className="block text-[11.5px] font-bold text-[#2B3530]">Type d’épargne proposé par la Tontine</span>
             <span className="mt-0.5 block text-[10.5px] text-[#8A9288]">Choisissez dans la liste : le type d’intérêt et les champs propres à ce type apparaissent ensuite.</span>
             <select
               value={brouillonEp.typeChoisi ?? ""}
@@ -2223,7 +2247,17 @@ export function SecPrets(p: {
       setPretsReunion(loadPretsReunion());
       setPretsDemandes(loadPretsDemandesSec());
     }, 0);
-    return () => clearTimeout(t0);
+    /* SYNC CROSS-ONGLET (v23) : registres tenus AUSSI par le président —
+     * toute modification dans un autre onglet est répercutée à la seconde. */
+    const onSync = (e: StorageEvent) => {
+      if (e.key === "fc_prets_reunion_v1") setPretsReunion(loadPretsReunion());
+      if (e.key === "fc_prets_demandes_v1") setPretsDemandes(loadPretsDemandesSec());
+    };
+    window.addEventListener("storage", onSync);
+    return () => {
+      clearTimeout(t0);
+      window.removeEventListener("storage", onSync);
+    };
   }, []);
 
   if (dernierRegl !== p.regl) {
@@ -2503,7 +2537,7 @@ export function SecPrets(p: {
           {/* — GARANTIES ACCEPTÉES POUR UN PRÊT — */}
           <div className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3">
             <p className="flex items-center gap-1.5 text-[11.5px] font-bold text-[#2B3530]"><Landmark className="h-3.5 w-3.5" /> Garanties acceptées pour un prêt</p>
-            <p className="mt-0.5 text-[10.5px] text-[#8A9288]">Toutes désactivées par défaut — activez celles que la cantine accepte.</p>
+            <p className="mt-0.5 text-[10.5px] text-[#8A9288]">Toutes désactivées par défaut — activez celles que la Tontine accepte.</p>
             <div className="mt-2 space-y-1.5">
               {(Object.keys(GARANTIES_LABELS) as (keyof Reglement["prets"]["garanties"])[]).map((k) => (
                 <ToggleRow key={k} label={GARANTIES_LABELS[k]} actif={brouillonPr.garanties[k]} onToggle={() => majGarantie(k)} />
@@ -2718,7 +2752,7 @@ export function SecSolidarite(p: {
         <div className="mt-3 grid gap-2 sm:grid-cols-3">
           <KpiCard icon={<Coins className="h-3.5 w-3.5" />} label="Caisse de secours" value={fcfa(caisseSecours)} sub={`méthode : ${methodeSol?.nom ?? "à fixer"} · plafond d’aide ${fcfa(p.regl.solidarite.plafondAideFcfa)}`} accent="#6E4B71" />
           <KpiCard icon={<HandHeart className="h-3.5 w-3.5" />} label="Types de solidarité" value={String(typesSolidarite.length)} sub="sommes, délais et variables membre par membre" accent="#2F6B45" />
-          <KpiCard icon={<CalendarCheck className="h-3.5 w-3.5" />} label="Visites planifiées" value={String(visitesTriees.length)} sub="calendrier des visites de la cantine" accent="#C89F62" />
+          <KpiCard icon={<CalendarCheck className="h-3.5 w-3.5" />} label="Visites planifiées" value={String(visitesTriees.length)} sub="calendrier des visites de la Tontine" accent="#C89F62" />
         </div>
         <p className="mt-2.5 text-[11.5px] leading-relaxed text-[#5C6B60]">
           ⚠ Types de solidarité, mains levées et calendrier des visites sont LES MÊMES SOURCES que la console du président (clés fc_solidarite_types_v1, fc_mains_levees_v1, fc_visites_solidarite_v1) — la secrétaire les tient pour le bureau. Les évènements et la caisse vivent dans le registre du secrétariat (seeds identiques à la démo du président).
@@ -2862,7 +2896,7 @@ export function SecSolidarite(p: {
         title="Types de mains levées"
         icon={<Hand className="h-4.5 w-4.5" />}
         accent="#6E4B71"
-        note="Les décisions votées à main levée en réunion : nommez autant de types de mains levées que la cantine en pratique — l'aide de solidarité, l'échange de tour, l'admission d'un membre…"
+        note="Les décisions votées à main levée en réunion : nommez autant de types de mains levées que la Tontine en pratique — l'aide de solidarité, l'échange de tour, l'admission d'un membre…"
       >
         <div className="space-y-3 p-4">
           <div className="rounded-2xl border-2 border-[#B8A87E] bg-[#FBF7EA] p-3">
@@ -2920,7 +2954,7 @@ export function SecSolidarite(p: {
         title="Calendrier de visites de solidarité"
         icon={<CalendarCheck className="h-4.5 w-4.5" />}
         accent="#6E4B71"
-        note="Pour chaque type de solidarité : planifiez les visites — le membre concerné (recherche dynamique), le type, le mois, qui représente la cantine (délégation) et une note. La cantine se déplace auprès des siens ; la secrétaire tient le calendrier."
+        note="Pour chaque type de solidarité : planifiez les visites — le membre concerné (recherche dynamique), le type, le mois, qui représente la Tontine (délégation) et une note. La Tontine se déplace auprès des siens ; la secrétaire tient le calendrier."
       >
         <div className="space-y-3 p-4">
           <div className="rounded-2xl border-2 border-[#B8A87E] bg-[#FBF7EA] p-3">
@@ -2972,7 +3006,7 @@ export function SecSolidarite(p: {
                 value={visDelegation}
                 onChange={(e) => setVisDelegation(e.target.value)}
                 placeholder="Délégation — ex. : Vice-présidente + 2 membres"
-                aria-label="Qui représente la cantine lors de la visite"
+                aria-label="Qui représente la Tontine lors de la visite"
                 className="rounded-lg border border-[#C9B98A] bg-white px-3 py-2.5 text-[12.5px] font-bold text-[#2B3530] outline-none placeholder:font-semibold placeholder:text-[#8A9288] focus:border-[#6E4B71]"
               />
             </div>

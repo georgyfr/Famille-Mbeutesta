@@ -1,7 +1,7 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MAQUETTE v19 — CONSOLE DU COMMISSAIRE AUX COMPTES (cantine Mbeutetsa)
+// MAQUETTE v19 — CONSOLE DU COMMISSAIRE AUX COMPTES (Tontine Mbeutetsa)
 //
 // Bernadette Kamga CONTRÔLE — elle ne manipule pas l'argent : elle vérifie,
 // atteste, rapproche et alerte. Même philosophie que la console du président,
@@ -62,7 +62,7 @@ type RapportTrimestre = { trimestre: string; le: string | null; signe: boolean; 
 
 const CAISSES_DEMO: CaisseCompte[] = [
   { id: "pot", label: "Pot du mois", detail: "Cotisations & collations encaissées en novembre — à remettre au bénéficiaire", montant: 210_000, tone: "#1E4D2B", icon: <Landmark className="h-4 w-4" /> },
-  { id: "sociale", label: "Caisse sociale", detail: "Fonds permanent de la cantine (adhésions, amendes, intérêts)", montant: 85_000, tone: "#3D6B72", icon: <Wallet className="h-4 w-4" /> },
+  { id: "sociale", label: "Caisse sociale", detail: "Fonds permanent de la Tontine (adhésions, amendes, intérêts)", montant: 85_000, tone: "#3D6B72", icon: <Wallet className="h-4 w-4" /> },
   { id: "secours", label: "Caisse de secours", detail: "Aides familiales (deuil, naissance, maladie) — votées par le bureau", montant: 45_000, tone: "#8A6420", icon: <HandHeart className="h-4 w-4" /> },
 ];
 
@@ -221,7 +221,7 @@ export function MaquetteCommissaire() {
         accent="#31565C" accentClair="#3D6B72"
         surtitre="Contrôle & audit des caisses"
         titre="Console — Commissaire aux comptes"
-        sousTitre={`${ROLE_META.commissaire.label} : Bernadette Kamga (vous) · Cantine Mbeutetsa · contrôle trimestriel`}
+        sousTitre={`${ROLE_META.commissaire.label} : Bernadette Kamga (vous) · Tontine Mbeutetsa · contrôle trimestriel`}
         icon={<Scale className="h-6 w-6" />}
         badges={
           <>

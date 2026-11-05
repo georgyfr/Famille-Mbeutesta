@@ -1,7 +1,7 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Le BUREAU de la cantine — Famille.Mbeutetsa
+// Le BUREAU de la Tontine — Famille.Mbeutetsa
 //
 // Règles posées par l'administrateur (2026-11) :
 //
@@ -32,7 +32,7 @@ import {
 
 const ROLE_KEY = "fc_tontine_role_v1";
 
-/** Rôle renseigné à l'inscription (« quel rôle jouez-vous dans la cantine ? »). */
+/** Rôle renseigné à l'inscription (« quel rôle jouez-vous dans la Tontine ? »). */
 export function loadVousRole(): RoleKey | null {
   try {
     const raw = localStorage.getItem(ROLE_KEY);

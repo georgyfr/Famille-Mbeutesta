@@ -27,7 +27,7 @@ const TAUX_KEY = "fc_tontine_taux_v1";
 const EPARGNES_KEY = "fc_tontine_epargnes_v1";
 const PRETS_KEY = "fc_tontine_prets_v1";
 const PAYES_KEY = "fc_tontine_payes_v1";
-const ROLE_CANTINE_KEY = "fc_tontine_role_v1"; // rôle dans la cantine (inscription)
+const ROLE_TONTINE_KEY = "fc_tontine_role_v1"; // rôle dans la Tontine (inscription)
 const SIGNALEMENTS_KEY = "fc_tontine_signalements_v1"; // signalements du groupe
 const DECISIONS_KEY = "fc_tontine_decisions_v1"; // journal des décisions du bureau
 const LOC_SKIP_KEY = "fc_loc_skipped"; // « localisation plus tard » — à retenir aussi
@@ -35,7 +35,7 @@ const LOC_SKIP_KEY = "fc_loc_skipped"; // « localisation plus tard » — à re
 /** Clés dont une copie de sécurité est tenue en permanence. */
 const MIRRORED_KEYS = [
   DB_KEY, TAUX_KEY, EPARGNES_KEY, PRETS_KEY, PAYES_KEY,
-  ROLE_CANTINE_KEY, SIGNALEMENTS_KEY, DECISIONS_KEY, LOC_SKIP_KEY,
+  ROLE_TONTINE_KEY, SIGNALEMENTS_KEY, DECISIONS_KEY, LOC_SKIP_KEY,
 ];
 
 const MIRROR_DB = "fc-mirror";

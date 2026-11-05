@@ -1,11 +1,11 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MAQUETTE v22 — CONSOLE DU SECRÉTAIRE (cantine Mbeutetsa)
+// MAQUETTE v23 — CONSOLE DU SECRÉTAIRE (Tontine Mbeutetsa)
 //
 // Françoise Mbeutetsa tient la MÉMOIRE et désormais AUSSI la GESTION de la
 // tontine (demande du président : le président peut ne pas maîtriser l'outil).
-// SEIZE onglets, chacun avec sa PROPRE URL (#secretaire/<onglet>) :
+// VINGT onglets, chacun avec sa PROPRE URL (#secretaire/<onglet>) :
 //   1.  #secretaire/pv           — Procès-verbaux
 //   2.  #secretaire/seances      — Séances & ordres du jour
 //   3.  #secretaire/presences    — Présences (appel auto-sauvegardé + moteur)
@@ -20,8 +20,17 @@
 //   11. #secretaire/prets        — Prêts & garanties (gestion)
 //   12. #secretaire/solidarite   — Solidarité (gestion)
 //   13. #secretaire/membres      — Membres & suivi (compteurs, amendes)
+//   13b. #secretaire/codes       — CRÉER UN MEMBRE (code d'invitation partagé
+//                                  par WhatsApp/copier-coller, collé à l'
+//                                  inscription, sans expiration — v23)
 //   14. #secretaire/notifications— Notifications du bureau (membres + président)
 //   15. #secretaire/statistiques — Statistiques de la tontine
+//   15b. #secretaire/m-cotis     — MES cotisations (Françoise MEMBRE : elle
+//                                  choisit son type de cotisation — v23)
+//   15c. #secretaire/m-epargne   — MES épargnes (Françoise MEMBRE : elle
+//                                  s'attribue une épargne, registre partagé — v23)
+//   15d. #secretaire/m-prets     — MES prêts (Françoise MEMBRE : elle souscrit
+//                                  et s'attribue un prêt, registre partagé — v23)
 //   16. #secretaire/parametres   — Paramètres du secrétariat
 //
 // MOTEUR AUTOMATIQUE (v22) : chaque clic d'appel est ENREGISTRÉ AUTOMATIQUEMENT
@@ -35,10 +44,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
-  Archive, Ban, BarChart3, Bell, BookOpen, CalendarClock, CheckCircle2, ChevronDown, ChevronUp,
+  Archive, Ban, BarChart3, Bell, BookOpen, CalendarCheck, CalendarClock, CheckCircle2, ChevronDown, ChevronUp,
   ClipboardList, Coins, Copy, Download, FileEdit, HandCoins, HeartHandshake, Mail, PenLine,
   Percent, PiggyBank, Play, Plus, RefreshCw, ScrollText, Send, Settings, ShieldCheck, Stamp,
-  Trash2, UserCheck, Users, Wallet, X,
+  Ticket, Trash2, UserCheck, Users, Wallet, X,
 } from "lucide-react";
 import {
   Block, Btn, BtnConfirme, P, KpiCard, EnteteConsole, NavOnglets,
@@ -53,6 +62,8 @@ import { loadEpargnesReunion, type AttributionReunion } from "./registres-bureau
 import { SecCotisationsCollations, SecEpargnes, SecPrets, SecSolidarite } from "./gestion-secretaire";
 import { ConvocationsSectionV2 } from "./secretaire-convocations";
 import { exportRegistreEpargnesExcel } from "./secretaire-excel";
+import { CodesMembresSection } from "./codes-membres-section";
+import { SecMesCotisations, SecMesEpargnes, SecMesPrets } from "./secretaire-membre";
 import {
   MOTIFS_LABELS, PARAMS_DEFAUT,
   derniersMoisKeys, labelMoisKey, loadAmendes, loadConvocations, loadDecisions,
@@ -71,7 +82,8 @@ import type {
 type TabKey =
   | "pv" | "seances" | "presences" | "decisions" | "archives" | "taux" | "registre"
   | "convocations" | "cotisations" | "epargnes" | "prets" | "solidarite"
-  | "membres" | "notifications" | "statistiques" | "parametres";
+  | "membres" | "codes" | "notifications" | "statistiques"
+  | "m-cotis" | "m-epargne" | "m-prets" | "parametres";
 
 const TABS: { key: TabKey; label: string; icon: ReactNode }[] = [
   { key: "pv", label: "Procès-verbaux", icon: <BookOpen className="h-3.5 w-3.5" /> },
@@ -87,8 +99,12 @@ const TABS: { key: TabKey; label: string; icon: ReactNode }[] = [
   { key: "prets", label: "Prêts & garanties", icon: <HandCoins className="h-3.5 w-3.5" /> },
   { key: "solidarite", label: "Solidarité", icon: <HeartHandshake className="h-3.5 w-3.5" /> },
   { key: "membres", label: "Membres & suivi", icon: <Users className="h-3.5 w-3.5" /> },
+  { key: "codes", label: "Créer un membre", icon: <Ticket className="h-3.5 w-3.5" /> },
   { key: "notifications", label: "Notifications", icon: <Bell className="h-3.5 w-3.5" /> },
   { key: "statistiques", label: "Statistiques", icon: <BarChart3 className="h-3.5 w-3.5" /> },
+  { key: "m-cotis", label: "Mes cotisations", icon: <CalendarCheck className="h-3.5 w-3.5" /> },
+  { key: "m-epargne", label: "Mes épargnes", icon: <PiggyBank className="h-3.5 w-3.5" /> },
+  { key: "m-prets", label: "Mes prêts", icon: <HandCoins className="h-3.5 w-3.5" /> },
   { key: "parametres", label: "Paramètres", icon: <Settings className="h-3.5 w-3.5" /> },
 ];
 
@@ -159,9 +175,17 @@ export function MaquetteSecretaire() {
     }, 0);
     const onHash = () => setTab(tabFromHash());
     window.addEventListener("hashchange", onHash);
+    /* SYNC CROSS-ONGLET (v23) : le registre des épargnes vit aussi sur la page
+     * du président et dans l'espace membre — un autre onglet du navigateur qui
+     * le modifie est répercuté ici à la seconde (éventuel visa conservé). */
+    const onSync = (e: StorageEvent) => {
+      if (e.key === "fc_epargnes_reunion_v1") setEpargnes(loadEpargnesReunion());
+    };
+    window.addEventListener("storage", onSync);
     return () => {
       clearTimeout(t0);
       window.removeEventListener("hashchange", onHash);
+      window.removeEventListener("storage", onSync);
     };
   }, []);
 
@@ -514,7 +538,7 @@ export function MaquetteSecretaire() {
         accent="#5D3F60" accentClair="#6E4B71"
         surtitre="Mémoire & gestion de la tontine"
         titre="Console — Secrétaire"
-        sousTitre={`${ROLE_META.secretariat.label} : Françoise Mbeutetsa (vous) · Cantine Mbeutetsa · ${TONTINE.jourLabel}`}
+        sousTitre={`${ROLE_META.secretariat.label} : Françoise Mbeutetsa (vous) · Tontine Mbeutetsa · ${TONTINE.jourLabel}`}
         icon={<PenLine className="h-6 w-6" />}
         badges={
           <>
@@ -590,11 +614,25 @@ export function MaquetteSecretaire() {
         {tab === "membres" && (
           <MembresSection roster={roster} historique={presHisto} moisKey={moisKey} rachatAuto={params.presences.rachatAuto} amendes={amendes} notifs={notifs} parMembre={parMembre} onSupprimerAmende={supprimerAmende} />
         )}
+        {tab === "codes" && (
+          <CodesMembresSection creePar="secretariat" accent="#6E4B71" creeParNom="Françoise Mbeutetsa — Secrétaire" />
+        )}
         {tab === "notifications" && (
           <NotificationsSection notifs={notifs} parMembre={parMembre} onToutLu={toutLu} onBasculerLu={basculerLu} onSupprimer={supprimerNotif} />
         )}
         {tab === "statistiques" && (
           <StatistiquesSection roster={roster} historique={presHisto} moisKey={moisKey} rachatAuto={params.presences.rachatAuto} amendes={amendes} decisions={decisions} convos={convos} types={params.decisions.types} />
+        )}
+        {/* — ESPACE MEMBRE DE LA SECRÉTAIRE (v23) : Françoise cotise, épargne et
+         *    emprunte COMME UN MEMBRE — pas comme la secrétaire (cf. Task 67). — */}
+        {tab === "m-cotis" && (
+          <SecMesCotisations moisIdx={moisIdx} moisLabel={moisLabel} />
+        )}
+        {tab === "m-epargne" && regl && (
+          <SecMesEpargnes moisCourantIdx={moisIdx} regl={regl} />
+        )}
+        {tab === "m-prets" && regl && (
+          <SecMesPrets moisCourantIdx={moisIdx} regl={regl} roster={roster} />
         )}
         {tab === "parametres" && (
           <ParametresSection params={params} onMaj={majParams} moisLabel={moisLabel ?? "…"} />

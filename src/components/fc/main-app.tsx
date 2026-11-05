@@ -78,7 +78,7 @@ export function MainApp() {
   const [splashMin, setSplashMin] = useState(true);
   const [session, setSession] = useState<SessionData | null>(null);
   const [locSkipped, setLocSkipped] = useState(false);
-  // Rôle dans la cantine : null = pas encore vérifié (évite un flash de l'écran
+  // Rôle dans la Tontine : null = pas encore vérifié (évite un flash de l'écran
   // de rôle avant la lecture du stockage local).
   const [roleChoisi, setRoleChoisi] = useState<boolean | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -120,7 +120,7 @@ export function MainApp() {
       }
       // L'utilisateur a-t-il déjà repoussé l'assistant de localisation (marqueur
       // lié au COMPTE, pas à l'appareil — valeur = uid) ? A-t-il déjà choisi son
-      // rôle dans la cantine ?
+      // rôle dans la Tontine ?
       const t0 = setTimeout(() => {
         setLocSkipped(locSkippedActuel());
         setRoleChoisi(loadVousRole() !== null);
@@ -146,7 +146,7 @@ export function MainApp() {
   const handleReady = useCallback(async () => {
     // Inscription ou connexion : on relit l'état de l'appareil — une NOUVELLE
     // inscription ayant effacé rôle + marqueur « localisation passée »,
-    // l'enchaînement est : géolocalisation PUIS rôle dans la cantine.
+    // l'enchaînement est : géolocalisation PUIS rôle dans la Tontine.
     setLocSkipped(locSkippedActuel());
     setRoleChoisi(loadVousRole() !== null);
     await loadSession();
@@ -189,7 +189,7 @@ export function MainApp() {
   // Après l'inscription (ou une session sans localisation validée) : l'application DEMANDE
   // où se trouve la personne — détection automatique modifiable puis enregistrement.
   const needsLocation = !!session && !session.user.hasLocation && !locSkipped;
-  // JUSTE APRÈS la géolocalisation : le rôle dans la cantine (président,
+  // JUSTE APRÈS la géolocalisation : le rôle dans la Tontine (président,
   // secrétaire, trésorier…) — il ouvre la page du bureau et les droits associés.
   const needsRole = !!session && !needsLocation && roleChoisi === false;
 

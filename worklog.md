@@ -1525,3 +1525,32 @@ Work Log:
 - E2E agent-browser PRODUCTION : bandeau v22 + 16 onglets ✓ ; moteur au chargement (3 amendes f09) ✓ ; 8 URLs sondées OK ✓ ; bouton Excel présent ✓ ; mobile 390 px 0 overflow, 16 onglets ✓ ; ZÉRO erreur page/console ✓.
 Stage Summary:
 - La secrétaire est devenue un VRAI poste de gestion : ses présences s'enregistrent toutes seules et le moteur des amendes (consécutives / 6 mois / année / excusés / convocation confirmée puis absent, rachat automatique) applique les règles du bureau configurées dans une page Paramètres complète — en notifiant chaque membre SUR SA page et le président. Les décisions portent des actions réelles tracées, le visa du registre verrouille, notifie et part dans un Excel téléchargeable, les convocations demandent confirmation de réception avec justification texte ou vocale, et les 4 sections de gestion du président (cotisations & collations, épargnes, prêts & garanties, solidarité) sont opérationnelles dans la même source que sa console. Seize onglets, seize URLs.
+
+---
+Task ID: 67
+Agent: Z.ai Code (orchestrateur)
+Task: v23 — Épargnes (colonnes versements + ordre), prêts (ordre), espace membre de la secrétaire, codes d'invitation, cantine→Tontine
+
+Work Log:
+- DEMANDES UTILISATEUR (6 axes) :
+  1. #secretaire/epargnes — colonne « Versements » à côté des noms + « Attribution des épargnes » remontée AU-DESSUS du registre ;
+  2. sync épargnes secrétaire ↔ président ;
+  3. « cantine » → « Tontine » partout ;
+  4. #secretaire/prets — « Attribution des prêts » tout en haut ;
+  5. sections personnelles de la SECRÉTAIRE en tant que MEMBRE (cotisation/épargne/prêt, comme le président) ;
+  6. création de membres par CODE (secrétaire + président) partagé WhatsApp/copier-coller, collé à l'inscription, SANS expiration.
+- GLOBAL : remplacement cantine→Tontine (3 casse-variants) sur tout src/ — identifiants renommés proprement (RoleTontineCard, ReglementTontine, ROLE_TONTINE_KEY…), zéro occurrence restante, zéro régression.
+- NOUVEAU codes-membres.ts : store fc_codes_membres_v1 — CodeMembre {code FCM-XXXXXX sans O/I/0/1, téléphone intl, nom optionnel, type de cotisation (types du bureau ou base), typeMembre simple/bureau + bureauRole, creePar, utiliseLe/utiliseNom}, génération anti-collision, normalisation tolérante (fcm ab12cd→FCM-AB12CD), consommation unique SANS expiration, fc_code_invite_v1 (pending), appliquerCotisationCode (règle UNE seule cotisation).
+- NOUVEAU codes-membres-section.tsx : section PARTAGÉE président/sectétaire (#president/codes + #secretaire/codes) — formulaire (nom, pays+télé via PhoneCountrySelect, type de cotisation selon les paramétrages, radiogroup Membre simple/Membre du bureau + liste déroulante du poste), carte de partage (code géant, Copier, WhatsApp wa.me avec message personnalisé), liste des codes (statut En attente/Utilisé le X par Y, re-partage, retrait double-clic), loadMontants pour le montant de base réel.
+- NOUVEAU secretaire-membre.tsx : 3 sections membre de Françoise (f06) — SecMesCotisations (elle CHOISIT son type, cotise → fc_secretaire_cotis_mois_v1), SecMesEpargnes (solde, intérêts mois par mois, S'ATTRIBUER une épargne → registre PARTAGÉ fc_epargnes_reunion_v1, retraits double-clic), SecMesPrets (SOUSCRIRE un prêt → fc_prets_demandes_v1 dossiers communs, s'ATTRIBUER un prêt à la réunion → registre partagé).
+- gestion-secretaire.tsx : RegistreReunionSection RÉORDONNÉE (Attribution AVANT Registre, prêts remboursés en 3e) — colonne Versements (badge compteur + libellé, colSpan adaptés estPrets?8:9, min-w 680), listeners « storage » cross-onglet sur SecEpargnes/SecPrets.
+- maquette-secretaire.tsx : 20 onglets — +codes (Créer un membre), +m-cotis/m-epargne/m-prets (mes sections), sync storage du registre console.
+- maquette-president.tsx : +onglet codes (Créer un membre, auteur « Joseph Mbeutetsa — Président »), +listener storage épargnes/prêts (sync secrétaire→président).
+- auth-flow.tsx : ChampCodeInvitation repliable sur PhoneScreen (inscription) + CredsScreen — validation immédiate (inconnu/déjà utilisé), préremplissage TÉLÉPHONE + PAYS (paysDepuisTelephone via DIAL_TO_ISO), appliquerCodeInvitation à la création du compte (les 2 parcours) : rôle du code (saveVousRole → assistant de rôle SAUTÉ, SA page s'ouvre directement) + cotisation attribuée au compte app-<uid>, code consommé (utiliseNom) sans jamais être supprimé.
+- maquette-gate.tsx : libellés v23 (20 onglets).
+- CORRECTIFS EN COURS DE DEV : retirerCodeInvite export manquant ; variable cotisNom (tsc runtime « cotisationNom is not defined » attrapé à l'E2E) ; BtnConfirme sans `small` + import TE_CLS (tsc --noEmit) ; loadMontants avant lecture du montant de base.
+- E2E agent-browser : ordre Attribution→Registre vérifié sur epargnes ET prets ; attribution 12 000 à Bernadette → compteur versements=3 → vue président 52 000 regroupé ✓ ; génération code FCM-V8VESD (bureau/Trésorier) + lien WhatsApp ✓ ; inscription complète avec le code (session isolée) : toast « Code d'invitation appliqué 🎟️ Votre page « Trésorier(ère) » s'ouvre directement », fc_tontine_role_v1=tresorier, code utilisé par Georges Mbeutetsa, assistant de rôle sauté, dashboard direct ✓ ; m-cotis (choix type → f06 attribué, cotiser → store), m-epargne (auto-attribution 20 000 → registre partagé, président voit 35 000), m-prets (souscription 100 000 → dossiers communs « À statuer », prêt à la réunion 30 000 → registre président ✓) ; mobile 390 px 0 overflow ; zéro erreur page/console ; lint propre (erreurs restantes = artefacts .next-demo préexistants).
+
+Stage Summary:
+- v23 déployable : la secrétaire et le président créent les membres AVANT leur arrivée et partagent un code d'invitation qui ne périme JAMAIS ; l'inscription par code ouvre DIRECTEMENT la page du rôle attribué avec la cotisation fixée ; la secrétaire dispose de son espace membre complet (cotisation choisie, épargne, prêts) sur les mêmes registres partagés que le président ; les registres épargnes/prêts montrent l'Attribution EN PREMIER et le nombre de versements par membre ; le mot « cantine » a disparu de toute l'application au profit de « Tontine ».
+- Build Cloudflare : bash scripts/build-cloudflare.sh puis wrangler pages deploy (déployé juste après — cf. entrée suivante).

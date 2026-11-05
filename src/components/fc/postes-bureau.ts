@@ -59,7 +59,7 @@ export const POSTES_BUREAU: { key: PosteKey; label: string; page: string; descri
 /** Titulaires (membreId) par poste — null = poste vacant. */
 export type PostesMap = Record<PosteKey, string | null>;
 
-/** Titulaires de démonstration = les titulaires réels de la cantine fictive. */
+/** Titulaires de démonstration = les titulaires réels de la Tontine fictive. */
 export const POSTES_DEFAUT: PostesMap = {
   vice_president: "f02", // Marie-Louise Nguetsop
   secretariat: "f06", // Françoise Mbeutetsa

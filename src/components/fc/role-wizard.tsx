@@ -1,17 +1,17 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Assistant « Mon rôle dans la cantine » — Famille.Mbeutetsa
+// Assistant « Mon rôle dans la Tontine » — Famille.Mbeutetsa
 //
 // Demande JUSTE APRÈS la sélection de la géolocalisation (parcours :
 // inscription → localisation → RÔLE → tableau de bord).
 //
-// Chaque personne indique le rôle qu'elle joue dans la cantine : simple membre
+// Chaque personne indique le rôle qu'elle joue dans la Tontine : simple membre
 // ou l'un des six acteurs du bureau (président, vice-président, secrétaire,
 // trésorier, commissaire aux comptes, censeur). Le rôle ouvre la page du
 // bureau correspondante et détermine les droits : taux mensuel, validations
 // d'épargnes, dettes, signalements. Modifiable à tout moment depuis la carte
-// « Mon rôle dans la cantine » de l'onglet Sécurité.
+// « Mon rôle dans la Tontine » de l'onglet Sécurité.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState } from "react";
@@ -57,16 +57,16 @@ export function RoleWizard({ onDone }: { onDone: () => void }) {
           <Users className="h-8 w-8" />
         </div>
         <h1 className="fc-serif text-2xl font-bold text-[#1E4D2B]">
-          Votre rôle dans la cantine
+          Votre rôle dans la Tontine
         </h1>
         <p className="mx-auto mt-1.5 max-w-sm text-[13.5px] leading-relaxed text-[#5C6B60]">
-          Dernière étape : quel rôle jouez-vous dans la cantine de la famille ? Il ouvre votre page
+          Dernière étape : quel rôle jouez-vous dans la Tontine de la famille ? Il ouvre votre page
           du bureau (président, secrétaire, trésorier…) et détermine vos droits.
         </p>
       </div>
 
       <FcCard className="p-5 sm:p-6">
-        <div role="radiogroup" aria-label="Rôle joué dans la cantine" className="space-y-2">
+        <div role="radiogroup" aria-label="Rôle joué dans la Tontine" className="space-y-2">
           {ORDRE.map((r) => {
             const meta = ROLE_META[r];
             const choisi = role === r;
@@ -117,7 +117,7 @@ export function RoleWizard({ onDone }: { onDone: () => void }) {
 
         <p className="mt-4 flex items-start gap-1.5 text-[11.5px] leading-relaxed text-[#8A9288]">
           <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          Vous pourrez changer de rôle à tout moment depuis la fiche « Mon rôle dans la cantine ».
+          Vous pourrez changer de rôle à tout moment depuis la fiche « Mon rôle dans la Tontine ».
         </p>
 
         <FcButton onClick={valider} className="mt-3 h-[54px] text-[16.5px]">

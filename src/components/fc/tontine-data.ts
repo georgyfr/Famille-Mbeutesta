@@ -219,7 +219,7 @@ export const MEMBRES_FICTIFS: Member[] = [
 ];
 
 /** Effectif complet : les 10 fictifs + « Vous » (membre connecté, avec le rôle
- *  renseigné à l'inscription dans la cantine), par ancienneté. */
+ *  renseigné à l'inscription dans la Tontine), par ancienneté. */
 export function buildRoster(vousName?: string | null, vousRole?: RoleKey | null): Member[] {
   const vous: Member = {
     id: "vous",

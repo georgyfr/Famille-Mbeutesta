@@ -451,7 +451,7 @@ function EntetePage({ vousRole = "membre", onGo, nbOuverts = 0, sigVersion = 0 }
           </button>
         )}
       </div>
-      {/* Le rôle joué dans la cantine — renseigné à l'inscription, il ouvre la
+      {/* Le rôle joué dans la Tontine — renseigné à l'inscription, il ouvre la
           page du bureau correspondante (URL dédiée). */}
       <div className="flex items-center justify-between gap-2 border-t border-[#E5DCC0] bg-[#FFFDF6] px-4 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
@@ -564,16 +564,16 @@ function OngletsBureau({ page, onGo, vousRole, nbSignalementsOuverts }: {
   );
 }
 
-/* ══════════════════════════ RÈGLEMENT DE LA CANTINE — visible par TOUS ══════════════════════════
+/* ══════════════════════════ RÈGLEMENT DE LA TONTINE — visible par TOUS ══════════════════════════
  *
  * Le paramétrage complet décidé par le président (poste de commandement,
  * onglet « Paramètres ») est affiché ICI, en lecture seule, pour TOUS les
  * membres : impayés & recouvrements, prêts & garanties, solidarité (caisse de
- * secours), épargne, quorum… C'est le président qui paramètre — la cantine
+ * secours), épargne, quorum… C'est le président qui paramètre — la Tontine
  * entière voit les règles et leur version publiée.
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function ReglementCantine() {
+function ReglementTontine() {
   /* Chargé après peinture (hydratation sûre) — mêmes valeurs que le bureau. */
   const [reg, setReg] = useState<Reglement>(REGLEMENT_DEFAUT);
   useEffect(() => {
@@ -683,16 +683,16 @@ function ReglementCantine() {
 
   return (
     <Block
-      title="Règlement de la cantine — fixé par le bureau"
+      title="Règlement de la Tontine — fixé par le bureau"
       icon={<Stamp className="h-4.5 w-4.5" />}
       chip={
         <Chip cls={reg.publieLe ? CHIP_OK : CHIP_NEUTRE}>
           {reg.publieLe ? `Version ${reg.version} — en vigueur` : "Version 1 — en vigueur"}
         </Chip>
       }
-      note="Le président paramètre la cantine dans son poste de commandement (onglet « Paramètres ») : impayés, recouvrements, prêts garantis, solidarité, épargne, quorum. Ce règlement est publié à tous — lecture seule : toute modification se décide en réunion puis est republiée ici."
+      note="Le président paramètre la Tontine dans son poste de commandement (onglet « Paramètres ») : impayés, recouvrements, prêts garantis, solidarité, épargne, quorum. Ce règlement est publié à tous — lecture seule : toute modification se décide en réunion puis est republiée ici."
     >
-      <TableWrap label="Règlement de la cantine">
+      <TableWrap label="Règlement de la Tontine">
         <tbody>
           {sections.map((s) => (
             <FragmentRow key={s.titre} titre={s.titre} lignes={s.lignes} />
@@ -908,11 +908,11 @@ function ReunionPage({ annee, roster, vousPhone, typesCotis, vousRole }: { annee
         </TableWrap>
       </Block>
 
-      {/* Règlement de la cantine — le paramétrage complet du bureau (impayés,
+      {/* Règlement de la Tontine — le paramétrage complet du bureau (impayés,
           recouvrements, prêts garantis, solidarité, épargne) VISIBLE PAR TOUS
           les membres, en lecture seule. Le président le règle dans son poste
           de commandement ; chaque publication est horodatée et versionnée. */}
-      <ReglementCantine />
+      <ReglementTontine />
 
       {/* Fiche réunion — modale ouverte au clic sur un mois du calendrier */}
       {fiche && <FicheReunion t={fiche} vousId={vousId} maCotisPerso={typeDeMembreAffiche({ id: vousId, role: vousRole }, typesCotis)} onFermer={() => setFiche(null)} />}
@@ -1567,7 +1567,7 @@ function FicheBeneficiaire({ t, vousPhone, onFermer }: { t: TourMois; vousPhone?
                     </a>
                   </>
                 ) : (
-                  <p className="text-[12px] italic text-[#8A9288]">Numéro non renseigné — passez voir le secrétaire de la cantine.</p>
+                  <p className="text-[12px] italic text-[#8A9288]">Numéro non renseigné — passez voir le secrétaire de la Tontine.</p>
                 )}
               </div>
             )}
@@ -1882,7 +1882,7 @@ function RolePage({ role, annee, roster, payes, vousRole, vousName, sigVersion, 
   const Icon = ROLE_ICON[role];
   const holder = roster.find((m) => m.role === role)!;
   // Les outils actifs de la page ne s'ouvrent que si C'EST VOTRE rôle dans la
-  // cantine (rôle renseigné à l'inscription) — sinon la page reste un poste
+  // Tontine (rôle renseigné à l'inscription) — sinon la page reste un poste
   // d'observation : on voit le travail du bureau, sans y toucher.
   const maPage = vousRole === role;
   void sigVersion; // les blocs se rechargent à chaque mutation de signalement
@@ -1919,7 +1919,7 @@ function RolePage({ role, annee, roster, payes, vousRole, vousName, sigVersion, 
         {maPage && (
           <p className="flex items-start gap-2 border-t border-[#E5DCC0] bg-[#2F6B45]/8 px-4 py-2.5 text-[11.5px] font-semibold leading-relaxed text-[#2F6B45]">
             <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            C&apos;est votre page — vos outils de gestion de la cantine sont actifs ci-dessous (URL dédiée : {hashFor(role as TPage)}).
+            C&apos;est votre page — vos outils de gestion de la Tontine sont actifs ci-dessous (URL dédiée : {hashFor(role as TPage)}).
           </p>
         )}
       </FcCard>
@@ -4122,7 +4122,7 @@ function BureauSignalements({ vousRole, sigVersion, onSignaler }: {
     >
       {list.length === 0 ? (
         <p className="mt-3 rounded-xl bg-[#2F6B45]/8 px-3.5 py-3 text-[12.5px] font-semibold text-[#2F6B45]">
-          Aucun signalement — la cantine est sereine.
+          Aucun signalement — la Tontine est sereine.
         </p>
       ) : (
         <div className="mt-3 space-y-2.5">
@@ -4184,7 +4184,7 @@ function BureauSignalements({ vousRole, sigVersion, onSignaler }: {
       )}
       {onSignaler && (
         <div className="mt-3">
-          <FcButton variant="outline" onClick={() => onSignaler({ cible: "autre", cibleId: null, cibleLabel: "Problème général de la cantine" })} className="w-auto">
+          <FcButton variant="outline" onClick={() => onSignaler({ cible: "autre", cibleId: null, cibleLabel: "Problème général de la Tontine" })} className="w-auto">
             <Flag className="h-4 w-4" /> Signaler un autre problème
           </FcButton>
         </div>
@@ -4603,7 +4603,7 @@ function TableSecretariat({ annee, roster }: { annee: TourMois[]; roster: Member
       <Block
         title="Procès-verbaux des réunions"
         icon={<FileText className="h-4.5 w-4.5" />}
-        note={`La secrétaire${secretaire ? ` (${secretaire.name})` : ""} rédige le compte rendu de chaque réunion et le lit au mois suivant — les PV sont archivés dans le registre de la cantine.`}
+        note={`La secrétaire${secretaire ? ` (${secretaire.name})` : ""} rédige le compte rendu de chaque réunion et le lit au mois suivant — les PV sont archivés dans le registre de la Tontine.`}
       >
         <TableWrap label="Procès-verbaux de l'année">
           <thead>

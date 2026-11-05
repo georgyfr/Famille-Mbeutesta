@@ -297,7 +297,7 @@ function HomeTab({
 
       {/* Tableau de bord — présente les pages de l'application.
           À la demande de l'administrateur (2026-10-31) : la page d'accueil par
-          défaut est ce tableau de bord ; SEULE la page Finances (la cantine de
+          défaut est ce tableau de bord ; SEULE la page Finances (la Tontine de
           la famille : tontine, épargnes, prêts) y apparaît pour le moment.
           Les autres univers restent masqués (`visible: false`) tant qu'ils ne
           sont pas travaillés — ils réapparaîtront d'un simple `visible: true`. */}
@@ -770,7 +770,7 @@ function InstallCard({ isIOS }: { isIOS: boolean }) {
 /* ─── « Mon poste au bureau » — switcher de poste (v20) ─────────────────────
    Demande (2026-11-05) : sur le tableau de bord, un membre doit pouvoir
    basculer vers un poste du bureau. Le poste est enregistré dans la MÊME
-   source que la carte « Mon rôle dans la cantine » (fc_tontine_role_v1) et
+   source que la carte « Mon rôle dans la Tontine » (fc_tontine_role_v1) et
    la page du poste s'ouvre immédiatement :
    · président / secrétaire / commissaire aux comptes → leur console dédiée
      (#president, #secretaire, #commissaire — la porte maquette bascule toute
@@ -952,11 +952,11 @@ function PosteBureauSwitcher() {
   );
 }
 
-/** Carte « Mon rôle dans la cantine » — le rôle renseigné à l'inscription est
+/** Carte « Mon rôle dans la Tontine » — le rôle renseigné à l'inscription est
  *  rappelé ici et peut être corrigé : il ouvre la page du bureau correspondante
  *  (président, secrétaire, trésorier…) et détermine les droits dans la tontine
  *  (taux mensuel, validations d'épargnes, dettes, signalements). */
-function RoleCantineCard() {
+function RoleTontineCard() {
   const [role, setRole] = useState<RoleKey | null>(null);
 
   useEffect(() => {
@@ -967,7 +967,7 @@ function RoleCantineCard() {
   const changer = (r: RoleKey) => {
     setRole(r);
     saveVousRole(r);
-    toast.success(`Rôle enregistré : ${ROLE_META[r].label} — votre page de la cantine est mise à jour.`);
+    toast.success(`Rôle enregistré : ${ROLE_META[r].label} — votre page de la Tontine est mise à jour.`);
   };
 
   const meta = role ? ROLE_META[role] : null;
@@ -976,10 +976,10 @@ function RoleCantineCard() {
     <FcCard className="p-5">
       <div className="mb-3 flex items-center gap-2">
         <Users className="h-5 w-5 text-[#C89F62]" />
-        <h3 className="fc-serif text-lg font-bold text-[#1E4D2B]">Mon rôle dans la cantine</h3>
+        <h3 className="fc-serif text-lg font-bold text-[#1E4D2B]">Mon rôle dans la Tontine</h3>
       </div>
       <p className="mb-3 text-[13px] leading-relaxed text-[#5C6B60]">
-        {meta?.summary ?? "Le rôle joué dans la cantine est renseigné à l'inscription."}{" "}
+        {meta?.summary ?? "Le rôle joué dans la Tontine est renseigné à l'inscription."}{" "}
         {role && role !== "membre"
           ? "Votre page du bureau vous donne vos outils : taux mensuel, validations, dettes, signalements."
           : "En tant que membre, vous validez les décisions du bureau et vous pouvez signaler tout problème."}
@@ -988,7 +988,7 @@ function RoleCantineCard() {
         <select
           value={role ?? "membre"}
           onChange={(e) => changer(e.target.value as RoleKey)}
-          aria-label="Mon rôle dans la cantine"
+          aria-label="Mon rôle dans la Tontine"
           className="min-h-[48px] flex-1 rounded-xl border border-[#E5DCC0] bg-[#FFFDF6] px-3 text-[14px] font-semibold text-[#2B3530] outline-none focus-visible:outline-2 focus-visible:outline-[#C89F62]"
         >
           {(["membre", ...ROLES_BUREAU] as RoleKey[]).map((r) => (
@@ -1053,7 +1053,7 @@ function SecurityTab({ session, onLoggedOut }: { session: SessionData; onLoggedO
     <div className="space-y-4">
       <PushCard />
       <InstallCard isIOS={isIOS} />
-      <RoleCantineCard />
+      <RoleTontineCard />
       <FcCard className="p-5">
         <div className="mb-3 flex items-center gap-2">
           <Smartphone className="h-5 w-5 text-[#C89F62]" />

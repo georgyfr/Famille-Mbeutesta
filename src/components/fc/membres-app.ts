@@ -14,7 +14,7 @@
 // ramenait vers la console du président.
 //
 // SOLUTION — ce module lit l'annuaire réel et le convertit en membres de la
-// cantine :
+// Tontine :
 //   • mode démo (site Cloudflare) : la base navigateur fc_demo_db_v2 — la
 //     même que l'inscription et le pré-enregistrement alimentent déjà ;
 //   • hors mode démo (dev, annuaire serveur exigeant une session) : liste
@@ -51,13 +51,13 @@ type EntreeAnnuaire = {
   id?: string;
   fullName?: string;
   phone?: string;
-  status?: string; // PREINSCRIT | ACTIF — les deux participent à la cantine
+  status?: string; // PREINSCRIT | ACTIF — les deux participent à la Tontine
   branch?: string;
   city?: string | null;
   createdAt?: string;
 };
 
-/** Lit l'annuaire de l'application et le convertit en membres de la cantine.
+/** Lit l'annuaire de l'application et le convertit en membres de la Tontine.
  *  Retourne [] en l'absence d'annuaire (dev, stockage vide) — jamais d'erreur. */
 export function loadMembresApplication(): Member[] {
   try {

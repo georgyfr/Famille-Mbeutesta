@@ -1,10 +1,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// COLLATIONS DE LA CANTINE — Famille.Mbeutetsa
+// COLLATIONS DE LA TONTINE — Famille.Mbeutetsa
 //
 // « Ajoutez autant de collations que souhaité » : le président crée une
 // collation (ex. « Collation ordinaire », 2 000 FCFA par personne et par
 // réunion), choisit les personnes qui la paient, puis en ajoute une autre
-// (ex. « Collation spéciale »)… autant de fois que la cantine en décide.
+// (ex. « Collation spéciale »)… autant de fois que la Tontine en décide.
 //
 // La part collation d'un membre = la SOMME des collations qui lui sont
 // attribuées (un membre peut très bien payer plusieurs collations — contrairement

@@ -32,8 +32,8 @@ import { Sparkles, Crown, PenLine, Landmark } from "lucide-react";
 type ConsoleKey = "president" | "secretaire" | "commissaire";
 
 const CONSOLES: Record<ConsoleKey, string> = {
-  president: "Poste de commandement du Président (paramétrage + espace membre)",
-  secretaire: "Console du Secrétaire (procès-verbaux, présences, décisions, taux, convocations)",
+  president: "Poste de commandement du Président (codes d'invitation + espace membre)",
+  secretaire: "Console du Secrétaire (20 onglets : mémoire, gestion, créer un membre)",
   commissaire: "Console du Commissaire aux comptes (caisses, journal, registres, rapports)",
 };
 
@@ -118,7 +118,7 @@ export function MaquetteGate() {
         <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#C89F62]" />
         <p className="hidden min-w-0 truncate text-[11px] font-semibold sm:block">
           {mode === "maquette"
-            ? `Maquette v22 — ${CONSOLES[console_]}`
+            ? `Maquette v23 — ${CONSOLES[console_]}`
             : "Application actuelle — consultation"}
         </p>
         {/* v21 — sélecteur de consoles : VISIBLE EN PERMANENCE (maquette comme

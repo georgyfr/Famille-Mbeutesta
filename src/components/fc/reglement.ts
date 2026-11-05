@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// RÈGLEMENT DE LA CANTINE — Famille.Mbeutetsa
+// RÈGLEMENT DE LA TONTINE — Famille.Mbeutetsa
 //
 // TOUT le paramétrage décidé par le bureau (président en tête) :
 //   · cotisations & réunion (montants réels via TONTINE / saveMontants)
@@ -26,7 +26,7 @@
 //
 // Le président (et le bureau) réglent ces valeurs dans l'onglet « Paramètres »
 // du poste de commandement ; « Publier » les rend VISIBLES À TOUS LES MEMBRES
-// (lecture seule) — la page Tontine les affiche alors à la cantine entière.
+// (lecture seule) — la page Tontine les affiche alors à la Tontine entière.
 //
 // Persistance locale (gratuit, hors ligne, zéro serveur) : clé fc_reglement_v1.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -43,7 +43,7 @@ export type TypePretConfig = {
 };
 
 /** Catalogue des types de prêts d'une association / tontine. Le président
- *  choisit LA nature qui correspond à sa cantine ; les champs du type choisi
+ *  choisit LA nature qui correspond à sa Tontine ; les champs du type choisi
  *  apparaissent mis en valeur. */
 export const TYPES_PRET_CATALOGUE: { id: string; nom: string; description: string }[] = [
   { id: "social", nom: "Prêt social / d'honneur", description: "Coup de pouce sans intérêt — urgence familiale, entraide" },
@@ -94,7 +94,7 @@ export const INTERETS_EPARGNE_LABELS: Record<TypeEpargneConfig["interet"], strin
 };
 
 /** Les méthodes de solidarité possibles dans une réunion — le président
- *  choisit celle qui arrange la cantine ; les champs propres à la méthode
+ *  choisit celle qui arrange la Tontine ; les champs propres à la méthode
  *  choisie apparaissent ensuite. */
 export type MethodeSolidarite = "caisse" | "speciale" | "mutualisation" | "assurance" | "nature";
 

@@ -20,17 +20,24 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api, deviceName } from "@/lib/fc-client";
 import { afterAuthPush, familyNotify } from "@/lib/fc-push";
-import { Country, countryByIso, groupPhone } from "@/lib/fc-countries";
+import { Country, countryByIso, DIAL_TO_ISO, groupPhone } from "@/lib/fc-countries";
 import { PhoneCountrySelect, usePhoneCountry } from "./phone-country-select";
 import { FcButton, FcCard, FcInput, FcSpinner, FcWatermark } from "./ui";
-/* Le choix du rôle dans la cantine n'est PLUS demandé ici : il se fait juste
+/* Le choix du rôle dans la Tontine n'est PLUS demandé ici : il se fait juste
  * APRÈS la sélection de la géolocalisation (assistant dédié RoleWizard dans
  * main-app.tsx). À l'inscription, le rôle de l'appareil est effacé pour que
- * le nouvel utilisateur passe par l'assistant. */
-import { clearVousRole } from "./tontine-bureau";
+ * le nouvel utilisateur passe par l'assistant — SAUF s'il colle un CODE
+ * D'INVITATION généré par le bureau : le rôle (et la cotisation) du code sont
+ * appliqués automatiquement et l'assistant est sauté (Task 67). */
+import { clearVousRole, saveVousRole } from "./tontine-bureau";
+import { ROLE_META } from "./tontine-data";
+import {
+  appliquerCotisationCode, codeInviteEnAttente, consommerCode, poserCodeInvite, trouverCode,
+  retirerCodeInvite, type CodeMembre,
+} from "./codes-membres";
 import {
   ArrowLeft, AtSign, BellRing, Check, ChevronRight, Eye, EyeOff, KeyRound,
-  Lock, Phone, RefreshCw, ShieldCheck, Smartphone, UserRound,
+  Lock, Phone, RefreshCw, ShieldCheck, Smartphone, Ticket, UserRound,
 } from "lucide-react";
 
 const UNIVERSES: { icon: string; label: string; wide?: boolean }[] = [
@@ -81,6 +88,120 @@ function placeholderFor(country: Country): string {
 
 /* ─── Validation identifiant : 3-30, lettres/chiffres/._- ─── */
 const IDENT_RE = /^[a-zA-Z0-9._-]{3,30}$/;
+
+/* ═══════════════ CODE D'INVITATION (Task 67) ═══════════════
+ * Le bureau (secrétaire, président) crée les membres AVANT leur arrivée et
+ * leur remet un code « FCM-XXXXXX ». La personne le colle à l'inscription :
+ * son téléphone est prérempli, puis À LA CRÉATION DU COMPTE son rôle et sa
+ * cotisation sont appliqués automatiquement (appliquerCodeInvitation, plus
+ * bas) — SA page s'ouvre directement, l'assistant de rôle est sauté. Un code
+ * n'expire JAMAIS. */
+/* Déduit le PAYS d'un numéro international (« +237 6… » → Cameroun) — sert au
+ * préremplissage depuis un code d'invitation : le pays ET le numéro sont
+ * posés, quelle que soit la détection automatique du navigateur. */
+function paysDepuisTelephone(tel: string): Country | null {
+  const brut = tel.replace(/^\+/, "");
+  for (let l = Math.min(6, brut.length); l >= 1; l--) {
+    const iso = DIAL_TO_ISO[brut.slice(0, l)];
+    if (iso) {
+      const c = countryByIso(iso);
+      if (c) return c;
+    }
+  }
+  return null;
+}
+
+function appliquerCodeInvitation(codeAtt: string | null, fullName: string, uid: string): void {
+  if (!codeAtt) return;
+  const c = trouverCode(codeAtt);
+  if (!c) { retirerCodeInvite(); return; }
+  const maj = consommerCode(codeAtt, fullName);
+  if (!maj) {
+    retirerCodeInvite();
+    toast.info("Votre code d'invitation était déjà utilisé — votre compte reste actif.");
+    return;
+  }
+  saveVousRole(c.bureauRole ?? "membre");
+  appliquerCotisationCode(c.cotisationTypeId, `app-${uid}`);
+  retirerCodeInvite();
+  const libelle = ROLE_META[c.bureauRole ?? "membre"]?.label ?? "Membre";
+  toast.success("Code d'invitation appliqué 🎟️", {
+    description: `Votre page « ${libelle} » s'ouvre directement${c.cotisationTypeId ? ` — cotisation « ${c.cotisationNom} » (${c.cotisationMontant.toLocaleString("fr-FR")} FCFA/mois)` : " — cotisation de base de la Tontine"}. Votre compte reste actif sans limite de temps.`,
+  });
+}
+
+/* Champ « J'ai un code d'invitation » — replié par défaut, ouvert d'un clic.
+ * onCodeValide permet à l'écran hôte de PRÉREMPLIR le numéro de téléphone. */
+function ChampCodeInvitation({ onCodeValide }: { onCodeValide?: (c: CodeMembre) => void }) {
+  const [ouvert, setOuvert] = useState(false);
+  const [saisie, setSaisie] = useState("");
+  const [valide, setValide] = useState<CodeMembre | null>(null);
+
+  const verifier = () => {
+    const c = trouverCode(saisie);
+    if (!c) {
+      toast.error("Code inconnu — vérifiez auprès du secrétaire ou du président qui l'a généré.");
+      return;
+    }
+    if (c.utiliseLe) {
+      toast.error("Ce code a déjà été utilisé", { description: "Demandez un nouveau code au bureau de la Tontine." });
+      return;
+    }
+    setValide(c);
+    poserCodeInvite(c.code); // mémorisé jusqu'à la création du compte (consommé ensuite)
+    onCodeValide?.(c);
+    toast.success("Code d'invitation accepté 🎟️", {
+      description: `Bienvenue${c.nomOptionnel ? ` ${c.nomOptionnel}` : ""} ! Votre page s'ouvrira avec le rôle qui vous a été attribué par le bureau.`,
+    });
+  };
+
+  if (!ouvert) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOuvert(true)}
+        className="mt-3 flex w-full items-center gap-2 rounded-xl border border-dashed border-[#C9B98A] bg-[#FBF7EA] px-3 py-2.5 text-left text-[12.5px] font-semibold text-[#5C6B60] transition hover:border-[#C89F62] hover:text-[#7A5B2E]"
+      >
+        <Ticket className="h-4 w-4 shrink-0 text-[#C89F62]" />
+        J&apos;ai un code d&apos;invitation du bureau — le coller ici
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-3 rounded-xl border border-[#C9B98A] bg-[#FBF7EA] p-3">
+      <p className="flex items-center gap-1.5 text-[12px] font-bold text-[#2B3530]">
+        <Ticket className="h-4 w-4 text-[#C89F62]" /> Votre code d&apos;invitation
+      </p>
+      <p className="mt-0.5 text-[11px] leading-snug text-[#8A9288]">
+        Généré par la secrétaire ou le président — format FCM-XXXXXX. Il ne périme jamais.
+      </p>
+      <div className="mt-2 flex items-stretch gap-2">
+        <input
+          value={saisie}
+          onChange={(e) => setSaisie(e.target.value.toUpperCase())}
+          onKeyDown={(e) => e.key === "Enter" && saisie.trim() && verifier()}
+          placeholder="FCM-AB12CD"
+          aria-label="Code d'invitation du bureau"
+          autoCapitalize="characters"
+          className="min-w-0 flex-1 rounded-lg border border-[#C9B98A] bg-white px-3 py-2.5 font-mono text-[14px] font-black tracking-wider text-[#2B3530] outline-none placeholder:font-semibold placeholder:tracking-normal placeholder:text-[#8A9288] focus:border-[#C89F62]"
+        />
+        <FcButton onClick={verifier} disabled={!saisie.trim()} className="h-auto min-h-[44px] shrink-0 px-3 text-[12px]">
+          Utiliser
+        </FcButton>
+      </div>
+      {valide && (
+        <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-[#2F6B45]/10 px-2.5 py-2 text-[11.5px] font-semibold leading-snug text-[#2F6B45]">
+          <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            Code <strong className="font-mono">{valide.code}</strong> accepté — {valide.typeMembre === "bureau" ? "membre du bureau" : "membre simple"}
+            {valide.cotisationTypeId ? `, cotisation « ${valide.cotisationNom} »` : ""}. Votre numéro est prérempli ci-dessus.
+          </span>
+        </p>
+      )}
+    </div>
+  );
+}
 
 export function AuthFlow({ onReady }: { onReady: (name: string) => void }) {
   const [step, setStep] = useState<Step>({ k: "welcome" });
@@ -352,6 +473,24 @@ function PhoneScreen({
         Recevoir la notification
       </FcButton>
 
+      {/* — CODE D'INVITATION (Task 67) : le bureau a créé ce membre avant son
+       *    arrivée — il colle le code reçu, son numéro est prérempli et, dès
+       *    la création du compte, son rôle et sa cotisation s'appliquent. — */}
+      {mode === "signup" && (
+        <ChampCodeInvitation
+          onCodeValide={(c) => {
+            /* le numéro du code fait FOI : on bascule le pays sur SON indicatif
+             * puis on préremplit le numéro national (préfixe retiré). */
+            const pays = paysDepuisTelephone(c.telephone);
+            const dial = pays?.dial ?? country.dial;
+            if (pays && pays.iso !== country.iso) setCountry(pays);
+            const brut = c.telephone.replace(/^\+/, "");
+            const d = brut.startsWith(dial) ? brut.slice(dial.length) : brut;
+            if (d) setDigits(onlyDigits(d).slice(0, maxDigitsFor(pays ?? country)));
+          }}
+        />
+      )}
+
       <p className="mt-4 text-center text-[12px] text-[#8A9288]">
         {country.iso === "CM"
           ? "Format camerounais — 9 chiffres commençant par 6 (mobile) ou 2 (fixe)."
@@ -582,8 +721,11 @@ function ProfileScreen({
         /* rien */
       }
       // Nouveau compte → le rôle de l'appareil repart à zéro : l'assistant
-      // « Votre rôle dans la cantine » viendra juste après la géolocalisation.
+      // « Votre rôle dans la Tontine » viendra juste après la géolocalisation —
+      // SAUF si un code d'invitation a été collé : son rôle s'applique déjà
+      // ici (page directe, assistant sauté).
       clearVousRole();
+      appliquerCodeInvitation(codeInviteEnAttente(), res.user.fullName, res.user.id);
       toast.success(`Bienvenue dans la famille, ${res.user.fullName.split(" ")[0]} ! 🌳`);
       void afterAuthPush(true);
       void familyNotify({
@@ -733,6 +875,10 @@ function CredsScreen({
         Continuer <ChevronRight className="h-5 w-5" />
       </FcButton>
 
+      {/* — CODE D'INVITATION (Task 67) : applicable aussi au parcours par
+       *    identifiant — le rôle du code sera appliqué à la création du compte. — */}
+      <ChampCodeInvitation />
+
       <p className="mt-4 text-center text-[12px] text-[#8A9288]">
         Lettres, chiffres, point, tiret ou underscore uniquement — ex : <code className="rounded bg-black/5 px-1">jean.m</code>
       </p>
@@ -794,8 +940,10 @@ function IdProfileScreen({
         /* rien */
       }
       // Nouveau compte → le rôle de l'appareil repart à zéro : l'assistant
-      // « Votre rôle dans la cantine » viendra juste après la géolocalisation.
+      // « Votre rôle dans la Tontine » viendra juste après la géolocalisation —
+      // SAUF si un code d'invitation a été collé (rôle appliqué automatiquement).
       clearVousRole();
+      appliquerCodeInvitation(codeInviteEnAttente(), res.user.fullName, res.user.id);
       if (res.linked) {
         // DÉTECTION : le numéro correspondait à un compte existant → identifiant associé
         toast.success(

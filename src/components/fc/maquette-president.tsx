@@ -1,7 +1,7 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MAQUETTE v1 — POSTE DE COMMANDEMENT DU PRÉSIDENT (cantine Mbeutetsa)
+// MAQUETTE v1 — POSTE DE COMMANDEMENT DU PRÉSIDENT (Tontine Mbeutetsa)
 //
 // Proposition soumise à validation (novembre 2026) : transformer la « fiche »
 // du président en véritable table de gestion opérationnelle — conduite de
@@ -25,7 +25,7 @@ import {
   HeartHandshake, Hourglass, Landmark, Layers, ListChecks, Lock, MessageSquarePlus,
   Mic, Pause, Percent, PiggyBank, Play, Plus, ReceiptText, RotateCcw, Scale, ScrollText, Send,
   ShieldCheck, Search, SlidersHorizontal, Sparkles, Square, Tag, ThumbsDown, ThumbsUp, Timer, TrendingUp,
-  Trash2, Undo2, UserCheck, UserPlus, Users, Vote, Wallet, XCircle,
+  Trash2, Ticket, Undo2, UserCheck, UserPlus, Users, Vote, Wallet, XCircle,
 } from "lucide-react";
 import { FcCard } from "./ui";
 import {
@@ -45,6 +45,7 @@ import {
   evolutionPretReunion, interetsAttribution, loadEpargnesReunion, loadPretsReunion, saveEpargnesReunion, savePretsReunion,
   type AttributionReunion, type RemboursementPret,
 } from "./registres-bureau";
+import { CodesMembresSection } from "./codes-membres-section";
 import {
   loadTypesCotisation, nouveauTypeCotisation, saveTypesCotisation,
   typeDuMembre, cotisationDuMembre, fmtMontant,
@@ -118,7 +119,7 @@ const SOUS_PARAM_KEYS = SOUS_PARAMS.map((s) => s.key);
  *  retombe sur l'accueil) ; « epargnes » la remplace (gestion des épargnes). */
 const TAB_KEYS: TabKey[] = [
   "cotisations", "cockpit", "reunion", "epargnes", "prets", "solidarite", "adhesions", "postes",
-  "journal", "parametres", "m-cotis", "m-epargne", "m-prets",
+  "journal", "parametres", "codes", "m-cotis", "m-epargne", "m-prets",
 ];
 
 function tabFromHash(): { tab: TabKey; sous: SousParamKey | null } {
@@ -233,7 +234,7 @@ type Candidat = {
 };
 type JournalEntry = { id: string; le: string; texte: string; acteur: string };
 type TabKey = "cotisations" | "cockpit" | "reunion" | "epargnes" | "prets" | "solidarite" | "adhesions" | "postes" | "journal"
-  | "parametres" | "m-cotis" | "m-epargne" | "m-prets";
+  | "parametres" | "codes" | "m-cotis" | "m-epargne" | "m-prets";
 
 const SUJETS_PAROLE = [
   "Échange de tour avec une cousine de Bafoussam",
@@ -287,7 +288,7 @@ export function MaquettePresident() {
   const [tab, setTab] = useState<TabKey>("cotisations");
   const [sousParam, setSousParam] = useState<SousParamKey>("cotisations");
   const [seance, setSeance] = useState<"fermee" | "ouverte" | "cloturee">("fermee");
-  /* — RÈGLEMENT DE LA CANTINE : paramétrage complet du bureau (impayés,
+  /* — RÈGLEMENT DE LA TONTINE : paramétrage complet du bureau (impayés,
    *    recouvrements, prêts, solidarité, épargne) — publié et visible par
    *    tous les membres. Initialisé sur les défauts (hydratation sûre), puis
    *    chargé du stockage local après peinture. — */
@@ -477,6 +478,18 @@ export function MaquettePresident() {
       window.removeEventListener("hashchange", sync);
     };
   }, []);
+
+  /* — SYNC CROSS-ONGLET (v23) : les registres du bureau (épargnes, prêts faits
+   *    à la réunion) sont tenus AUSSI par la secrétaire — une modification dans
+   *    un autre onglet du navigateur est répercutée ici à la seconde. — */
+  useEffect(() => {
+    const onSync = (e: StorageEvent) => {
+      if (e.key === "fc_epargnes_reunion_v1") setEpargnesReunion(loadEpargnesReunion());
+      if (e.key === "fc_prets_reunion_v1") setPretsReunion(loadPretsReunion());
+    };
+    window.addEventListener("storage", onSync);
+    return () => window.removeEventListener("storage", onSync);
+  }, []);
   const goTab = (t: TabKey) => {
     setTab(t);
     try {
@@ -512,9 +525,9 @@ export function MaquettePresident() {
     setReglement(p);
     setReglSale(false);
     toast.success(`Règlement publié — version ${p.version}`, {
-      description: "Tous les membres le voient désormais en lecture seule dans la page Tontine, bloc « Règlement de la cantine ».",
+      description: "Tous les membres le voient désormais en lecture seule dans la page Tontine, bloc « Règlement de la Tontine ».",
     });
-    journalAdd(`Règlement de la cantine publié (version ${p.version}) — visible par tous les membres.`, "Président (paramétrage)");
+    journalAdd(`Règlement de la Tontine publié (version ${p.version}) — visible par tous les membres.`, "Président (paramétrage)");
   };
   const reinitialiserReglement = () => {
     const r = { ...REGLEMENT_DEFAUT };
@@ -522,7 +535,7 @@ export function MaquettePresident() {
     setReglement(r);
     setReglSale(false);
     toast("Paramètres réinitialisés sur les valeurs d'origine");
-    journalAdd("Paramètres de la cantine réinitialisés sur les valeurs d'origine.", "Président (paramétrage)");
+    journalAdd("Paramètres de la Tontine réinitialisés sur les valeurs d'origine.", "Président (paramétrage)");
   };
 
   /* — types de cotisations : toute validation d'attribution est enregistrée
@@ -670,7 +683,7 @@ export function MaquettePresident() {
     const p1 = oj.find((x) => x.genre === "appel");
     if (p1 && p1.statut === "en_attente") setOj((prev) => prev.map((x) => (x.id === p1.id ? { ...x, statut: "en_cours" } : x)));
     toast.success("Séance ouverte — l’appel des membres est lancé");
-    journalAdd("Ouverture de la séance mensuelle de la cantine.");
+    journalAdd("Ouverture de la séance mensuelle de la Tontine.");
   };
   const marquerPresence = (id: string) => {
     setPresences((prev) => {
@@ -807,7 +820,7 @@ export function MaquettePresident() {
   };
   const publierAdmission = (c: Candidat) => {
     setCandidats((prev) => prev.map((x) => (x.id === c.id ? { ...x, statut: "admis" } : x)));
-    toast.success(`${c.nom} est admis(e) dans la cantine`, { description: "Notification à tous les membres — frais d’adhésion à percevoir par le trésorier." });
+    toast.success(`${c.nom} est admis(e) dans la Tontine`, { description: "Notification à tous les membres — frais d’adhésion à percevoir par le trésorier." });
     journalAdd(`Admission publiée : ${c.nom} (${c.ville}) — parrain ${c.parrain}. Frais d’adhésion ${fcfa(TONTINE.fraisAdhesion)} confiés au trésorier.`);
   };
   const docOfficiel = (label: string) => {
@@ -848,7 +861,7 @@ export function MaquettePresident() {
     const moisIdx = pretMoisChoisi ?? moisCourantIdx ?? 0;
     /* nature et garanties ne sont plus demandées dans le formulaire : la nature
      * du règlement s’applique (motif), les garanties restent libres côté bureau. */
-    const motif = TYPES_PRET_CATALOGUE.find((t) => t.id === reglement.prets.typeChoisi)?.nom ?? "Prêt à la caisse de la cantine";
+    const motif = TYPES_PRET_CATALOGUE.find((t) => t.id === reglement.prets.typeChoisi)?.nom ?? "Prêt à la caisse de la Tontine";
     setPrets((prev) => [{
       id: nid(), membreId: MOI, montant, motif, garanties: "",
       avalisteId: mesPretsForm.avalisteId, cosignTresorier: false, statut: "en_attente" as const, motifRefus: "", president: true,
@@ -918,6 +931,7 @@ export function MaquettePresident() {
     { key: "solidarite", label: "Solidarité", icon: <HandHeart className="h-3.5 w-3.5" /> },
     { key: "adhesions", label: "Adhésions", icon: <UserPlus className="h-3.5 w-3.5" /> },
     { key: "postes", label: "Autres postes", icon: <Users className="h-3.5 w-3.5" /> },
+    { key: "codes", label: "Créer un membre", icon: <Ticket className="h-3.5 w-3.5" /> },
     { key: "journal", label: "Journal des décisions", icon: <ScrollText className="h-3.5 w-3.5" /> },
     { key: "parametres", label: "Paramètres", icon: <SlidersHorizontal className="h-3.5 w-3.5" /> },
     { key: "m-cotis", label: "Mes cotisations", icon: <CalendarCheck className="h-3.5 w-3.5" />, membre: true },
@@ -973,7 +987,7 @@ export function MaquettePresident() {
             <div className="min-w-0 flex-1">
               <p className="text-[10.5px] font-bold uppercase tracking-widest text-[#C89F62]">Table de gestion opérationnelle</p>
               <p className="fc-serif text-[19px] font-bold leading-tight">Poste de commandement — Président</p>
-              <p className="mt-0.5 text-[12px] text-white/85">Joseph Mbeutetsa (vous) · Cantine Mbeutetsa · {TONTINE.jourLabel}</p>
+              <p className="mt-0.5 text-[12px] text-white/85">Joseph Mbeutetsa (vous) · Tontine Mbeutetsa · {TONTINE.jourLabel}</p>
             </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-1.5">
@@ -996,7 +1010,7 @@ export function MaquettePresident() {
            *    sarcelle = espace membre personnel ; le président voit du premier
            *    coup d’œil à quelle section appartient chaque onglet. — */}
           <p className="flex items-center gap-1.5 px-1 pb-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#1E4D2B]">
-            <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-full bg-[#1E4D2B]" /> Gestion de la cantine
+            <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-full bg-[#1E4D2B]" /> Gestion de la Tontine
           </p>
           <div className="flex flex-wrap gap-2">{tabsGestion.map(renderTab)}</div>
           <p className="flex items-center gap-1.5 px-1 pb-2 pt-3 text-[10px] font-black uppercase tracking-[0.16em] text-[#2A5259]">
@@ -1186,6 +1200,12 @@ export function MaquettePresident() {
             onRetirer={retirerPoste}
           />
         )}
+        {/* — CRÉER UN MEMBRE (v23, demande de l'administrateur) : le président
+         *    génère les codes d'invitation — la personne les colle à son
+         *    inscription et SA page s'ouvre avec le rôle attribué. — */}
+        {tab === "codes" && (
+          <CodesMembresSection creePar="president" accent="#1E4D2B" creeParNom="Joseph Mbeutetsa — Président" />
+        )}
         {JOURNAL_ACTIVE && tab === "journal" && <JournalSection journal={journal} />}
         {tab === "parametres" && (
           <ParametresSection
@@ -1327,7 +1347,7 @@ function CockpitSection(p: {
 
       <Block title="Actions urgentes" icon={<AlertTriangle className="h-4.5 w-4.5" />} note="Chaque action est interactive : elle notifie l’acteur concerné (trésorier, secrétaire, vice-président, membre) et s’inscrit au journal.">
         {urgentes.length === 0 ? (
-          <p className="flex items-center gap-2 px-4 py-4 text-[13px] text-[#5C6B60]"><CheckCircle2 className="h-4 w-4 text-[#2F6B45]" /> Rien d’urgent — la cantine tourne rondement.</p>
+          <p className="flex items-center gap-2 px-4 py-4 text-[13px] text-[#5C6B60]"><CheckCircle2 className="h-4 w-4 text-[#2F6B45]" /> Rien d’urgent — la Tontine tourne rondement.</p>
         ) : (
           <ul className="divide-y divide-[#E5DCC0]">
             {urgentes.map((u) => (
@@ -3098,7 +3118,7 @@ function SolidariteSection(p: {
       <Block
         title="Types de solidarité — autant que vous voulez"
         icon={<HandHeart className="h-4.5 w-4.5" />}
-        note="Créez autant de types de solidarité que la cantine en pratique, chacun avec sa somme. À chaque type vous associez autant de VARIABLES que nécessaire — le membre attribué et la somme QU'IL paie, car tout le monde ne paie pas la solidarité de la même manière —, un DÉLAI (en mois) pour être à jour de cette solidarité ou la rembourser, et une RECHERCHE DYNAMIQUE pour trouver vite les membres à attribuer."
+        note="Créez autant de types de solidarité que la Tontine en pratique, chacun avec sa somme. À chaque type vous associez autant de VARIABLES que nécessaire — le membre attribué et la somme QU'IL paie, car tout le monde ne paie pas la solidarité de la même manière —, un DÉLAI (en mois) pour être à jour de cette solidarité ou la rembourser, et une RECHERCHE DYNAMIQUE pour trouver vite les membres à attribuer."
       >
         <div className="space-y-3 p-4">
           {/* — formulaire d'ajout d'un type — */}
@@ -3233,7 +3253,7 @@ function SolidariteSection(p: {
       <Block
         title="Types de mains levées"
         icon={<Hand className="h-4.5 w-4.5" />}
-        note="Les décisions votées à main levée en réunion : nommez autant de types de mains levées que la cantine en pratique — l'aide de solidarité, l'échange de tour, l'admission d'un membre…"
+        note="Les décisions votées à main levée en réunion : nommez autant de types de mains levées que la Tontine en pratique — l'aide de solidarité, l'échange de tour, l'admission d'un membre…"
       >
         <div className="space-y-3 p-4">
           <div className="rounded-2xl border-2 border-[#B8A87E] bg-[#FBF7EA] p-3">
@@ -3290,7 +3310,7 @@ function SolidariteSection(p: {
       <Block
         title="Calendrier de visites de solidarité"
         icon={<CalendarCheck className="h-4.5 w-4.5" />}
-        note="Pour chaque type de solidarité : planifiez les visites — le membre concerné (recherche dynamique), le type, le mois, qui représente la cantine (délégation) et une note. La cantine se déplace auprès des siens."
+        note="Pour chaque type de solidarité : planifiez les visites — le membre concerné (recherche dynamique), le type, le mois, qui représente la Tontine (délégation) et une note. La Tontine se déplace auprès des siens."
       >
         <div className="space-y-3 p-4">
           <div className="rounded-2xl border-2 border-[#B8A87E] bg-[#FBF7EA] p-3">
@@ -3342,7 +3362,7 @@ function SolidariteSection(p: {
                 value={visDelegation}
                 onChange={(e) => setVisDelegation(e.target.value)}
                 placeholder="Délégation — ex. : Vice-présidente + 2 membres"
-                aria-label="Qui représente la cantine lors de la visite"
+                aria-label="Qui représente la Tontine lors de la visite"
                 className="rounded-lg border border-[#C9B98A] bg-white px-3 py-2.5 text-[12.5px] font-bold text-[#2B3530] outline-none placeholder:font-semibold placeholder:text-[#8A9288] focus:border-[#1F5B3F]"
               />
             </div>
@@ -3816,7 +3836,7 @@ function MesCotisationsSection(p: {
   onCotiser: () => void;
 }) {
   /* Ma cotisation : celle fixée par le bureau pour MOI (type attribué), sinon
-   * la cotisation de base — comme pour chaque membre de la cantine. */
+   * la cotisation de base — comme pour chaque membre de la Tontine. */
   const monType = typeDuMembre(MOI, p.typesCotis);
   const maCotis = cotisationDuMembre(MOI, p.typesCotis, TONTINE.montantCotisation);
   const mesCollations = collationDuMembre(MOI, p.collations);
@@ -3827,7 +3847,7 @@ function MesCotisationsSection(p: {
         <div className="flex items-start gap-3 bg-[#3D6B72] px-4 py-3.5 text-white">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/15"><UserCheck className="h-4.5 w-4.5" /></span>
           <div>
-            <p className="fc-serif text-[15px] font-bold">D’abord membre de la cantine — ensuite président</p>
+            <p className="fc-serif text-[15px] font-bold">D’abord membre de la Tontine — ensuite président</p>
             <p className="mt-0.5 text-[12px] leading-relaxed text-white/85">
               Vous cotisez comme tout le monde : mêmes montants, mêmes pénalités, même ordre des tours (votre levée a eu lieu au tour n°1).
               Votre cotisation rejoint le total que le trésorier encaisse — aucune exception, c’est la règle de la maison.
@@ -3840,7 +3860,7 @@ function MesCotisationsSection(p: {
               <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Ma cotisation {p.moisCourant ? `— ${p.moisCourant}` : "du mois"}</p>
               <p className="text-[19px] font-black text-[#2B3530]">{fcfa(maCotis)}{mesCollations > 0 && <span className="text-[12px] font-semibold text-[#8A9288]"> + {fcfa(mesCollations)} de collation</span>}</p>
               <p className="mt-0.5 text-[11px] font-semibold text-[#8A6420]">
-                {monType ? `Type attribué par le bureau : ${monType.nom}` : "Cotisation de base de la cantine"}
+                {monType ? `Type attribué par le bureau : ${monType.nom}` : "Cotisation de base de la Tontine"}
               </p>
             </div>
             {p.cotisCeMois
@@ -4307,7 +4327,7 @@ function MesPretsSection(p: {
         <div className="flex items-start gap-2.5">
           <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#1E4D2B]/10 text-[#1E4D2B]"><Landmark className="h-4 w-4" /></span>
           <p className="text-[13px] leading-relaxed text-[#5C6B60]">
-            <strong className="text-[#1E4D2B]">Emprunter à la caisse de la cantine — les mêmes règles pour vous.</strong>
+            <strong className="text-[#1E4D2B]">Emprunter à la caisse de la Tontine — les mêmes règles pour vous.</strong>
             Choisissez un montant, un avaliste et le mois du prêt, taux {taux} %/mois. Et parce que c’est votre caisse,
             <strong className="text-[#1E4D2B]"> vous êtes récusé</strong> : le bureau statue sans votre voix (vote {MAJORITES_LABELS[p.regl.prets.majorityPresident]}).
           </p>
@@ -4367,7 +4387,7 @@ function MesPretsSection(p: {
       </FcCard>
 
       {p.mesPrets.length > 0 && (
-        <Block title="Mes demandes de prêt (caisse de la cantine)" icon={<ScrollText className="h-4.5 w-4.5" />}
+        <Block title="Mes demandes de prêt (caisse de la Tontine)" icon={<ScrollText className="h-4.5 w-4.5" />}
           note="Suivez la décision du bureau dans l’onglet « Prêts & garanties » — votre voix y est désactivée. Le calendrier de remboursement s’affiche sous chaque dossier.">
           <ul className="divide-y divide-[#E5DCC0]">
             {p.mesPrets.map((pr) => {
@@ -4540,7 +4560,7 @@ function CotisationsCollationsSection(p: {
   );
 }
 
-/* ══════════════════════════ PARAMÈTRES DE LA CANTINE ══════════════════════════
+/* ══════════════════════════ PARAMÈTRES DE LA TONTINE ══════════════════════════
  *
  * Le centre de paramétrage du président — TOUT ce qui se règle pour une
  * réunion : montants réels (visibles aussitôt par tous), impayés &
@@ -4550,7 +4570,7 @@ function CotisationsCollationsSection(p: {
  * événements, majorité, versement), épargne (taux, préavis, minimums) et
  * réunion (quorum, reports). Chaque règle modifiée devient un BROUILLON ;
  * « Publier » la rend visible par TOUS les membres (lecture seule, page
- * Tontine, bloc « Règlement de la cantine »).
+ * Tontine, bloc « Règlement de la Tontine »).
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 /** Champ numérique avec prévisualisation FCFA (les montants en FCFA s'y
@@ -4869,7 +4889,7 @@ function ParametresSection(p: {
     toast.success("Collations enregistrées", { description: "La part collation de chaque personne désignée est aussitôt mise à jour dans la page Cotisations & collations." });
   };
 
-  /* — RÈGLE DE LA CANTINE : un membre ne cotise qu'UNE seule somme mensuelle —
+  /* — RÈGLE DE LA TONTINE : un membre ne cotise qu'UNE seule somme mensuelle —
    *    typeOccupant(membreId, editeId?) retourne le type (autre que celui en
    *    cours d'édition) auquel la personne est DÉJÀ attribuée, pour le CITER
    *    à l'écran (« déjà dans « X » ») et bloquer son cochage ailleurs. */
@@ -4961,7 +4981,7 @@ function ParametresSection(p: {
         <div className="flex items-start gap-3 bg-gradient-to-br from-[#1E4D2B] to-[#2F6B45] px-4 py-3.5 text-white">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/15"><SlidersHorizontal className="h-4.5 w-4.5" /></span>
           <div>
-            <p className="fc-serif text-[15px] font-bold">Paramètres de la cantine — c&apos;est vous qui paramétrez</p>
+            <p className="fc-serif text-[15px] font-bold">Paramètres de la Tontine — c&apos;est vous qui paramétrez</p>
             <p className="mt-0.5 text-[12px] leading-relaxed text-white/85">
               Une section = un écran = un bouton « Enregistrer ». Tous les chiffres démarrent à 0 et toutes les options à désactivées : c&apos;est VOUS qui décidez de chaque valeur.
             </p>
@@ -5003,7 +5023,7 @@ function ParametresSection(p: {
       </div>
 
       {/* ══════════════════ SECTION COTISATIONS & COLLATIONS ══════════════════
-       *  L'ancienne section « Montants de la cantine » (5 champs) a été retirée
+       *  L'ancienne section « Montants de la Tontine » (5 champs) a été retirée
        *  à la demande de l'administrateur : les sommes passent DÉSORMAIS par les
        *  types de cotisations ci-dessous, et les collations par la section
        *  « Collations » — on en crée autant qu'on veut. Les champs d'ajout
@@ -5093,7 +5113,7 @@ function ParametresSection(p: {
                           <Btn small tone="neutre" onClick={() => setFormCotis((x) => ({ ...x, membreIds: [] }))}>Tout décocher</Btn>
                         </div>
                       </div>
-                      <p className="mt-1.5 text-[10.5px] leading-snug text-[#8A9288]">Règle de la cantine : un membre ne cotise qu&apos;une seule somme mensuelle — une personne déjà attribuée à un autre type est signalée « déjà dans… » et ne peut pas être cochée ici.</p>
+                      <p className="mt-1.5 text-[10.5px] leading-snug text-[#8A9288]">Règle de la Tontine : un membre ne cotise qu&apos;une seule somme mensuelle — une personne déjà attribuée à un autre type est signalée « déjà dans… » et ne peut pas être cochée ici.</p>
                       <div className="mt-2 max-h-52 space-y-1 overflow-y-auto rounded-xl bg-[#FBF7EA] p-2">
                         {p.roster.map((m) => {
                           const coche = formCotis.membreIds.includes(m.id);
@@ -5232,7 +5252,7 @@ function ParametresSection(p: {
           <Block
             title="Collations"
             icon={<Coffee className="h-4 w-4" />}
-            note="Ajoutez AUTANT de collations que la cantine en décide : chaque collation a son nom, sa somme par personne et par réunion, et les personnes qui la paient. La part d'un membre = la somme des collations qui lui sont attribuées."
+            note="Ajoutez AUTANT de collations que la Tontine en décide : chaque collation a son nom, sa somme par personne et par réunion, et les personnes qui la paient. La part d'un membre = la somme des collations qui lui sont attribuées."
           >
             <div className="space-y-3 p-4">
               <Btn tone="or" onClick={basculerFormColl} aria-expanded={formCollOpen}><Plus className="h-4 w-4" /> Ajouter une collation</Btn>
@@ -5296,7 +5316,7 @@ function ParametresSection(p: {
               )}
               {collationsLocales.length === 0 && (
                 <p className="rounded-2xl border border-dashed border-[#C9B98A] bg-[#FBF7EA] px-3 py-2.5 text-[11.5px] leading-relaxed text-[#8A9288]">
-                  Aucune collation pour l&apos;instant — cliquez sur « Ajouter une collation » pour créer la première. Ajoutez-en autant que la cantine en décide.
+                  Aucune collation pour l&apos;instant — cliquez sur « Ajouter une collation » pour créer la première. Ajoutez-en autant que la Tontine en décide.
                 </p>
               )}
               {collationsLocales.map((c) => (
@@ -5438,11 +5458,11 @@ function ParametresSection(p: {
         <Block
           title="Solidarité"
           icon={<HandHeart className="h-4 w-4" />}
-          note="Choisissez d'abord la MÉTHODE de solidarité qui arrange la cantine — les champs propres à la méthode choisie apparaissent ensuite. Chaque chiffre démarre à 0."
+          note="Choisissez d'abord la MÉTHODE de solidarité qui arrange la Tontine — les champs propres à la méthode choisie apparaissent ensuite. Chaque chiffre démarre à 0."
         >
           <div className="space-y-2 p-4">
             <div className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3">
-              <p className="text-[11.5px] font-bold text-[#2B3530]">Méthode de solidarité — plusieurs méthodes possibles, choisissez celle qui arrange la cantine</p>
+              <p className="text-[11.5px] font-bold text-[#2B3530]">Méthode de solidarité — plusieurs méthodes possibles, choisissez celle qui arrange la Tontine</p>
               <div role="radiogroup" aria-label="Méthode de solidarité" className="mt-2 space-y-1.5">
                 {METHODES_SOLIDARITE.map((m) => {
                   const actif = r.solidarite.methode === m.id;
@@ -5636,7 +5656,7 @@ function ParametresSection(p: {
 
             {/* — E. TYPE D'ÉPARGNE : le type choisi dévoile ses champs — */}
             <label className="block rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] px-3 py-2.5">
-              <span className="block text-[11.5px] font-bold text-[#2B3530]">Type d'épargne proposé par la cantine</span>
+              <span className="block text-[11.5px] font-bold text-[#2B3530]">Type d'épargne proposé par la Tontine</span>
               <span className="mt-0.5 block text-[10.5px] text-[#8A9288]">Choisissez dans la liste : le type d&apos;intérêt et les champs propres à ce type apparaissent ensuite.</span>
               <select
                 value={r.epargne.typeChoisi ?? ""}
@@ -5682,7 +5702,7 @@ function ParametresSection(p: {
         <Block
           title="Publier le règlement aux membres"
           icon={<Send className="h-4 w-4" />}
-          note={`Le règlement est en version ${r.version}. ${p.sale ? "Vos dernières modifications attendent la publication." : "Tout ce que vous avez réglé est déjà visible par les membres."} Une fois publié, le bloc « Règlement de la cantine » de la page Tontine affiche ces règles à tous — lecture seule.`}
+          note={`Le règlement est en version ${r.version}. ${p.sale ? "Vos dernières modifications attendent la publication." : "Tout ce que vous avez réglé est déjà visible par les membres."} Une fois publié, le bloc « Règlement de la Tontine » de la page Tontine affiche ces règles à tous — lecture seule.`}
         >
           <div className="flex flex-col gap-2 p-4 sm:flex-row">
             <Btn onClick={p.onPublier} tone="vert"><Send className="h-4 w-4" /> Publier la version {p.sale ? r.version + 1 : r.version} aux membres</Btn>
