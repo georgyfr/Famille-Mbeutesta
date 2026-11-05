@@ -411,7 +411,10 @@ const CONVOS_DEMO: ConvocationV2[] = [
       f04: { statut: "confirmee", confirmeeLe: "6 oct." },
       f05: { statut: "absence", reponduLe: "9 oct.", justificationTexte: "Déplacement professionnel à Bafoussam — je m'excuse et régulariserai ma cotisation." },
       f06: { statut: "confirmee", confirmeeLe: "6 oct." },
-      f07: { statut: "confirmee", confirmeeLe: "8 oct." },
+      /* f07 (Patrick, l'aperçu de l'Espace Membre) n'a PAS encore répondu :
+       * l'onglet Convocations du membre présente le vrai parcours —
+       * confirmer la réception ou notifier son absence (texte + vocal). */
+      f07: { statut: "envoyee" },
       f08: { statut: "confirmee", confirmeeLe: "6 oct." },
       f09: { statut: "confirmee", confirmeeLe: "7 oct." },
       f10: { statut: "confirmee", confirmeeLe: "6 oct." },

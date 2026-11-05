@@ -27,22 +27,26 @@ import { MainApp } from "./main-app";
 import { MaquettePresident } from "./maquette-president";
 import { MaquetteSecretaire } from "./maquette-secretaire";
 import { MaquetteCommissaire } from "./maquette-commissaire";
-import { Sparkles, Crown, PenLine, Landmark } from "lucide-react";
+import { EspaceMembre } from "./espace-membre";
+import { Sparkles, Crown, PenLine, Landmark, Users } from "lucide-react";
 
-type ConsoleKey = "president" | "secretaire" | "commissaire";
+type ConsoleKey = "president" | "secretaire" | "commissaire" | "membre";
 
 const CONSOLES: Record<ConsoleKey, string> = {
   president: "Poste de commandement du Président (codes d'invitation + espace membre)",
   secretaire: "Console du Secrétaire (20 onglets : mémoire, gestion, créer un membre)",
   commissaire: "Console du Commissaire aux comptes (caisses, journal, registres, rapports)",
+  membre: "Espace Membre (15 onglets : ma vie, la Tontine, ma voix, mon compte)",
 };
 
 // v21 — pastilles du bandeau : une par console, cliquable PARTOUT (maquette
-// comme application). Dans l'ordre d'affichage du bureau.
+// comme application). Dans l'ordre d'affichage du bureau. v26 : la 4ᵉ pastille
+// Membre ouvre l'ESPACE MEMBRE — l'espace des membres simples refait à neuf.
 const PILLES: Array<{ key: ConsoleKey; label: string; Icon: typeof Crown }> = [
   { key: "president", label: "Président", Icon: Crown },
   { key: "secretaire", label: "Secrétaire", Icon: PenLine },
   { key: "commissaire", label: "Commissaire", Icon: Landmark },
+  { key: "membre", label: "Membre", Icon: Users },
 ];
 
 function consoleFromHash(): ConsoleKey {
@@ -50,6 +54,7 @@ function consoleFromHash(): ConsoleKey {
     const h = (window.location.hash || "").toLowerCase();
     if (h.startsWith("#secretaire")) return "secretaire";
     if (h.startsWith("#commissaire")) return "commissaire";
+    if (h.startsWith("#membre")) return "membre";
   } catch { /* rien */ }
   return "president";
 }
@@ -60,7 +65,7 @@ function consoleFromHash(): ConsoleKey {
 function hashConsoleExplicite(): boolean {
   try {
     const h = (window.location.hash || "").toLowerCase();
-    return h.startsWith("#president") || h.startsWith("#secretaire") || h.startsWith("#commissaire");
+    return h.startsWith("#president") || h.startsWith("#secretaire") || h.startsWith("#commissaire") || h.startsWith("#membre");
   } catch {
     return false;
   }
@@ -118,12 +123,14 @@ export function MaquetteGate() {
         <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#C89F62]" />
         <p className="hidden min-w-0 truncate text-[11px] font-semibold sm:block">
           {mode === "maquette"
-            ? `Maquette v25 — ${CONSOLES[console_]}`
+            ? console_ === "membre"
+              ? `Espace Membre v26 — ${CONSOLES[console_]}`
+              : `Maquette v26 — ${CONSOLES[console_]}`
             : "Application actuelle — consultation"}
         </p>
         {/* v21 — sélecteur de consoles : VISIBLE EN PERMANENCE (maquette comme
             application). Un clic pose le hash et ouvre la console visée. */}
-        <nav aria-label="Consoles du bureau" className="flex min-w-0 items-center gap-1">
+        <nav aria-label="Consoles du bureau" className="fc-scroll flex min-w-0 items-center gap-1 overflow-x-auto">
           {PILLES.map(({ key, label, Icon }) => {
             const actif = mode === "maquette" && console_ === key;
             return (
@@ -156,7 +163,10 @@ export function MaquetteGate() {
         </button>
       </div>
       {mode === "maquette" ? (
-        console_ === "president" ? <MaquettePresident /> : console_ === "secretaire" ? <MaquetteSecretaire /> : <MaquetteCommissaire />
+        console_ === "president" ? <MaquettePresident />
+          : console_ === "secretaire" ? <MaquetteSecretaire />
+          : console_ === "membre" ? <EspaceMembre voirApp={() => setMode("app")} />
+          : <MaquetteCommissaire />
       ) : (
         <MainApp />
       )}

@@ -788,7 +788,7 @@ const PAGE_POSTE: Record<RoleKey, { hash: string | null; libelle: string }> = {
   commissaire: { hash: "commissaire", libelle: "Console du commissaire" },
   tresorier: { hash: "tontine", libelle: "Outils dans Finances" },
   censeur: { hash: "tontine", libelle: "Outils dans Finances" },
-  membre: { hash: null, libelle: "Vue membre" },
+  membre: { hash: "membre", libelle: "Espace Membre — ma vie de tontine" },
 };
 
 const ICONES_POSTE: Record<RoleKey, React.ReactNode> = {
@@ -896,7 +896,7 @@ function PosteBureauSwitcher() {
       saveVousRole(r);
       toast.success(`Poste activé : ${ROLE_META[r].label} 🎉`);
     }
-    if (!page.hash) return; // membre simple → rien à ouvrir, reste à l'accueil
+    if (!page.hash) return; // sécurité — chaque rôle a désormais sa page
     naviguerHash(page.hash);
   };
 
