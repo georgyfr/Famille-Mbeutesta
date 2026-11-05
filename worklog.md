@@ -1571,3 +1571,11 @@ Work Log:
 
 Stage Summary:
 - Production famille-mbeutetsa.pages.dev mise à jour v22 → v23 : création de membres par codes d'invitation (secrétaire + président), inscription par code avec page de rôle directe, espace membre de la secrétaire, registres réordonnés avec nombre de versements, « Tontine » partout.
+
+## Task 68 — DÉPLOIEMENT PRODUCTION v23 → v24 (2026-11-05)
+- 6ᵉ fourniture de tokens (environnement restauré) : Cloudflare cfut_…605de (vérifié « active », échéance 2027-10-27) + GitHub PAT (georgyfr). PIÈGE RECONNU : l'Account ID fourni (5ab8107e…) est INVALIDE pour ce token — le vrai compte, lu via GET /accounts avec le token, est « Famille mbeutetsa » ead74f172a86c9debb937c356976260f (l'ID 5ab8107e renvoie 9109/10000 Authentication error sur /pages/projects).
+- .env.cloudflare RECOURÉ (chmod 600, git check-ignore OK) + copie ~/.bashrc — le deploy : set -a source .env.cloudflare ; bunx wrangler@4 pages deploy .next-demo --project-name famille-mbeutetsa --branch main.
+- Build scripts/build-cloudflare.sh OK (stash API routes → build statique DEMO_BUILD=1 → restauration → _worker.js passerelle push).
+- DÉPLOIEMENT RÉUSSI : https://45bc6747.famille-mbeutetsa.pages.dev (292 fichiers, 18 uploadés) ; production famille-mbeutetsa.pages.dev 200, titre « Maquette v24 — Console du Secrétaire (20 onglets) ».
+- E2E PRODUCTION agent-browser : 4 SECTIONS présentes (Mémoire de la réunion 6 onglets violet rgba(110,75,113) · Gestion de la tontine 6 or rgba(138,100,32) · Membres & suivi 3 terracotta rgba(165,71,61) · Mon espace membre & outils 5 sarcelle rgba(61,107,114)) ; CRÉER UN MEMBRE vert plein rgb(31,91,63) blanc gras ; badge Notifications 6 → ouverture → CHIFFRE DISPARU ; Séances 4 → disparu ; réouverture Notifications → badge toujours absent (mémoire fc_onglets_vus_* préservée) ; mobile 390 px scrollWidth=390 (0 overflow) ; consoles Président/Commissaire intactes.
+- GITHUB : miroir georgyfr/Famille-Mbeutesta — ancienne histoire (miroir assaini Task 44 v3, c5caac3) archivée sur branche archive/mirror-task44-v3 ; scan secrets FULL history (66 commits, blobs + messages : cfut_/github_pat_/GLM/sk-) = PROPRE ; main local (v24) prête à être poussée.
