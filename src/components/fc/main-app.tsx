@@ -13,6 +13,7 @@ import { Dashboard, type SessionData } from "./dashboard";
 import { LocationWizard } from "./location-wizard";
 import { RoleWizard } from "./role-wizard";
 import { loadVousRole } from "./tontine-bureau";
+import { purgerAppUneFois } from "./purge-app";
 import { FcSpinner } from "./ui";
 
 /** Décision durable du browser gate (layout.tsx) — survit à l'hydratation React,
@@ -110,6 +111,12 @@ export function MainApp() {
     // WhatsApp/Opéra…), puis on simule les API — l'utilisateur ne doit JAMAIS
     // se réinscrire à chaque clic sur le lien.
     void (async () => {
+      // v27 — PURGE ONE-SHOT de l'application réelle : plus AUCUN utilisateur
+      // (ni manuel, ni créé par l'IA), plus aucune de leurs données (cotisations,
+      // prêts, géolocalisations). La maquette garde TOUS ses utilisateurs. Une
+      // seule fois : ensuite le premier utilisateur réel (secrétaire — code
+      // FCM-K7M2PV) s'inscrit sur une base vide qui ne se vide plus jamais.
+      purgerAppUneFois();
       if (process.env.NEXT_PUBLIC_DEMO_MODE === "1") {
         try {
           await installStorageMirror();

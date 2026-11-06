@@ -130,10 +130,13 @@ function appliquerCodeInvitation(codeAtt: string | null, fullName: string, uid: 
   });
 }
 
-/* Champ « J'ai un code d'invitation » — replié par défaut, ouvert d'un clic.
+/* Champ « J'ai un code d'invitation » — v27 : PORTE D'ENTRÉE du parcours
+ * (1ʳᵉ ouverture de l'app = insertion du code → puis le nom → puis la
+ * détection de position → l'accueil). OUVERT par défaut ; repliable d'un clic
+ * (« Je n'ai pas de code ») pour le parcours sans invitation.
  * onCodeValide permet à l'écran hôte de PRÉREMPLIR le numéro de téléphone. */
 function ChampCodeInvitation({ onCodeValide }: { onCodeValide?: (c: CodeMembre) => void }) {
-  const [ouvert, setOuvert] = useState(false);
+  const [ouvert, setOuvert] = useState(true);
   const [saisie, setSaisie] = useState("");
   const [valide, setValide] = useState<CodeMembre | null>(null);
 
@@ -169,12 +172,21 @@ function ChampCodeInvitation({ onCodeValide }: { onCodeValide?: (c: CodeMembre) 
   }
 
   return (
-    <div className="mt-3 rounded-xl border border-[#C9B98A] bg-[#FBF7EA] p-3">
-      <p className="flex items-center gap-1.5 text-[12px] font-bold text-[#2B3530]">
-        <Ticket className="h-4 w-4 text-[#C89F62]" /> Votre code d&apos;invitation
-      </p>
+    <div className="mt-3 rounded-xl border border-[#C89F62]/60 bg-[#FBF7EA] p-3 ring-1 ring-[#C89F62]/25">
+      <div className="flex items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 text-[12px] font-bold text-[#2B3530]">
+          <Ticket className="h-4 w-4 text-[#C89F62]" /> Votre code d&apos;invitation
+        </p>
+        <button
+          type="button"
+          onClick={() => setOuvert(false)}
+          className="shrink-0 text-[11px] font-semibold text-[#8A9288] underline hover:text-[#5C6B60]"
+        >
+          Je n&apos;ai pas de code
+        </button>
+      </div>
       <p className="mt-0.5 text-[11px] leading-snug text-[#8A9288]">
-        Généré par la secrétaire ou le président — format FCM-XXXXXX. Il ne périme jamais.
+        Première étape : collez le code reçu du bureau (secrétaire ou président) — format FCM-XXXXXX. Il ne périme jamais.
       </p>
       <div className="mt-2 flex items-stretch gap-2">
         <input
@@ -186,7 +198,7 @@ function ChampCodeInvitation({ onCodeValide }: { onCodeValide?: (c: CodeMembre) 
           autoCapitalize="characters"
           className="min-w-0 flex-1 rounded-lg border border-[#C9B98A] bg-white px-3 py-2.5 font-mono text-[14px] font-black tracking-wider text-[#2B3530] outline-none placeholder:font-semibold placeholder:tracking-normal placeholder:text-[#8A9288] focus:border-[#C89F62]"
         />
-        <FcButton onClick={verifier} disabled={!saisie.trim()} className="h-auto min-h-[44px] shrink-0 px-3 text-[12px]">
+        <FcButton onClick={verifier} disabled={!saisie.trim()} className="h-auto min-h-[44px] w-auto shrink-0 px-3 text-[12px]">
           Utiliser
         </FcButton>
       </div>

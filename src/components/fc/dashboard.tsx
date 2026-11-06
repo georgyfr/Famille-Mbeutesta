@@ -8,19 +8,18 @@ import { PhoneCountrySelect, usePhoneCountry } from "./phone-country-select";
 import { FcButton, FcCard, PriorityBadge } from "./ui";
 import { roleLabel } from "./auth-flow";
 import {
-  Bell, BellOff, CalendarDays, Check, CheckCheck, Coins, Copy, Crown, Download, Eye, Fingerprint, HeartHandshake, Home,
+  Bell, BellOff, CalendarDays, Check, CheckCheck, Coins, Copy, Crown, Eye, Fingerprint, HeartHandshake, Home,
   KeyRound, Landmark, LifeBuoy, LocateFixed, LogOut, MapPinned, Megaphone, Navigation, PenLine, PiggyBank, RefreshCw,
-  ScrollText, Send, ShieldCheck, Smartphone, Trash2, User, UserPlus, Users, Vote, X,
+  ScrollText, Send, ShieldCheck, Smartphone, Trash2, User, UserPlus, Users, Vote,
 } from "lucide-react";
 import { FamilyTab } from "./family-tab";
 import { LocationWizard } from "./location-wizard";
 import { TontinePage } from "./tontine-page";
 import { loadVousRole, saveVousRole } from "./tontine-bureau";
 import { ROLE_META, ROLES_BUREAU, type RoleKey } from "./tontine-data";
-import { loadNotifs, saveNotifs, type NotifBureau } from "./secretaire-bureau";
 import { formatPlace, type LocationDraft } from "@/lib/fc-geo";
 import {
-  enablePush, hasDeferredInstallPrompt, promptInstall, pushState as getPushState, startInAppNotificationPolling, testPush,
+  enablePush, pushState as getPushState, startInAppNotificationPolling, testPush,
   type PushState, familyNotify,
 } from "@/lib/fc-push";
 
@@ -177,10 +176,8 @@ export function Dashboard({
         />
       ) : (
         <>
-          {/* Rappel d'installation — hors app installée, le navigateur affiche
-              l'adresse du site en haut : l'installation (gratuite) la masque et
-              donne une vraie sensation d'application, comme WhatsApp. */}
-          <InstallBanner />
+          {/* v27 — « Installer l'application / naviguer sans URL » SUPPRIMÉ :
+              l'application est déjà installée sur le téléphone. */}
           {tab === "home" && <HomeTab session={session} goFamille={() => setTab("famille")} openLocation={() => setEditLocation(true)} />}
           {tab === "famille" && <FamilyTab onEditLocation={() => setEditLocation(true)} />}
           {tab === "notif" && <NotifTab session={session} />}
@@ -334,14 +331,13 @@ function HomeTab({
         </p>
       </div>
 
-      {/* Mon poste au bureau — switcher (v20) : le membre bascule vers son poste,
-          la page du bureau correspondante s'ouvre immédiatement. */}
+      {/* Mon poste au bureau — carte UNIQUE du poste enregistré (v27) : le
+          membre du bureau ne voit que SON titre (ex. trésorier → Trésorier),
+          un clic ouvre immédiatement sa page. */}
       <PosteBureauSwitcher />
 
-      {/* Notifications du bureau (v22) : le moteur du secrétariat notifie le
-          membre SUR SA PAGE — avertissements d'absences, amendes automatiques,
-          rachats, visas de la secrétaire, convocations à confirmer. */}
-      <NotificationsBureau vousName={session.user.fullName} />
+      {/* v27 — « Notifications du bureau » SUPPRIMÉE de l'accueil : le journal
+          du membre vit dans son Espace Membre (#membre → notifications). */}
 
       {/* Annonce du conseil — uniquement si une vraie annonce existe */}
       {stats?.announcement && (
@@ -539,7 +535,6 @@ function PushCard() {
     (/iPhone|iPad|iPod/.test(navigator.userAgent) ||
       (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1))
   );
-
   useEffect(() => {
     const t = setTimeout(async () => setState(await getPushState()), 0);
     return () => clearTimeout(t);
@@ -607,178 +602,13 @@ function PushCard() {
   );
 }
 
-/* Bannière d'installation — « on voit encore l'URL du site en haut » : tant
-   que l'app n'est pas installée, le navigateur (ou le lien WhatsApp) affiche
-   sa barre d'adresse. Cette bannière propose l'installation en un touche
-   (invite native beforeinstallprompt) ou la marche à suivre ; une fois en
-   mode standalone (app installée / APK), elle disparaît d'elle-même — et
-   l'URL n'existe plus à l'écran. Discret : rabattable pour 14 jours. */
-function InstallBanner() {
-  const [visible, setVisible] = useState(false);
-  const [available, setAvailable] = useState(false);
-  const [estIOS, setEstIOS] = useState(false);
-
-  useEffect(() => {
-    const t = setTimeout(() => {
-      try {
-        // Déjà en app installée (PWA standalone / APK TWA) → pas de bannière.
-        const standalone =
-          window.matchMedia?.("(display-mode: standalone)")?.matches ||
-          (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
-        if (standalone) return;
-        const raw = localStorage.getItem("fc_install_banner_v1");
-        const until = raw ? Number(raw) : 0;
-        if (until > Date.now()) return;
-        setEstIOS(/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
-        setAvailable(hasDeferredInstallPrompt());
-        setVisible(true);
-      } catch {
-        /* rien */
-      }
-    }, 1200);
-    const onBip = () => setAvailable(true);
-    window.addEventListener("beforeinstallprompt", onBip);
-    return () => {
-      clearTimeout(t);
-      window.removeEventListener("beforeinstallprompt", onBip);
-    };
-  }, []);
-
-  if (!visible) return null;
-
-  const rabattre = () => {
-    setVisible(false);
-    try {
-      localStorage.setItem("fc_install_banner_v1", String(Date.now() + 14 * 86_400_000));
-    } catch {
-      /* rien */
-    }
-  };
-
-  return (
-    <div
-      role="region"
-      aria-label="Installer l'application sur votre téléphone"
-      className="relative mb-3 overflow-hidden rounded-2xl border border-[#C89F62]/50 bg-gradient-to-br from-[#1E4D2B] to-[#2F6B45] p-4 text-white shadow-lg"
-    >
-      <button
-        onClick={rabattre}
-        aria-label="Rabattre ce rappel"
-        className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-white/15 transition hover:bg-white/30"
-      >
-        <X className="h-3.5 w-3.5" />
-      </button>
-      <div className="flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#C89F62] text-[#2B2416]">
-          <Smartphone className="h-5 w-5" />
-        </span>
-        <div className="min-w-0 flex-1 pr-7">
-          <p className="fc-serif text-[15px] font-bold leading-tight">Installez l&apos;application — naviguez sans l&apos;URL</p>
-          <p className="mt-1 text-[12px] leading-relaxed text-white/85">
-            {estIOS
-              ? "Sur iPhone : Partager ⎋ → « Sur l'écran d'accueil ». L'adresse du site disparaît, comme une vraie app."
-              : available
-                ? "Un touche suffit : l'icône verte s'ajoute à votre écran d'accueil et la barre d'adresse disparaît."
-                : "Installez l'app Android (APK) ou ajoutez-la à l'écran d'accueil : la barre d'adresse disparaît, comme WhatsApp."}
-          </p>
-          <div className="mt-2.5 flex flex-wrap gap-2">
-            {available && !estIOS && (
-              <button
-                onClick={async () => {
-                  const res = await promptInstall();
-                  if (res === "accepted") {
-                    setVisible(false);
-                    toast.success("Famille.Mbeutetsa installée — ouvrez-la depuis l'icône verte 📱");
-                  }
-                }}
-                className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl bg-[#C89F62] px-3.5 text-[12.5px] font-bold text-[#2B2416] transition hover:bg-[#b98f50]"
-              >
-                <Download className="h-4 w-4" /> Installer maintenant
-              </button>
-            )}
-            {!estIOS && (
-              <a
-                href="/famille-mbeutetsa-1.1.0.apk"
-                download
-                className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border border-white/30 bg-white/10 px-3.5 text-[12.5px] font-bold text-white transition hover:bg-white/20"
-              >
-                <Download className="h-4 w-4" /> Application Android (APK)
-              </a>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* Carte installation PWA — dans Ma sécurité */
-
-function InstallCard({ isIOS }: { isIOS: boolean }) {
-  const [available, setAvailable] = useState(false);
-
-  useEffect(() => {
-    const t = setTimeout(() => setAvailable(hasDeferredInstallPrompt()), 0);
-    return () => clearTimeout(t);
-  }, []);
-
-  if (isIOS) {
-    return (
-      <FcCard className="p-5">
-        <h3 className="fc-serif mb-2 text-lg font-bold text-[#1E4D2B]">Installer l'application</h3>
-        <p className="text-[13px] leading-relaxed text-[#5C6B60]">
-          Sur iPhone : touchez <strong>Partager</strong> ⎋ en bas de Safari, puis
-          <strong> « Sur l'écran d'accueil »</strong>. L'icône verte de la famille apparaîtra comme une vraie app.
-        </p>
-      </FcCard>
-    );
-  }
-  return (
-    <FcCard className="p-5">
-      <h3 className="fc-serif mb-2 text-lg font-bold text-[#1E4D2B]">Installer l'application</h3>
-      {available ? (
-        <>
-          <p className="mb-3 text-[13px] text-[#5C6B60]">
-            Ajoutez l'icône verte à votre écran d'accueil — ouverture immédiate, comme WhatsApp.
-          </p>
-          <FcButton
-            onClick={async () => {
-              const res = await promptInstall();
-              if (res === "accepted") toast.success("Famille.Mbeutetsa ajoutée à votre téléphone 📱");
-            }}
-          >
-            Installer sur mon téléphone
-          </FcButton>
-        </>
-      ) : (
-        <p className="text-[13px] leading-relaxed text-[#8A9288]">
-          Ou téléchargez l'application Android :{' '}
-          <a
-            href="/famille-mbeutetsa.apk"
-            className="font-semibold text-[#2A4A3A] underline"
-            target="_blank"
-            rel="noreferrer"
-          >
-            famille-mbeutetsa.apk
-          </a>
-        </p>
-      )}
-    </FcCard>
-  );
-}
-
-/* ─── « Mon poste au bureau » — switcher de poste (v20) ─────────────────────
-   Demande (2026-11-05) : sur le tableau de bord, un membre doit pouvoir
-   basculer vers un poste du bureau. Le poste est enregistré dans la MÊME
-   source que la carte « Mon rôle dans la Tontine » (fc_tontine_role_v1) et
-   la page du poste s'ouvre immédiatement :
-   · président / secrétaire / commissaire aux comptes → leur console dédiée
-     (#president, #secretaire, #commissaire — la porte maquette bascule toute
-     seule vers la maquette) ;
-   · vice-président / trésorier / censeur → la page Finances (tontine) qui
-     porte déjà leurs outils — une console dédiée suivra si le besoin se
-     présente ;
-   · membre simple → reste sur l'accueil (aucune page du bureau).
+/* ─── « Mon poste au bureau » — CARTE UNIQUE du poste enregistré (v27) ──────
+   Demande de l'administrateur : « si enregistré comme membre du bureau, on ne
+   voit que SON PROPRE TITRE (ex. trésorier → uniquement la carte Trésorier),
+   un clic = accès immédiat à sa page de trésorier. » Le poste vient du CODE
+   d'invitation remis par le bureau (fc_tontine_role_v1) — il n'est plus
+   auto-attribuable depuis l'accueil. Un membre simple voit sa carte unique :
+   l'Espace Membre (sa page, 15 onglets).
    ──────────────────────────────────────────────────────────────────────── */
 
 const PAGE_POSTE: Record<RoleKey, { hash: string | null; libelle: string }> = {
@@ -816,71 +646,6 @@ function naviguerHash(cible: string): void {
   }
 }
 
-/* ─── Notifications du bureau (v22) — la page DU MEMBRE reçoit ce que le
-       secrétariat lui notifie : avertissements d'absences, amendes
-       automatiques, rachats, visas, convocations à confirmer. Lecture seule :
-       c'est le journal du membre ; « tout marquer lu » est le seul geste. ─── */
-function NotificationsBureau({ vousName }: { vousName: string }) {
-  const [notifs, setNotifs] = useState<NotifBureau[]>([]);
-  useEffect(() => {
-    const t0 = setTimeout(() => setNotifs(loadNotifs()), 0);
-    return () => clearTimeout(t0);
-  }, []);
-  const pourMembre = notifs.filter((n) => n.destinataire !== "president");
-  if (pourMembre.length === 0) return null;
-  const nonLues = pourMembre.filter((n) => !n.lu).length;
-  const marquerToutLu = () => {
-    saveNotifs(loadNotifs().map((n) => ({ ...n, lu: true })));
-    setNotifs(loadNotifs());
-    toast.success("Notifications marquées comme lues");
-  };
-  return (
-    <FcCard className="p-4">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="relative">
-            <Bell className="h-4 w-4 text-[#C89F62]" />
-            {nonLues > 0 && <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#A5473D] px-1 text-[9px] font-black text-white">{nonLues}</span>}
-          </span>
-          <p className="text-[11px] font-bold uppercase tracking-wide text-[#8A9288]">Notifications du bureau</p>
-        </div>
-        {nonLues > 0 && (
-          <button type="button" onClick={marquerToutLu} className="rounded-full border border-[#C7A9CA] bg-white px-2.5 py-1 text-[10.5px] font-bold text-[#5A3E5D] hover:border-[#C89F62]">
-            Tout marquer lu
-          </button>
-        )}
-      </div>
-      <div className="space-y-2">
-        {pourMembre.slice(0, 4).map((n) => {
-          const estVous = n.destinataireNom.toLowerCase() === vousName.toLowerCase();
-          return (
-            <div key={n.id} className={`rounded-xl border px-3 py-2 ${n.lu ? "border-[#E5DCC0] bg-[#FBF7EA] opacity-80" : "border-[#C89F62]/45 bg-[#FFF8EC]"}`}>
-              <div className="flex flex-wrap items-center justify-between gap-1.5">
-                <p className="text-[12.5px] font-bold text-[#2B3530]">{n.titre}</p>
-                <span className="flex items-center gap-1">
-                  {estVous && (
-                    <span className="rounded-full bg-[#C89F62] px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wide text-[#2B2416]">Vous</span>
-                  )}
-                  {!estVous && n.destinataire !== "tous" && (
-                    <span className="rounded-full border border-[#E5DCC0] bg-white px-2 py-0.5 text-[9.5px] font-bold text-[#8A9288]">{n.destinataireNom}</span>
-                  )}
-                </span>
-              </div>
-              <p className="mt-0.5 text-[11.5px] leading-snug text-[#5C6B60]">{n.message}</p>
-              <p className="mt-0.5 text-[9.5px] font-bold uppercase tracking-wide text-[#8A9288]">{n.le} · secrétariat de la famille</p>
-            </div>
-          );
-        })}
-      </div>
-      {pourMembre.length > 4 && (
-        <p className="mt-2 px-1 text-[10.5px] font-semibold text-[#8A9288]">
-          + {pourMembre.length - 4} autre(s) notification(s) — journal complet : bandeau → console Secrétaire → onglet Notifications.
-        </p>
-      )}
-    </FcCard>
-  );
-}
-
 function PosteBureauSwitcher() {
   const [role, setRole] = useState<RoleKey | null>(null);
 
@@ -889,18 +654,10 @@ function PosteBureauSwitcher() {
     return () => clearTimeout(t);
   }, []);
 
-  const basculer = (r: RoleKey) => {
-    const page = PAGE_POSTE[r];
-    if (r !== role) {
-      setRole(r);
-      saveVousRole(r);
-      toast.success(`Poste activé : ${ROLE_META[r].label} 🎉`);
-    }
-    if (!page.hash) return; // sécurité — chaque rôle a désormais sa page
-    naviguerHash(page.hash);
-  };
-
-  const ordre: RoleKey[] = [...ROLES_BUREAU, "membre"];
+  const r = role ?? "membre";
+  const meta = ROLE_META[r];
+  const page = PAGE_POSTE[r];
+  const auBureau = r !== "membre";
 
   return (
     <FcCard className="p-5">
@@ -909,45 +666,31 @@ function PosteBureauSwitcher() {
         <h3 className="fc-serif text-lg font-bold text-[#1E4D2B]">Mon poste au bureau</h3>
       </div>
       <p className="mb-3 text-[12.5px] leading-relaxed text-[#5C6B60]">
-        Basculez vers un poste : votre rôle est enregistré et la page du poste s&apos;ouvre
-        immédiatement — console dédiée pour le président, la secrétaire et le commissaire aux comptes.
+        {auBureau
+          ? "Votre poste, attribué par le bureau via votre code d'invitation : un clic ouvre immédiatement votre page."
+          : "Vous n'êtes pas membre du bureau — votre espace, c'est votre page Membre (cotisations, convocations, solidarité…)."}
       </p>
-      <div className="grid grid-cols-2 gap-2.5">
-        {ordre.map((r) => {
-          const meta = ROLE_META[r];
-          const actif = role === r;
-          return (
-            <button
-              key={r}
-              type="button"
-              onClick={() => basculer(r)}
-              aria-pressed={actif}
-              className={`flex min-h-[56px] items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-all active:scale-[0.98] ${
-                actif
-                  ? "border-[#C89F62] bg-[#FFF7E6] shadow-sm"
-                  : "border-[#E5DCC0] bg-[#FFFDF6] hover:border-[#C89F62]/60 hover:bg-[#FBF7EA]"
-              } ${r === "membre" ? "col-span-2" : ""}`}
-            >
-              <span
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
-                style={{ background: `${meta.accent}1A` }}
-                aria-hidden="true"
-              >
-                <span style={{ color: meta.accent }}>{ICONES_POSTE[r]}</span>
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[13.5px] font-bold leading-tight text-[#2B3530]">{meta.label}</span>
-                <span className="mt-0.5 block text-[11px] leading-tight text-[#8A9288]">{PAGE_POSTE[r].libelle}</span>
-              </span>
-              {actif && (
-                <span className="shrink-0 rounded-full bg-[#C89F62] px-2 py-0.5 text-[10px] font-bold text-[#2B2416]">
-                  Actuel
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+      <button
+        type="button"
+        onClick={() => page.hash && naviguerHash(page.hash)}
+        className="flex w-full items-center gap-3 rounded-xl border border-[#C89F62] bg-[#FFF7E6] px-4 py-3 text-left shadow-sm transition-all hover:shadow-md active:scale-[0.98]"
+        aria-label={`Ouvrir ${page.libelle}`}
+      >
+        <span
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+          style={{ background: `${meta.accent}1A` }}
+          aria-hidden="true"
+        >
+          <span style={{ color: meta.accent }}>{ICONES_POSTE[r]}</span>
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[14.5px] font-bold leading-tight text-[#2B3530]">{meta.label}</span>
+          <span className="mt-0.5 block text-[11.5px] leading-tight text-[#8A9288]">{page.libelle}</span>
+        </span>
+        <span className="shrink-0 rounded-full bg-[#C89F62] px-2.5 py-1 text-[10.5px] font-bold text-[#2B2416]">
+          Ouvrir
+        </span>
+      </button>
     </FcCard>
   );
 }
@@ -1043,16 +786,9 @@ function SecurityTab({ session, onLoggedOut }: { session: SessionData; onLoggedO
     }
   };
 
-  const [isIOS] = useState(() =>
-    typeof navigator !== "undefined" &&
-    (/iPhone|iPad|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1))
-  );
-
   return (
     <div className="space-y-4">
       <PushCard />
-      <InstallCard isIOS={isIOS} />
       <RoleTontineCard />
       <FcCard className="p-5">
         <div className="mb-3 flex items-center gap-2">

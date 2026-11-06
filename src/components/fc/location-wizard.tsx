@@ -23,6 +23,8 @@ import {
   CM_CITIES, CM_REGIONS, COMMON_COUNTRIES, EMPTY_DRAFT, detectLocation, forwardGeocode, osmViewUrl,
   type LocationDraft,
 } from "@/lib/fc-geo";
+import { memeVille, villeConnue } from "./villes";
+import { maVille, setMaVille } from "./tontine-ville";
 import { FcButton, FcCard, FcSpinner } from "./ui";
 import {
   AlertTriangle, Building2, Check, Compass, Globe2, Landmark, LocateFixed,
@@ -79,6 +81,11 @@ export function LocationWizard({
     setStep("detecting");
     try {
       const outcome = await detectLocation();
+      // v27 — DÉTECTION AUTOMATIQUE DE LA VILLE : si le GPS n'a pas trouvé la
+      // ville mais que le compte en a déjà UNE (posée par le code d'invitation
+      // du bureau), on la propose — la détection reste modifiable.
+      const mv = maVille();
+      if (!outcome.draft.city.trim() && mv) outcome.draft.city = mv;
       setDraft(outcome.draft);
       setMethod(outcome.method);
       detectedAddrRef.current = JSON.stringify([
@@ -108,6 +115,25 @@ export function LocationWizard({
   const save = async () => {
     setStep("saving");
     try {
+      // v27 — VÉRIFICATION DE LA VILLE DE TONTINE : si la ville détectée (et
+      // confirmée par la personne) est une ville connue de la Tontine :
+      //   · compte SANS ville → la ville détectée devient sa tontine (detection
+      //     automatique de la ville — la page Finances la groupera) ;
+      //   · compte AVEC une ville → elle est CONFIRMÉE à l'écran (jamais
+      //     écrasée : la ville de tontine est attribuée par le bureau).
+      if (villeConnue(draft.city)) {
+        const mv = maVille();
+        if (!mv) {
+          setMaVille(draft.city);
+          toast.success(`Votre tontine : celle de ${draft.city} 🏙️`, {
+            description: "Ville reconnue de la Tontine — vos cotisations, épargnes et prêts s'additionnent entre membres de votre ville.",
+          });
+        } else if (memeVille(draft.city, mv)) {
+          toast.success(`Tontine de ${mv} confirmée ✓`, {
+            description: "La ville détectée correspond à votre ville de tontine.",
+          });
+        }
+      }
       const res = await api("/api/me/location", { body: { ...draft, source: method ?? "manual" } });
       if (!res.ok) throw new Error(res.error);
       toast.success("Votre localisation est enregistrée 🌍", {
@@ -209,6 +235,10 @@ export function LocationWizard({
                 <Field label="Quartier" icon={<MapPin className="h-4 w-4" />} value={draft.quartier} onChange={(v) => set({ quartier: v })} placeholder="ex : Akwa, Bonapriso…" />
               </div>
 
+              {/* v27 — VILLE DE TONTINE : la détection est vérifiée contre les
+                  villes de la Tontine (une ville = une tontine, page Finances). */}
+              <EncartVilleTontine city={draft.city} />
+
               {/* Position GPS */}
               <div className="mt-4 rounded-2xl border border-[#E5DCC0] bg-[#FFFDF6] p-3.5">
                 <div className="flex items-center justify-between gap-3">
@@ -282,6 +312,53 @@ function ExplainRow({ icon, text }: { icon: React.ReactNode; text: string }) {
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#2A4A3A]/8 text-[#2A4A3A]">{icon}</span>
       <span className="pt-1.5 text-[13.5px] leading-snug text-[#2B3530]">{text}</span>
     </li>
+  );
+}
+
+/* v27 — Encart « ville de tontine » : confronte la ville détectée aux villes
+   connues de la Tontine (une ville = une tontine sur la page Finances).
+   · ville reconnue & conforme (ou compte sans ville : elle deviendra sa tontine)
+   · ville reconnue mais différente de celle du bureau (la tontine ne bouge pas)
+   · ville hors Tontine (aucun groupe) */
+function EncartVilleTontine({ city }: { city: string }) {
+  const propre = city.trim();
+  if (!propre) return null;
+  const mv = maVille();
+  const connue = villeConnue(propre);
+  const conforme = mv && memeVille(propre, mv);
+  const sansVille = !mv;
+
+  if (connue && (conforme || sansVille)) {
+    return (
+      <div className="mt-3 flex items-start gap-2 rounded-xl border border-[#2F6B45]/35 bg-[#2F6B45]/10 p-3 text-[12.5px] leading-relaxed text-[#2F6B45]">
+        <Building2 className="mt-0.5 h-4 w-4 shrink-0" />
+        <p>
+          <strong>Tontine de {propre} ✓</strong> — ville reconnue de la Tontine.
+          {sansVille
+            ? " À l'enregistrement, elle devient votre ville de tontine : vos cotisations, épargnes et prêts s'additionnent entre membres de votre ville."
+            : " C'est votre ville de tontine — vos cotisations, épargnes et prêts s'additionnent entre membres de votre ville."}
+        </p>
+      </div>
+    );
+  }
+  if (connue && !conforme) {
+    return (
+      <div className="mt-3 flex items-start gap-2 rounded-xl border border-[#C89F62]/45 bg-[#FFF8EC] p-3 text-[12.5px] leading-relaxed text-[#8A6420]">
+        <Building2 className="mt-0.5 h-4 w-4 shrink-0" />
+        <p>
+          Vous habitez <strong>{propre}</strong> — votre tontine reste celle de <strong>{mv}</strong> :
+          c&apos;est le bureau qui attribue la ville de tontine (via votre code d&apos;invitation).
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-3 flex items-start gap-2 rounded-xl border border-[#E5DCC0] bg-[#FBF7EA] p-3 text-[12px] leading-relaxed text-[#8A9288]">
+      <Building2 className="mt-0.5 h-4 w-4 shrink-0" />
+      <p>
+        {propre} n&apos;est pas (encore) une ville de la Tontine — {mv ? <>votre tontine reste celle de <strong>{mv}</strong>.</> : "le bureau peut l'ajouter depuis la création d'un membre (choix de la région, puis de la ville)."}
+      </p>
+    </div>
   );
 }
 

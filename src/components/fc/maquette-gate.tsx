@@ -1,25 +1,22 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BASCULE MAQUETTE ⇄ APPLICATION — Famille.Mbeutetsa (v22)
+// BASCULE MAQUETTE ⇄ APPLICATION — Famille.Mbeutetsa (v27)
 //
-// Trois consoles de gestion sont présentées en vue de validation, routées par
-// le hash de l'URL :
+// v27 — DEMANDE DE L'ADMINISTRATEUR : « au niveau de l'application mobile,
+// que l'on ne voie PAS la maquette : qu'on voie l'APPLICATION TELLE QUELLE. »
+//   · À l'ouverture, c'est l'APPLICATION qui s'affiche (MainApp) — plus la
+//     maquette par défaut ;
+//   · en mode app, le bandeau est réduit à une fine barre discrète (marque
+//     + accès « Bureau » pour l'administrateur) : l'app est vue TELLE QUELLE ;
+//   · les consoles du bureau restent accessibles : pastille « Bureau », ou
+//     hash explicite (#president/#secretaire/#commissaire/#membre) posé par
+//     le switcher « Mon poste au bureau » — la vue bascule alors d'elle-même.
+// Trois consoles de gestion restent présentées en vue de validation, routées
+// par le hash de l'URL :
 //   · #president/…    → Poste de commandement du Président
-//   · #secretaire/…   → Console du Secrétaire (v22 : 16 onglets, moteur
-//                       d'amendes, convocations à réponse, export Excel)
-//   · #commissaire/…  → Console du Commissaire aux comptes (v19)
-// v20 : le switcher « Mon poste au bureau » du tableau de bord (application)
-// pointe vers ces hashes — quand le hash cible explicitement une console, la
-// vue bascule AUTOMATIQUEMENT de l'application vers la maquette.
-// v21 : le bandeau porte désormais un SÉLECTEUR DE CONSOLES (Président ·
-// Secrétaire · Commissaire) VISIBLE EN PERMANENCE, en maquette comme en
-// application — un clic sur une pastille pose le hash et ouvre la console,
-// sans passer par l'URL ni par le tableau de bord. Fini les consoles
-// introuvables : chaque poste est à un clic du bandeau vert.
-// L'administrateur compare la maquette à l'application actuelle ; après son
-// accord, la maquette disparaîtra et ses outils rejoindront les pages des
-// acteurs dans le projet Cloudflare.
+//   · #secretaire/…   → Console du Secrétaire (20 onglets)
+//   · #commissaire/…  → Console du Commissaire aux comptes
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useState } from "react";
@@ -77,8 +74,12 @@ export function MaquetteGate() {
   const [legacy] = useState(
     () => typeof document !== "undefined" && /fc-legacy/.test(document.documentElement.className),
   );
-  const [mode, setMode] = useState<"maquette" | "app">("maquette");
-  const [console_, setConsole_] = useState<ConsoleKey>(() => "president");
+  // v27 — L'APPLICATION TELLE QUELLE à l'ouverture : le mode initial est « app »
+  // SAUF si l'URL vise déjà une console (#president/…, #secretaire/…).
+  const [mode, setMode] = useState<"maquette" | "app">(() =>
+    (typeof window !== "undefined" && hashConsoleExplicite()) ? "maquette" : "app",
+  );
+  const [console_, setConsole_] = useState<ConsoleKey>(() => consoleFromHash());
 
   // v21 — pastille de console : ouvre IMMÉDIATEMENT la console visée (état
   // posé à la main) et pose le hash via history.pushState — le pattern du
@@ -117,16 +118,38 @@ export function MaquetteGate() {
 
   if (legacy) return <MainApp />;
 
+  // v27 — MODE APP : l'application TELLE QUELLE, avec une fine barre discrète
+  // (marque + accès « Bureau » réservé à l'administrateur). Aucune maquette
+  // visible, aucun sélecteur de consoles : le membre est DANS l'application.
+  if (mode === "app") {
+    return (
+      <div className="flex flex-1 flex-col">
+        <div className="sticky top-0 z-30 flex items-center gap-2 bg-[#2A4A3A] px-3 py-1.5 text-white">
+          <Sparkles className="h-3 w-3 shrink-0 text-[#C89F62]" />
+          <p className="min-w-0 truncate text-[11px] font-semibold">Famille.Mbeutetsa</p>
+          <button
+            type="button"
+            onClick={() => setMode("maquette")}
+            title="Consoles du bureau — vue de validation (administrateur)"
+            className="ml-auto shrink-0 rounded-full border border-white/25 bg-white/5 px-2.5 py-0.5 text-[10px] font-bold text-white/75 transition-all hover:border-white/50 hover:text-white active:scale-95"
+          >
+            Bureau ›
+            <span className="sr-only">Ouvrir les consoles du bureau (vue de validation)</span>
+          </button>
+        </div>
+        <MainApp />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-1 flex-col">
       <div className="sticky top-0 z-30 flex items-center gap-1 bg-[#2A4A3A] px-1.5 py-1.5 text-white sm:gap-2 sm:px-3">
         <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#C89F62]" />
         <p className="hidden min-w-0 truncate text-[11px] font-semibold sm:block">
-          {mode === "maquette"
-            ? console_ === "membre"
-              ? `Espace Membre v26 — ${CONSOLES[console_]}`
-              : `Maquette v26 — ${CONSOLES[console_]}`
-            : "Application actuelle — consultation"}
+          {console_ === "membre"
+            ? `Espace Membre v27 — ${CONSOLES[console_]}`
+            : `Maquette v27 — ${CONSOLES[console_]}`}
         </p>
         {/* v21 — sélecteur de consoles : VISIBLE EN PERMANENCE (maquette comme
             application). Un clic pose le hash et ouvre la console visée. */}
@@ -154,12 +177,12 @@ export function MaquetteGate() {
         </nav>
         <button
           type="button"
-          onClick={() => setMode((m) => (m === "maquette" ? "app" : "maquette"))}
+          onClick={() => setMode("app")}
           className="ml-auto shrink-0 rounded-full bg-[#C89F62] px-2.5 py-1 text-[11px] font-bold text-[#2B2416] transition-all hover:bg-[#b98f50] active:scale-95 sm:px-3"
         >
-          <span className="hidden sm:inline">{mode === "maquette" ? "Voir l’app actuelle" : "Voir la maquette"}</span>
-          <span className="sm:hidden">{mode === "maquette" ? "App" : "Maquette"}</span>
-          <span className="sr-only">{mode === "maquette" ? "Voir l’application actuelle" : "Voir la maquette"}</span>
+          <span className="hidden sm:inline">Voir l’app</span>
+          <span className="sm:hidden">App</span>
+          <span className="sr-only">Revenir à l’application</span>
         </button>
       </div>
       {mode === "maquette" ? (

@@ -117,11 +117,12 @@ function remapListe<T extends ItemMembreId>(cle: string, de: string, vers: strin
   }
 }
 
-/** Écrit la VILLE du code sur le compte réel (annuaire démo fc_demo_db_v3) et
+/** Écrit la VILLE du code sur le compte réel (base de l'app fc_demo_db_v2) et
  *  sur le cache « ma ville » — la page Finances groupe les tontines par ville. */
 function ecrireVilleCompte(idUid: string, ville: string): void {
   try {
-    const cle = "fc_demo_db_v3";
+    // Base de l'APPLICATION (cf. demo-api.ts DB_KEY = fc_demo_db_v2).
+    const cle = "fc_demo_db_v2";
     const brut = window.localStorage.getItem(cle);
     if (brut) {
       const db = JSON.parse(brut) as { members?: Array<Record<string, unknown>> };

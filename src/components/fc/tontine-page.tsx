@@ -77,6 +77,8 @@ import {
   type Reglement,
 } from "./reglement";
 import { loadTypesCotisation, type TypeCotisation } from "./cotisations-types";
+import { loadVilles, memeVille } from "./villes";
+import { maVille, setMaVille, resumeTontineVille, rosterTontine } from "./tontine-ville";
 
 /* ══════════════════════════ petits utilitaires ══════════════════════════ */
 
@@ -242,6 +244,131 @@ function hashFor(p: TPage): string {
 
 /* ══════════════════════════ composant principal ══════════════════════════ */
 
+/* v27 — VILLE = TONTINE. Demande de l'administrateur : « tous les membres
+   d'une même ville forment une seule tontine — leurs cotisations s'additionnent
+   entre eux, prêts et autres pris en compte. Un membre SANS VILLE n'appartient
+   à AUCUNE tontine et ne peut pas interagir avec les membres. »
+   Le bloc s'affiche EN TÊTE de la page Finances (#tontine) :
+   · MA VILLE connue → « Tontine de {ville} » : les membres de la ville, le
+     total de leurs cotisations du mois, leurs épargnes et leurs prêts en cours ;
+   · SANS VILLE → avertissement + choix de la ville (les villes ajoutées par
+     le bureau via « Ajouter une nouvelle ville » apparaissent ici). */
+function BlocTontineVille({ vousName, montVersion }: { vousName?: string | null; montVersion: number }) {
+  const [mounted2, setMounted2] = useState(false);
+  const [ville, setVilleEtat] = useState("");
+  const [version, setVersion] = useState(0);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setVilleEtat(maVille());
+      setMounted2(true);
+    }, 0);
+    return () => clearTimeout(t);
+  }, []);
+
+  const choisirVille = (v: string) => {
+    setMaVille(v);
+    setVilleEtat(v);
+    setVersion((x) => x + 1);
+    toast.success(`Vous rejoignez la tontine de ${v} 🏙️`, {
+      description: "Vos cotisations, épargnes et prêts s'additionnent entre membres de votre ville.",
+    });
+  };
+
+  // Hooks TOUJOURS appelés (règle React) — les rendus conditionnels viennent après.
+  const villes = useMemo(() => (mounted2 ? loadVilles() : []), [mounted2]);
+  const roster = useMemo(() => rosterTontine(vousName), [vousName, version]);
+  const resume = useMemo(
+    () => resumeTontineVille(ville, roster),
+    // montVersion : les montants changés par le bureau recalculent les totaux
+    [ville, roster, montVersion],
+  );
+
+  if (!mounted2) return null;
+
+  // ── SANS VILLE : aucune tontine — avertissement + choix de la ville ──
+  if (!ville) {
+    return (
+      <div className="rounded-2xl border border-[#A5473D]/40 bg-[#A5473D]/10 p-4">
+        <div className="mb-1 flex items-center gap-2">
+          <MapPin className="h-4 w-4 shrink-0 text-[#A5473D]" />
+          <p className="text-[13px] font-bold text-[#A5473D]">Vous n&apos;appartenez à aucune tontine</p>
+        </div>
+        <p className="text-[12px] leading-relaxed text-[#7A3B34]">
+          Chaque ville forme UNE SEULE tontine : ses membres cotisent, épargnent et empruntent ensemble.
+          Sans ville, vous ne pouvez pas interagir avec les tontines de ville — choisissez la vôtre ci-dessous
+          (ou demandez au bureau de l&apos;attribuer à votre code d&apos;invitation).
+        </p>
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {villes.map((v) => (
+            <button
+              key={v.nom}
+              type="button"
+              onClick={() => choisirVille(v.nom)}
+              className="inline-flex items-center gap-1 rounded-full border border-[#A5473D]/35 bg-white px-3 py-1.5 text-[12px] font-bold text-[#7A3B34] transition hover:border-[#A5473D] hover:bg-[#A5473D]/10"
+            >
+              <MapPin className="h-3 w-3" /> {v.nom}
+              <span className="text-[9.5px] font-semibold text-[#A5473D]/70">· {v.region}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ── MA TONTINE DE VILLE : ce qui s'additionne entre membres de la ville ──
+  return (
+    <div className="rounded-2xl border border-[#2F6B45]/35 bg-gradient-to-br from-[#2F6B45]/12 via-[#FFFDF6] to-[#C89F62]/12 p-4">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <MapPin className="h-4 w-4 shrink-0 text-[#2F6B45]" />
+          <p className="text-[13.5px] font-bold text-[#1E4D2B]">
+            Tontine de {resume.ville}
+          </p>
+          <span className="rounded-full bg-[#2F6B45]/15 px-2 py-0.5 text-[10px] font-bold text-[#2F6B45]">
+            {resume.membres.length} membre{resume.membres.length > 1 ? "s" : ""}
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => { setMaVille(""); setVilleEtat(""); }}
+          className="text-[10.5px] font-semibold text-[#8A9288] underline hover:text-[#5C6B60]"
+        >
+          changer de ville
+        </button>
+      </div>
+      <p className="mb-3 text-[11.5px] leading-relaxed text-[#5C6B60]">
+        Tous les membres de {resume.ville} forment <strong>une seule tontine</strong> : leurs cotisations
+        s&apos;additionnent entre eux ; épargnes et prêts de la ville sont pris en compte.
+      </p>
+      <div className="grid grid-cols-3 gap-2">
+        <MiniKpi label="Cotisations du mois" value={fmtFcfa(resume.cotisationsMois)} sub="total de la ville" tone="bg-[#2F6B45]/12 text-[#2F6B45]" />
+        <MiniKpi label="Épargnes de la ville" value={fmtFcfa(resume.epargnes)} sub="réunions de l'année" tone="bg-[#C89F62]/20 text-[#8A6420]" />
+        <MiniKpi label="Prêts en cours" value={fmtFcfa(resume.pretsEnCours)} sub={`${resume.nbPretsEnCours} prêt${resume.nbPretsEnCours > 1 ? "s" : ""}`} tone="bg-[#B85C33]/12 text-[#B85C33]" />
+      </div>
+      {resume.membres.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {resume.membres.map((m) => (
+            <span
+              key={m.id}
+              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                m.isVous ? "border-[#C89F62] bg-[#FFF7E6] text-[#8A6420]" : "border-[#E5DCC0] bg-white text-[#2B3530]"
+              }`}
+            >
+              {m.name}{m.isVous ? " (vous)" : ""}
+            </span>
+          ))}
+        </div>
+      )}
+      {memeVille(ville, "Yaoundé") && (
+        <p className="mt-2 text-[10.5px] font-semibold text-[#8A9288]">
+          Ville par défaut de la Tontine — les nouveaux codes d&apos;invitation y sont rattachés.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function TontinePage({ onBack, vousName, vousPhone }: { onBack: () => void; vousName?: string | null; vousPhone?: string | null }) {
   const [mounted, setMounted] = useState(false);
   const [page, setPage] = useState<TPage>("reunion");
@@ -349,6 +476,11 @@ export function TontinePage({ onBack, vousName, vousPhone }: { onBack: () => voi
 
       <OngletsPrincipaux page={page} onGo={goPage} />
       <OngletsBureau page={page} onGo={goPage} vousRole={roleActif} nbSignalementsOuverts={ouverts.length} />
+
+      {/* v27 — VILLE = TONTINE : les membres d'une même ville forment UNE seule
+          tontine (cotisations additionnées, épargnes et prêts pris en compte) ;
+          un membre sans ville n'appartient à aucune tontine. */}
+      <BlocTontineVille vousName={vousName} montVersion={montVersion} />
 
       {/* Bannière de rappel — les signalements ouverts reviennent tous les 3 jours
           jusqu'à traitement par le bureau. */}
