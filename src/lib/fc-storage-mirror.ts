@@ -45,6 +45,30 @@ const ANCHOR_COOKIE = "fc_anchor";
 const DATA_COOKIE = "fc_ep_data";
 const COOKIE_AGE_S = 60 * 60 * 24 * 365 * 10; // 10 ans
 
+// ─── PURGE v28 (Task 72) — le miroir ne ressuscite PLUS les comptes ───
+// Signalement : « Supprime absolument tous les comptes, même ceux que j'ai
+// créés via le téléphone (Georges, Georges 2…). » La purge v27 effaçait la
+// base… et CE miroir la restaurait aussitôt (snapshot IndexedDB + cookies).
+// Désormais la purge appelle detruireMiroir() et pose un drapeau de session :
+// restoreFromMirror() refuse alors TOUTE restauration pendant cette page.
+
+/** Drapeau de SESSION posé par la purge v28 (fc/purge-app.ts) : la page qui
+ *  vient de purger ne doit JAMAIS restaurer un snapshot résiduel. */
+export const DRAPEAU_PURGE = "fc_purge_v28_active";
+
+/** Destruction COMPLÈTE du miroir : base IndexedDB « fc-mirror » supprimée de
+ *  fond en comble + cookies « fc_anchor » / « fc_ep_data » expirés sur-le-champ.
+ *  Idempotente et sans danger : appelable autant de fois que nécessaire. */
+export function detruireMiroir(): void {
+  try {
+    if (typeof indexedDB !== "undefined") indexedDB.deleteDatabase(MIRROR_DB);
+  } catch {
+    /* IndexedDB indisponible */
+  }
+  writeCookie(ANCHOR_COOKIE, null);
+  writeCookie(DATA_COOKIE, null);
+}
+
 type Anchor = {
   uid: string;
   did: string;
@@ -336,6 +360,17 @@ function seedMinimalDb(a: Anchor, epargnes: EpargneLike[], prets: PretLike[], ta
  */
 export async function restoreFromMirror(): Promise<"idb" | "cookie" | null> {
   if (typeof window === "undefined") return null;
+  // v28 — PURGE EN COURS DANS CETTE PAGE : ne restaurer RIEN. On re-détruit le
+  // miroir résiduel (course purge ⇄ IndexedDB éliminée) et on retire le drapeau.
+  try {
+    if (window.sessionStorage.getItem(DRAPEAU_PURGE)) {
+      detruireMiroir();
+      window.sessionStorage.removeItem(DRAPEAU_PURGE);
+      return null;
+    }
+  } catch {
+    /* sessionStorage indisponible — suite normale */
+  }
   try {
     // Session déjà en place ? → simple rafraîchissement du miroir, rien à restaurer.
     const raw = localStorage.getItem(DB_KEY);

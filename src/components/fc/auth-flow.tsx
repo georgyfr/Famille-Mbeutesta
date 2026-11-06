@@ -134,11 +134,20 @@ function appliquerCodeInvitation(codeAtt: string | null, fullName: string, uid: 
  * (1ʳᵉ ouverture de l'app = insertion du code → puis le nom → puis la
  * détection de position → l'accueil). OUVERT par défaut ; repliable d'un clic
  * (« Je n'ai pas de code ») pour le parcours sans invitation.
- * onCodeValide permet à l'écran hôte de PRÉREMPLIR le numéro de téléphone. */
-function ChampCodeInvitation({ onCodeValide }: { onCodeValide?: (c: CodeMembre) => void }) {
+ * onCodeValide permet à l'écran hôte de PRÉREMPLIR le numéro de téléphone.
+ * v28 — codeInitial : le code arrive PRÉCHARGÉ par un LIEN CLIQUABLE
+ * (?code=FCM-XXXXXX partagé par le bureau) — le champ s'affiche déjà
+ * « accepté », la personne ne colle rien. */
+function ChampCodeInvitation({
+  onCodeValide,
+  codeInitial,
+}: {
+  onCodeValide?: (c: CodeMembre) => void;
+  codeInitial?: CodeMembre | null;
+}) {
   const [ouvert, setOuvert] = useState(true);
-  const [saisie, setSaisie] = useState("");
-  const [valide, setValide] = useState<CodeMembre | null>(null);
+  const [saisie, setSaisie] = useState(codeInitial?.code ?? "");
+  const [valide, setValide] = useState<CodeMembre | null>(codeInitial ?? null);
 
   const verifier = () => {
     const c = trouverCode(saisie);
@@ -215,9 +224,44 @@ function ChampCodeInvitation({ onCodeValide }: { onCodeValide?: (c: CodeMembre) 
   );
 }
 
+/* v28 — LIEN CLIQUABLE du bureau : « ?code=FCM-XXXXXX » (ou #code=…) ouvre
+ * l'app DIRECTEMENT sur l'inscription, code déjà accepté et numéro prérempli
+ * — la personne clique, tape son nom, sa page s'ouvre. Lecture UNE fois à
+ * l'initialisation du composant (le contenu du lien est statique) — JAMAIS
+ * dans un effet (setState en effet interdit) : initialisateurs paresseux. */
+type LienCode =
+  | { statut: "absent"; code: null }
+  | { statut: "ok"; code: CodeMembre }
+  | { statut: "inconnu" | "utilise"; code: null };
+
+function lireCodeDuLien(): LienCode {
+  if (typeof window === "undefined") return { statut: "absent", code: null };
+  try {
+    const lire = (s: string) => new URLSearchParams(s.startsWith("#") ? s.slice(1) : s);
+    const q = lire(window.location.search);
+    const h = lire(window.location.hash);
+    const brut =
+      q.get("code") ?? q.get("invitation") ?? q.get("invite") ??
+      h.get("code") ?? h.get("invitation") ?? h.get("invite");
+    if (!brut) return { statut: "absent", code: null };
+    const c = trouverCode(brut);
+    if (!c) return { statut: "inconnu", code: null };
+    if (c.utiliseLe) return { statut: "utilise", code: null };
+    return { statut: "ok", code: c };
+  } catch {
+    return { statut: "absent", code: null };
+  }
+}
+
 export function AuthFlow({ onReady }: { onReady: (name: string) => void }) {
-  const [step, setStep] = useState<Step>({ k: "welcome" });
+  // Code préchargé par le lien (null = parcours normal) — lu UNE fois.
+  const [lien] = useState<LienCode>(lireCodeDuLien);
+  const precharge = lien.statut === "ok" ? lien.code : null;
   const [busy, setBusy] = useState(false);
+  // Lien valide → saut direct à l'inscription par numéro (pas d'écran d'accueil).
+  const [step, setStep] = useState<Step>(() =>
+    precharge ? { k: "phone", mode: "signup" } : { k: "welcome" },
+  );
 
   return (
     <div className="relative flex w-full flex-1 flex-col lg:flex-row">
@@ -297,9 +341,35 @@ export function AuthFlow({ onReady }: { onReady: (name: string) => void }) {
         </div>
 
         <div className="relative z-10 w-full max-w-md space-y-4">
+          {/* v28 — signalement inline si le lien portait un code inutilisable */}
+          {lien.statut === "utilise" && (
+            <div
+              role="status"
+              className="rounded-xl border border-[#C89F62]/50 bg-[#FBF7EA] px-4 py-3 text-[12.5px] font-semibold leading-snug text-[#7A5B2E]"
+            >
+              Le code de ce lien a déjà été utilisé — si c&apos;est votre compte, connectez-vous avec votre numéro.
+              Sinon, demandez un nouveau code au bureau de la Tontine.
+            </div>
+          )}
+          {lien.statut === "inconnu" && (
+            <div
+              role="status"
+              className="rounded-xl border border-[#C89F62]/50 bg-[#FBF7EA] px-4 py-3 text-[12.5px] font-semibold leading-snug text-[#7A5B2E]"
+            >
+              Le code contenu dans ce lien est inconnu — vérifiez auprès du bureau de la Tontine.
+            </div>
+          )}
           {step.k === "welcome" && <WelcomeScreen goto={setStep} />}
           {step.k === "login-choice" && <LoginChoiceScreen goto={setStep} />}
-          {step.k === "phone" && <PhoneScreen mode={step.mode} busy={busy} setBusy={setBusy} goto={setStep} />}
+          {step.k === "phone" && (
+            <PhoneScreen
+              mode={step.mode}
+              busy={busy}
+              setBusy={setBusy}
+              goto={setStep}
+              precharge={precharge}
+            />
+          )}
           {step.k === "verify" && (
             <VerifyScreen state={step} busy={busy} setBusy={setBusy} goto={setStep} onReady={onReady} />
           )}
@@ -407,15 +477,32 @@ function PhoneScreen({
   busy,
   setBusy,
   goto,
+  precharge,
 }: {
   mode: "signup" | "login";
   busy: boolean;
   setBusy: (b: boolean) => void;
   goto: (s: Step) => void;
+  /** v28 — code préchargé par un LIEN CLIQUABLE (?code=…) : numéro prérempli. */
+  precharge?: CodeMembre | null;
 }) {
   const [digits, setDigits] = useState("");
-  const { country, setCountry } = usePhoneCountry();
+  const { country, setCountry, ready } = usePhoneCountry();
   const maxD = maxDigitsFor(country);
+  // Le préremplissage depuis le lien s'applique UNE fois, APRÈS la détection
+  // automatique du pays (sinon elle l'écraserait) — le code fait foi.
+  const prechargeFait = useRef(false);
+  useEffect(() => {
+    if (!precharge || !ready || prechargeFait.current) return;
+    prechargeFait.current = true;
+    poserCodeInvite(precharge.code); // mémorisé jusqu'à la création du compte (consommé ensuite)
+    const pays = paysDepuisTelephone(precharge.telephone);
+    if (pays) setCountry(pays);
+    const dial = pays?.dial ?? country.dial;
+    const brut = precharge.telephone.replace(/^\+/, "");
+    const d = brut.startsWith(dial) ? brut.slice(dial.length) : brut;
+    if (d) setDigits(onlyDigits(d).slice(0, maxDigitsFor(pays ?? country)));
+  }, [precharge, ready, country, setCountry]);
 
   const send = async () => {
     if (!phoneDigitsOk(country, digits)) {
@@ -487,9 +574,11 @@ function PhoneScreen({
 
       {/* — CODE D'INVITATION (Task 67) : le bureau a créé ce membre avant son
        *    arrivée — il colle le code reçu, son numéro est prérempli et, dès
-       *    la création du compte, son rôle et sa cotisation s'appliquent. — */}
+       *    la création du compte, son rôle et sa cotisation s'appliquent.
+       *    v28 : ou préchargé par le LIEN CLIQUABLE du bureau (?code=…). — */}
       {mode === "signup" && (
         <ChampCodeInvitation
+          codeInitial={precharge}
           onCodeValide={(c) => {
             /* le numéro du code fait FOI : on bascule le pays sur SON indicatif
              * puis on préremplit le numéro national (préfixe retiré). */

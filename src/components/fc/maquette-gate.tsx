@@ -1,7 +1,7 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BASCULE MAQUETTE ⇄ APPLICATION — Famille.Mbeutetsa (v27)
+// BASCULE MAQUETTE ⇄ APPLICATION — Famille.Mbeutetsa (v28)
 //
 // v27 — DEMANDE DE L'ADMINISTRATEUR : « au niveau de l'application mobile,
 // que l'on ne voie PAS la maquette : qu'on voie l'APPLICATION TELLE QUELLE. »
@@ -148,8 +148,8 @@ export function MaquetteGate() {
         <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#C89F62]" />
         <p className="hidden min-w-0 truncate text-[11px] font-semibold sm:block">
           {console_ === "membre"
-            ? `Espace Membre v27 — ${CONSOLES[console_]}`
-            : `Maquette v27 — ${CONSOLES[console_]}`}
+            ? `Espace Membre v28 — ${CONSOLES[console_]}`
+            : `Maquette v28 — ${CONSOLES[console_]}`}
         </p>
         {/* v21 — sélecteur de consoles : VISIBLE EN PERMANENCE (maquette comme
             application). Un clic pose le hash et ouvre la console visée. */}
