@@ -36,7 +36,7 @@ import {
   retirerCodeInvite, type CodeMembre,
 } from "./codes-membres";
 import {
-  ArrowLeft, AtSign, BellRing, Check, ChevronRight, Eye, EyeOff, KeyRound,
+  ArrowLeft, AtSign, Check, ChevronRight, Eye, EyeOff, KeyRound,
   Lock, Phone, RefreshCw, ShieldCheck, Smartphone, Ticket, UserRound,
 } from "lucide-react";
 
@@ -524,16 +524,36 @@ function PhoneScreen({
       } catch {
         /* rien */
       }
+      setEnvoiRate(false);
       toast.success(`Notification de vérification envoyée au +${country.dial} ${groupPhone(digits)}`, {
         description: "Consultez vos notifications — l'application vérifie ensuite votre appareil.",
       });
       goto({ k: "verify", verifyToken: res.verifyToken, digits, demoCode: res.demoCode, dial: country.dial, iso: country.iso });
     } catch (e) {
+      setEnvoiRate(true); // v29 — repli discret : un bouton « Renvoyer » apparaît
       toast.error(e instanceof Error ? e.message : "Envoi de la notification impossible.");
     } finally {
       setBusy(false);
     }
   };
+
+  /* v29 — NOTIFICATION AUTOMATIQUE (demande de l'administrateur : « la
+   * notification automatique doit être par défaut ») : le bouton « Recevoir
+   * la notification » est SUPPRIMÉ. Dès que le numéro est complet, la
+   * vérification part TOUTE SEULE après un léger délai (anti-course entre
+   * les touches). Le réglage notifications vit dans les PARAMÈTRES. — */
+  const [envoiRate, setEnvoiRate] = useState(false);
+  const envoyePourRef = useRef("");
+  const cleNum = phoneDigitsOk(country, digits) ? `${country.dial}|${onlyDigits(digits)}` : "";
+  useEffect(() => {
+    if (!cleNum || busy) return;
+    if (envoyePourRef.current === cleNum) return; // déjà envoyé pour CE numéro
+    const t = setTimeout(() => {
+      envoyePourRef.current = cleNum;
+      void send();
+    }, 850);
+    return () => clearTimeout(t);
+  }, [cleNum, busy, send]);
 
   return (
     <FcCard className="p-6 sm:p-8">
@@ -542,8 +562,8 @@ function PhoneScreen({
       <h2 className="fc-serif mb-1 text-center text-2xl font-bold text-[#1E4D2B]">Votre numéro de téléphone</h2>
       <p className="mb-6 text-center text-[14px] leading-relaxed text-[#5C6B60]">
         {mode === "signup"
-          ? "Votre numéro est votre identifiant — nous vous envoyons une notification pour vérifier qu'il s'agit bien de votre téléphone."
-          : "Nous vous envoyons une notification avec un code pour vous reconnecter sans mot de passe."}
+          ? "Votre numéro est votre identifiant — dès qu'il est complet, la notification de vérification part automatiquement."
+          : "Dès que votre numéro est complet, une notification avec un code part automatiquement — sans mot de passe."}
       </p>
 
       <div className="mb-4 flex items-stretch gap-2">
@@ -567,10 +587,24 @@ function PhoneScreen({
         />
       </div>
 
-      <FcButton onClick={send} disabled={busy || !phoneDigitsOk(country, digits)} className="h-[54px]">
-        {busy ? <FcSpinner /> : <BellRing className="h-5 w-5" />}
-        Recevoir la notification
-      </FcButton>
+      {/* v29 — plus AUCUN bouton « Recevoir la notification » : l'envoi est
+       *    AUTOMATIQUE dès que le numéro est complet. En cas d'échec réseau,
+       *    un bouton « Renvoyer la vérification » apparaît (repli discret). — */}
+      <div aria-live="polite">
+        {busy ? (
+          <p className="flex min-h-[54px] items-center justify-center gap-2 rounded-xl bg-[#1E4D2B]/8 px-4 text-[13.5px] font-bold text-[#1E4D2B]">
+            <FcSpinner /> Envoi automatique de la vérification…
+          </p>
+        ) : envoiRate ? (
+          <FcButton variant="outline" onClick={() => void send()} className="h-[54px] w-full">
+            <RefreshCw className="h-5 w-5" /> Renvoyer la vérification
+          </FcButton>
+        ) : (
+          <p className="rounded-xl bg-[#3D6B52]/8 px-4 py-3.5 text-[12.5px] leading-relaxed text-[#2A4A3A]">
+            🔔 La notification part <b>toute seule</b> dès que votre numéro est complet — rien à cliquer.
+          </p>
+        )}
+      </div>
 
       {/* — CODE D'INVITATION (Task 67) : le bureau a créé ce membre avant son
        *    arrivée — il colle le code reçu, son numéro est prérempli et, dès

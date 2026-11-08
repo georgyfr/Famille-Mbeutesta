@@ -43,11 +43,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
-  CalendarCheck, CalendarClock, CalendarDays, CheckCircle2, ClipboardList, Coins, Coffee,
+  Bell, CalendarCheck, CalendarClock, CalendarDays, CheckCircle2, ClipboardList, Coins, Coffee,
   Crown, FileText, Gavel, HandCoins, HandHeart, Landmark, Mail, MessageSquarePlus, Mic, PiggyBank,
   ReceiptText, ScrollText, Send, Square, Trash2, TrendingUp, User, UserCheck, Users, Wallet, X,
 } from "lucide-react";
 import { FcCard } from "./ui";
+import { ReglageNotifications } from "./reglage-notifications";
 import {
   Block, Btn, BtnConfirme, EnteteConsole, KpiCard, NavOnglets, P,
   dateCourte, fcfa, fmt, heure, nid, useOngletsVus,
@@ -2001,6 +2002,16 @@ function ProfilTab(p: { ctx: CtxMembre }): ReactNode {
             </div>
           ))}
         </dl>
+      </Block>
+
+      {/* v29 — NOTIFICATIONS dans LES PARAMÈTRES du membre : automatiques par
+       *    défaut (demande de l'administrateur — plus de bouton « Recevoir la
+       *    notification » nulle part, l'interrupteur vit ICI). — */}
+      <Block title="Notifications" icon={<Bell className="h-4.5 w-4.5" />} accent="#3D6B72"
+        note="Automatiques par défaut — alertes de la famille même application fermée, avec son et vibration, comme WhatsApp. Cet interrupteur remplace l'ancien bouton : le réglage vit ICI, dans vos paramètres.">
+        <div className="p-4">
+          <ReglageNotifications />
+        </div>
       </Block>
     </>
   );

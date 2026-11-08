@@ -77,6 +77,7 @@ import type { Reglement } from "./reglement";
 import { loadEpargnesReunion, type AttributionReunion } from "./registres-bureau";
 import { SecCotisationsCollations, SecEpargnes, SecPrets, SecSolidarite } from "./gestion-secretaire";
 import { ConvocationsSectionV2 } from "./secretaire-convocations";
+import { ReglageNotifications } from "./reglage-notifications";
 import { exportRegistreEpargnesExcel } from "./secretaire-excel";
 import { CodesMembresSection } from "./codes-membres-section";
 import { SecMesCotisations, SecMesEpargnes, SecMesPrets } from "./secretaire-membre";
@@ -1715,6 +1716,16 @@ function ParametresSection(p: { params: ParamsSecretaire; onMaj: (p: ParamsSecre
           <NumField label="Rappel automatique avant la réunion" value={p.params.convocations.rappelJours} onChange={(v) => majConvocations({ rappelJours: v })} unite="jours" />
           <ToggleRow label="Sanction « confirmé puis absent »" note="Le moteur amende automatiquement le membre qui avait confirmé la convocation du mois et est marqué ABSENT à l'appel." actif={p.params.convocations.sanctionActif} onToggle={() => majConvocations({ sanctionActif: !p.params.convocations.sanctionActif })} />
           <NumField label="…montant de la sanction" value={p.params.convocations.amendeConfirmeAbsent} onChange={(v) => majConvocations({ amendeConfirmeAbsent: v })} unite="FCFA" />
+        </div>
+      </Block>
+
+      {/* v29 — NOTIFICATIONS dans LES PARAMÈTRES du secrétariat : automatiques
+       *    par défaut (demande de l'administrateur — l'interrupteur remplace le
+       *    bouton « Recevoir la notification » supprimé à l'inscription). — */}
+      <Block title="Paramètres — notifications de l'appareil" icon={<Bell className="h-4 w-4" />} accent="#6E4B71"
+        note="Automatiques par défaut — convocations, amendes et décisions sonnent sur le téléphone même application fermée. L'interrupteur coupe/relance sur CET appareil ; le réglage vit ICI, dans les paramètres.">
+        <div className="p-4">
+          <ReglageNotifications />
         </div>
       </Block>
 

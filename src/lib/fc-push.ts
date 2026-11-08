@@ -174,9 +174,56 @@ export async function enablePush(opts?: { silent?: boolean }): Promise<boolean> 
   }
 }
 
-/** Après l'authentification : nouvel inscrit → invite automatique ; connu → abonnement silencieux si déjà accordé. */
+/* ── Préférence NOTIFICATIONS (v29) — AUTOMATIQUES PAR DÉFAUT ──
+ * Demande de l'administrateur : « “Recevoir la notification” — supprime cette
+ * phrase car la notification automatique doit être par défaut ; ajoute cette
+ * option plutôt dans les paramètres. » La préférence vit dans les PARAMÈTRES
+ * (Ma sécurité, Espace Membre → Mon profil, Paramètres du secrétariat et du
+ * président) via le composant ReglageNotifications. Valeur ABSENTE = "auto" :
+ * les notifications s'activent toutes seules (aucun bouton à cliquer). */
+const PREF_CLE = "fc_push_pref_v1";
+
+export type PrefPush = "auto" | "off";
+
+export function lirePrefPush(): PrefPush {
+  try {
+    return window.localStorage.getItem(PREF_CLE) === "off" ? "off" : "auto";
+  } catch {
+    return "auto";
+  }
+}
+
+export function ecrirePrefPush(pref: PrefPush): void {
+  try {
+    if (pref === "off") window.localStorage.setItem(PREF_CLE, "off");
+    else window.localStorage.removeItem(PREF_CLE);
+  } catch {
+    /* stockage indisponible — la préférence reste "auto" */
+  }
+}
+
+/** Coupe les notifications sur CET appareil : désabonnement navigateur +
+ *  retrait côté serveur + préférence "off" (plus aucune invite automatique). */
+export async function desabonnerPush(): Promise<boolean> {
+  try {
+    const sub = await currentSubscription();
+    if (sub) {
+      const endpoint = sub.endpoint;
+      await sub.unsubscribe().catch(() => undefined);
+      await api("/api/push/unsubscribe", { body: { endpoint } }).catch(() => undefined);
+    }
+    ecrirePrefPush("off");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Après l'authentification : nouvel inscrit → invite automatique ; connu → abonnement silencieux si déjà accordé.
+ *  v29 : si l'utilisateur a COUPÉ les notifications dans les paramètres, plus AUCUNE invite. */
 export async function afterAuthPush(isNewUser: boolean): Promise<void> {
   if (!isPushSupported()) return;
+  if (lirePrefPush() === "off") return;
   try {
     if (isNewUser) {
       const ok = await enablePush({ silent: true });

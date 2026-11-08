@@ -1,7 +1,17 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BASCULE MAQUETTE ⇄ APPLICATION — Famille.Mbeutetsa (v28)
+// BASCULE MAQUETTE ⇄ APPLICATION — Famille.Mbeutetsa (v29)
+//
+// v29 — DEMANDE DE L'ADMINISTRATEUR : « “Recevoir la notification” — supprime
+// cette phrase car la notification automatique doit être par défaut ; ajoute
+// cette option plutôt dans les paramètres. »
+//   · le bouton « Recevoir la notification » de l'inscription est SUPPRIMÉ :
+//     la vérification du numéro part TOUTE SEULE dès que le numéro est complet ;
+//   · les notifications push sont AUTOMATIQUES PAR DÉFAUT (aucun bouton
+//     « Activer les notifications ») ;
+//   · le réglage vit dans LES PARAMÈTRES : Ma sécurité, Espace Membre → Mon
+//     profil, Paramètres du secrétariat et du président (ReglageNotifications).
 //
 // v27 — DEMANDE DE L'ADMINISTRATEUR : « au niveau de l'application mobile,
 // que l'on ne voie PAS la maquette : qu'on voie l'APPLICATION TELLE QUELLE. »
@@ -148,8 +158,8 @@ export function MaquetteGate() {
         <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#C89F62]" />
         <p className="hidden min-w-0 truncate text-[11px] font-semibold sm:block">
           {console_ === "membre"
-            ? `Espace Membre v28 — ${CONSOLES[console_]}`
-            : `Maquette v28 — ${CONSOLES[console_]}`}
+            ? `Espace Membre v29 — ${CONSOLES[console_]}`
+            : `Maquette v29 — ${CONSOLES[console_]}`}
         </p>
         {/* v21 — sélecteur de consoles : VISIBLE EN PERMANENCE (maquette comme
             application). Un clic pose le hash et ouvre la console visée. */}

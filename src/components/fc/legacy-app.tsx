@@ -51,6 +51,9 @@ html.fc-legacy body{background:#F4F1E9;margin:0}
 .l-label{font-size:14px;font-weight:bold;color:#1E4D2B;margin-bottom:8px}
 .l-sub{font-size:13px;color:#5C6B60;line-height:1.45;margin-bottom:12px}
 .l-hint{font-size:11px;color:#8A9288;text-align:center;margin-top:10px;line-height:1.4}
+/* v29 — note « notification automatique » (remplace le bouton « Recevoir la notification ») */
+.l-auto-note{background:#EAF3EC;border:1px solid #CDE3D2;color:#2A4A3A;border-radius:10px;
+  padding:10px 12px;font-size:12.5px;line-height:1.45;text-align:center}
 .l-input{width:100%;height:50px;border:1px solid #C9B98A;border-radius:12px;background:#FFFDF6;
   font-size:16px;color:#2B3530;padding:0 14px;margin-bottom:10px}
 .l-phone-row{display:-webkit-flex;display:flex;-webkit-align-items:stretch;align-items:stretch}
@@ -225,9 +228,7 @@ export function LegacyApp() {
                 aria-label="Numéro de téléphone"
               />
             </div>
-            <button id="l-btn-phone" type="button" className="l-btn">
-              🔔 Recevoir la notification
-            </button>
+            <p className="l-auto-note">🔔 La notification part <b>toute seule</b> dès que votre numéro est complet — rien à cliquer.</p>
             <p className="l-hint">Format camerounais — 9 chiffres commençant par 6 (mobile) ou 2 (fixe).</p>
           </div>
 

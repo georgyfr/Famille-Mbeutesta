@@ -199,6 +199,7 @@
   }
 
   function startVerify() {
+    if (S.autoT) { window.clearTimeout(S.autoT); S.autoT = null; }
     var input = $("l-phone");
     var digits = digitsOnly((input && input.value) || "");
     if (digits.length !== 9) {
@@ -300,7 +301,6 @@
       var el = $(id);
       if (el && el.addEventListener) { el.addEventListener("click", fn, false); }
     }
-    on("l-btn-phone", startVerify);
     on("l-btn-verify", manualMode);
     on("l-btn-code", confirmCode);
     on("l-btn-profile", register);
@@ -323,7 +323,9 @@
       })(btns[i]);
     }
 
-    /* Entrée clavier */
+    /* Entrée clavier + v29 NOTIFICATION AUTOMATIQUE : le bouton « Recevoir
+     * la notification » est SUPPRIMÉ — dès que le numéro est complet (9
+     * chiffres), la vérification part TOUTE SEULE (cour délai anti-course). */
     var phone = $("l-phone");
     if (phone) {
       phone.onkeydown = function (e) {
@@ -331,6 +333,13 @@
         var k = e.keyCode || e.which;
         if (k === 13) { startVerify(); }
       };
+      if (phone.addEventListener) {
+        phone.addEventListener("input", function () {
+          var d = digitsOnly(phone.value || "");
+          if (S.autoT) { window.clearTimeout(S.autoT); S.autoT = null; }
+          if (d.length === 9) { S.autoT = window.setTimeout(startVerify, 700); }
+        }, false);
+      }
     }
     var code = $("l-code");
     if (code) {

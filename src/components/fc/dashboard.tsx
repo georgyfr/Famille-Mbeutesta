@@ -2,25 +2,25 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { api, deviceName, timeAgo, urlBase64ToUint8Array } from "@/lib/fc-client";
+import { api, deviceName, timeAgo } from "@/lib/fc-client";
 import { groupPhone, onlyDigits as stripDigits } from "@/lib/fc-countries";
 import { PhoneCountrySelect, usePhoneCountry } from "./phone-country-select";
 import { FcButton, FcCard, PriorityBadge } from "./ui";
 import { roleLabel } from "./auth-flow";
 import {
-  Bell, BellOff, CalendarDays, Check, CheckCheck, Coins, Copy, Crown, Eye, Fingerprint, HeartHandshake, Home,
+  Bell, CalendarDays, Check, CheckCheck, Coins, Copy, Crown, Eye, Fingerprint, HeartHandshake, Home,
   KeyRound, Landmark, LifeBuoy, LocateFixed, LogOut, MapPinned, Megaphone, Navigation, PenLine, PiggyBank, RefreshCw,
   ScrollText, Send, ShieldCheck, Smartphone, Trash2, User, UserPlus, Users, Vote,
 } from "lucide-react";
 import { FamilyTab } from "./family-tab";
+import { ReglageNotifications } from "./reglage-notifications";
 import { LocationWizard } from "./location-wizard";
 import { TontinePage } from "./tontine-page";
 import { loadVousRole, saveVousRole } from "./tontine-bureau";
 import { ROLE_META, ROLES_BUREAU, type RoleKey } from "./tontine-data";
 import { formatPlace, type LocationDraft } from "@/lib/fc-geo";
 import {
-  enablePush, pushState as getPushState, startInAppNotificationPolling, testPush,
-  type PushState, familyNotify,
+  startInAppNotificationPolling, familyNotify,
 } from "@/lib/fc-push";
 
 export type SessionLocation = {
@@ -523,84 +523,10 @@ function NotifTab({ session }: { session: SessionData }) {
   );
 }
 
-/* ─────────────────────────── Sécurité ─────────────────────────── */
-
-/* Carte notifications système — dans Ma sécurité */
-
-function PushCard() {
-  const [state, setState] = useState<PushState>("default");
-  const [busy, setBusy] = useState(false);
-  const [isIOS] = useState(() =>
-    typeof navigator !== "undefined" &&
-    (/iPhone|iPad|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1))
-  );
-  useEffect(() => {
-    const t = setTimeout(async () => setState(await getPushState()), 0);
-    return () => clearTimeout(t);
-  }, []);
-
-  const enable = async () => {
-    setBusy(true);
-    const ok = await enablePush();
-    if (ok) setState(await getPushState());
-    setBusy(false);
-  };
-
-  const verify = async () => {
-    setBusy(true);
-    const res = await testPush();
-    if (res.ok) {
-      toast.success("Notification envoyée — regardez votre écran, même vérrouillé 🔔");
-    } else {
-      toast.error(res.error || "Envoi impossible.");
-    }
-    setBusy(false);
-  };
-
-  return (
-    <FcCard className="p-5">
-      <div className="mb-2 flex items-center gap-2">
-        <Bell className="h-5 w-5 text-[#C89F62]" />
-        <h3 className="fc-serif text-lg font-bold text-[#1E4D2B]">Notifications du téléphone</h3>
-      </div>
-      {state === "unsupported" && (
-        <p className="text-[13px] leading-relaxed text-[#8A9288]">
-          {isIOS
-            ? "Sur iPhone : ajoutez d'abord l'app à l'écran d'accueil (Partager → Sur l'écran d'accueil), puis ouvrez-la depuis l'icône."
-            : "Ce navigateur ne prend pas en charge les notifications push."}
-        </p>
-      )}
-      {state === "denied" && (
-        <p className="flex items-center gap-2 text-[13px] text-[#B91C1C]">
-          <BellOff className="h-4 w-4" /> Notifications bloquées — réautorisez-les dans les réglages du site
-          (icône cadenas dans la barre d'adresse).
-        </p>
-      )}
-      {(state === "default" || state === "granted") && (
-        <>
-          <p className="mb-3 text-[13px] leading-relaxed text-[#5C6B60]">
-            Recevez les événements de la famille même application fermée — avec le son et la vibration,
-            comme WhatsApp. Gratuit et illimité.
-          </p>
-          <FcButton onClick={enable} disabled={busy}>
-            {busy ? "Activation…" : "Activer les notifications"}
-          </FcButton>
-        </>
-      )}
-      {state === "subscribed" && (
-        <>
-          <p className="mb-3 flex items-center gap-1.5 text-[13px] font-medium text-[#16A34A]">
-            <ShieldCheck className="h-4 w-4" /> Actives sur cet appareil — même app fermée.
-          </p>
-          <FcButton variant="outline" onClick={verify} disabled={busy}>
-            {busy ? "Envoi…" : "Vérifier que ça sonne sur mon téléphone"}
-          </FcButton>
-        </>
-      )}
-    </FcCard>
-  );
-}
+/* ─────────────────────────── Sécurité ───────────────────────────
+ * v29 — la carte « Notifications du téléphone » (bouton « Activer les
+ * notifications ») est REMPLACÉE par le réglage Paramètres
+ * ReglageNotifications : automatiques par défaut, interrupteur ici. */
 
 /* ─── « Mon poste au bureau » — CARTE UNIQUE du poste enregistré (v27) ──────
    Demande de l'administrateur : « si enregistré comme membre du bureau, on ne
@@ -788,7 +714,7 @@ function SecurityTab({ session, onLoggedOut }: { session: SessionData; onLoggedO
 
   return (
     <div className="space-y-4">
-      <PushCard />
+      <ReglageNotifications />
       <RoleTontineCard />
       <FcCard className="p-5">
         <div className="mb-3 flex items-center gap-2">

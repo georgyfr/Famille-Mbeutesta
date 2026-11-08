@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { FcCard } from "./ui";
 import { useOngletsVus, useHorsEcranNav, PastilleOnglets } from "./maquette-ui";
+import { ReglageNotifications } from "./reglage-notifications";
 import {
   MEMBRES_FICTIFS, MOIS_FR, ROLE_META, TONTINE, TAUX_DEFAUT, loadMontants, saveMontants,
   detteParPersonne, potMensuelDynamique, secondSunday,
@@ -5017,6 +5018,11 @@ function ParametresSection(p: {
           </div>
         </div>
       </FcCard>
+
+      {/* v29 — NOTIFICATIONS dans LES PARAMÈTRES : automatiques par défaut
+       *    (demande de l'administrateur — l'interrupteur remplace le bouton
+       *    « Recevoir la notification » supprimé à l'inscription). — */}
+      <ReglageNotifications />
 
       {/* — sous-onglets de paramétrage : une section par écran, chaque section
        *    a SON URL (#president/parametres/<section>) et SON bouton
