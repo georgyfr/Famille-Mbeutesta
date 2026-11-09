@@ -23,7 +23,7 @@ import {
   Scale, ScrollText, Send, ShieldCheck, Wallet,
 } from "lucide-react";
 import {
-  Block, Btn, BtnConfirme, P, KpiCard, EnteteConsole, NavOnglets,
+  Block, Btn, BtnConfirme, P, KpiCard, EnteteConsole, MenuHamburger,
   fmt, fcfa, heure, nid, dateCourte, OK_CLS, OR_CLS, RJ_CLS, TE_CLS, toast,
 } from "./maquette-ui";
 import { MEMBRES_FICTIFS, MOIS_FR, ROLE_META } from "./tontine-data";
@@ -189,31 +189,6 @@ export function MaquetteCommissaire() {
     rapports: observations.filter((o) => o.statut === "transmise").length,
   };
 
-  const renderTab = (t: (typeof TABS)[number], actif: boolean) => {
-    const badge = badges[t.key] ?? 0;
-    return (
-      <button
-        key={t.key}
-        type="button"
-        onClick={() => goTab(t.key)}
-        aria-current={actif ? "page" : undefined}
-        className={`inline-flex min-h-[46px] items-center gap-2 rounded-xl border-2 px-3.5 py-2.5 text-[13px] font-bold transition-all sm:min-h-[48px] sm:text-[14px] ${
-          actif
-            ? "border-[#22484F] bg-[#3D6B72] text-white shadow-[0_6px_18px_rgba(61,107,114,0.5)]"
-            : "border-[#8FB5BA] bg-[#EDF4F3] text-[#2A5259] hover:border-[#3D6B72] hover:bg-[#DFEDEB]"
-        }`}
-      >
-        {t.icon}
-        {t.label}
-        {badge > 0 && (
-          <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-black ${actif ? "bg-[#C89F62] text-[#2B2416]" : "bg-[#A5473D] text-white"}`}>
-            {badge}
-          </span>
-        )}
-      </button>
-    );
-  };
-
   return (
     <div className="mx-auto w-full max-w-3xl px-3 pb-10 pt-3 sm:px-4">
       {/* ── en-tête ── */}
@@ -234,15 +209,14 @@ export function MaquetteCommissaire() {
         }
       />
 
-      {/* ── onglets ── */}
-      <NavOnglets
+      {/* ── v30 : MENU HAMBURGER — même mécanisme que les autres consoles ── */}
+      <MenuHamburger
         ariaLabel="Sections du commissariat aux comptes"
-        etiquette="Commissariat aux comptes — contrôler sans décider"
+        libelle={`${TABS.length} onglets`}
         couleurPoint="#3D6B72"
         onglets={TABS.map((t) => ({ ...t, badge: badges[t.key] ?? 0 }))}
         actif={tab}
         goTab={goTab}
-        render={renderTab}
       />
 
       {/* ── contenu ── */}

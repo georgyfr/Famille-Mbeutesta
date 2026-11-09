@@ -1,7 +1,7 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// UI PARTAGÉE DES CONSOLES (v19) — Secrétaire · Commissaire aux comptes
+// UI PARTAGÉE DES CONSOLES (v30) — Secrétaire · Commissaire · Président · Membre
 //
 // Même philosophie que la maquette du président (MÊMES couleurs de section,
 // MÊMES cartes crème, MÊMES pastilles) : petits composants extraits pour que
@@ -11,7 +11,7 @@
 
 import type { ReactNode, RefObject } from "react";
 import { useEffect, useRef, useState } from "react";
-import { ChevronsUp } from "lucide-react";
+import { ChevronsUp, Menu, X } from "lucide-react";
 import { toast } from "sonner";
 import { FcCard } from "./ui";
 
@@ -290,6 +290,175 @@ export function NavOnglets<T extends string>({ ariaLabel, etiquette, etiquetteCo
       </div>
     </nav>
     <PastilleOnglets visible={navHorsEcran} couleurPoint={couleurPoint} onClick={remonterOnglets} />
+    </>
+  );
+}
+
+/* — v30 : MENU HAMBURGER — retour des retours terrain : dans les consoles à
+ *    20 onglets, la nav d'onglets occupait TOUTE la page et noyait le contenu
+ *    (« les différents boutons des pages occupent toute la page, ça rend la
+ *    navigation difficile »). Désormais UNE barre compacte COLLANTE de 48 px
+ *    (bouton ☰ + onglet courant) et un TIROIR latéral qui regroupe toutes les
+ *    sections avec leurs onglets (Mémoire de la réunion, Gestion de la
+ *    cantine…) : le contenu des pages redevient lisible. MÊME MÉCANISME pour
+ *    toutes les consoles du bureau : secrétaire, président, commissaire et
+ *    espace membre — props identiques à NavOnglets (groupes | onglets). — */
+export function MenuHamburger<T extends string>({ ariaLabel, libelle, couleurPoint, onglets, groupes, actif, goTab }: {
+  ariaLabel: string; libelle?: string; couleurPoint: string;
+  onglets?: OngletItem<T>[];
+  groupes?: GroupeOnglets<T>[];
+  actif: T; goTab: (t: T) => void;
+}) {
+  const [ouvert, setOuvert] = useState(false);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const fermerRef = useRef<HTMLButtonElement | null>(null);
+
+  const plats: OngletItem<T>[] = groupes ? groupes.flatMap((g) => g.onglets) : (onglets ?? []);
+  const courant = plats.find((t) => t.key === actif) ?? plats[0];
+  const badgeCourant = courant?.badge ?? 0;
+  const autresBadges = plats.reduce((s, t) => s + (t.badge ?? 0), 0) - badgeCourant;
+
+  /* Escape referme ; la page derrière ne défile plus ; focus clavier au
+   * bouton de fermeture (différé : l'élément doit exister). */
+  useEffect(() => {
+    if (!ouvert) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOuvert(false); };
+    window.addEventListener("keydown", onKey);
+    const avant = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const t0 = window.setTimeout(() => fermerRef.current?.focus(), 60);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = avant;
+      window.clearTimeout(t0);
+    };
+  }, [ouvert]);
+
+  const choisir = (t: T) => {
+    setOuvert(false);
+    btnRef.current?.focus();
+    if (t !== actif) {
+      goTab(t);
+      /* le contenu de la nouvelle section commence en haut */
+      try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch { window.scrollTo(0, 0); }
+    }
+  };
+
+  const ligne = (t: OngletItem<T>, couleur: string) => {
+    const on = t.key === actif;
+    return (
+      <button
+        key={t.key}
+        type="button"
+        onClick={() => choisir(t.key)}
+        aria-current={on ? "page" : undefined}
+        className={`flex min-h-[46px] w-full items-center gap-2.5 rounded-xl border-2 px-3 py-2 text-left text-[13.5px] font-bold transition-all active:scale-[0.98] ${
+          on
+            ? "border-transparent text-white shadow-[0_6px_18px_rgba(42,74,58,0.35)]"
+            : "border-[#E5DCC0] bg-white text-[#2B3530] hover:border-[#B8A87E] hover:bg-[#F6EFE2]"
+        }`}
+        style={on ? { backgroundColor: couleur } : undefined}
+      >
+        <span className="shrink-0" style={on ? undefined : { color: couleur }}>{t.icon}</span>
+        <span className="min-w-0 flex-1 truncate">{t.label}</span>
+        {(t.badge ?? 0) > 0 && (
+          <span className={`inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-black ${on ? "bg-white/25 text-white" : "bg-[#A5473D] text-white"}`}>
+            {t.badge}
+          </span>
+        )}
+      </button>
+    );
+  };
+
+  const fermer = () => { setOuvert(false); btnRef.current?.focus(); };
+
+  return (
+    <>
+      {/* barre compacte COLLANTE (sous le bandeau de consoles, ~35 px) —
+       *    48 px de haut : elle ne dévore plus l'écran, le contenu passe
+       *    dessous en scollant mais le menu reste TOUJOURS accessible. */}
+      <div className="sticky top-[35px] z-20 -mx-3 mt-3 px-3 sm:-mx-4 sm:px-4">
+        <div className="flex items-center gap-2 rounded-2xl border-2 border-[#B8A87E] bg-white/95 py-1.5 pl-2 pr-2.5 shadow-[0_8px_24px_rgba(42,74,58,0.16)] backdrop-blur sm:pl-2.5">
+          <button
+            ref={btnRef}
+            type="button"
+            onClick={() => setOuvert(true)}
+            aria-expanded={ouvert}
+            aria-haspopup="dialog"
+            aria-label={`Ouvrir le menu — ${ariaLabel}`}
+            className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 transition-all active:scale-95"
+            style={{ borderColor: couleurPoint, color: couleurPoint, backgroundColor: `${couleurPoint}0F` }}
+          >
+            <Menu aria-hidden className="h-5 w-5" />
+            {autresBadges > 0 && (
+              <span className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white bg-[#A5473D] px-1 text-[10px] font-black text-white">
+                {autresBadges}
+              </span>
+            )}
+          </button>
+          <div aria-hidden className="h-6 w-px shrink-0 bg-[#E5DCC0]" />
+          <div className="flex min-w-0 flex-1 items-center gap-1.5" style={{ color: couleurPoint }}>
+            {courant?.icon}
+            <p className="min-w-0 truncate text-[13.5px] font-bold text-[#2B3530]">{courant?.label ?? "—"}</p>
+            {badgeCourant > 0 && (
+              <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#A5473D] px-1.5 text-[11px] font-black text-white">
+                {badgeCourant}
+              </span>
+            )}
+          </div>
+          <span className="hidden shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] sm:inline" style={{ backgroundColor: `${couleurPoint}14`, color: couleurPoint }}>
+            {libelle ?? `${plats.length} onglets`}
+          </span>
+        </div>
+      </div>
+
+      {/* tiroir latéral — toutes les sections et tous les onglets du poste */}
+      {ouvert && (
+        <div role="dialog" aria-modal="true" aria-label={ariaLabel} className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-[#141F17]/55 backdrop-blur-[2px]" onClick={fermer} />
+          <div className="fc-drawer-in absolute inset-y-0 left-0 flex w-[88%] max-w-[350px] flex-col border-r-2 border-[#B8A87E] bg-[#FBF7EA] shadow-[10px_0_44px_rgba(0,0,0,0.35)]">
+            <div className="flex items-center gap-2 border-b-2 border-[#B8A87E]/60 bg-white px-3 py-3">
+              <span aria-hidden className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: couleurPoint }} />
+              <div className="min-w-0 flex-1">
+                <p className="fc-serif truncate text-[15px] font-bold text-[#2A4A3A]">{ariaLabel}</p>
+                <p className="text-[10.5px] font-semibold text-[#8A9288]">
+                  {plats.length} onglet{plats.length > 1 ? "s" : ""}{groupes ? ` · ${groupes.length} section${groupes.length > 1 ? "s" : ""}` : ""}
+                </p>
+              </div>
+              <button
+                ref={fermerRef}
+                type="button"
+                onClick={fermer}
+                aria-label="Fermer le menu"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 border-[#E5DCC0] bg-white text-[#2B3530] transition-all hover:border-[#A5473D] hover:text-[#A5473D] active:scale-95"
+              >
+                <X aria-hidden className="h-5 w-5" />
+              </button>
+            </div>
+            <nav aria-label={ariaLabel} className="fc-scroll flex-1 overflow-y-auto px-3 pb-8 pt-1">
+              {groupes ? (
+                <div className="space-y-1">
+                  {groupes.map((g) => (
+                    <div key={g.label}>
+                      <p className="flex items-center gap-1.5 pb-1.5 pt-4 text-[10px] font-black uppercase tracking-[0.14em]" style={{ color: g.couleur }}>
+                        <span aria-hidden className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: g.couleur }} />
+                        {g.label}
+                        <span className="ml-auto rounded-full px-1.5 py-0.5 text-[9px] font-bold normal-case tracking-normal" style={{ backgroundColor: `${g.couleur}1A` }}>
+                          {g.onglets.length}
+                        </span>
+                      </p>
+                      {g.note && <p className="pb-2 text-[10.5px] leading-snug text-[#8A9288]">{g.note}</p>}
+                      <div className="space-y-1.5">{g.onglets.map((t) => ligne(t, g.couleur))}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-1.5 pt-3">{plats.map((t) => ligne(t, couleurPoint))}</div>
+              )}
+            </nav>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -65,7 +65,7 @@ import {
   Ticket, Trash2, UserCheck, Users, Wallet, X,
 } from "lucide-react";
 import {
-  Block, Btn, BtnConfirme, P, KpiCard, EnteteConsole, NavOnglets, useOngletsVus,
+  Block, Btn, BtnConfirme, P, KpiCard, EnteteConsole, MenuHamburger, useOngletsVus,
   fmt, fcfa, heure, nid, dateCourte, OK_CLS, OR_CLS, RJ_CLS, TE_CLS, VI_CLS, toast,
 } from "./maquette-ui";
 import { MEMBRES_FICTIFS, MOIS_FR, ROLE_META, TONTINE, secondSunday } from "./tontine-data";
@@ -152,35 +152,6 @@ const GROUPES: { label: string; note?: string; couleur: string; keys: TabKey[] }
   },
 ];
 const TABS_PAR_CLE = Object.fromEntries(TABS.map((t) => [t.key, t])) as Record<TabKey, (typeof TABS)[number]>;
-
-/* — v24 : TROIS familles de couleurs d'onglets — VIOLET = onglets du bureau,
- *    SARCELLE = espace membre personnel (Mes… + Paramètres), VERT PLEIN =
- *    « Créer un membre » (repérable au premier coup d'œil dans la section). — */
-type ThemeOnglet = "bureau" | "membre" | "creer";
-const THEME_ONGLETS: Record<ThemeOnglet, { inactif: string; actif: string; badgeInactif: string; badgeActif: string }> = {
-  bureau: {
-    inactif: "border-[#C7A9CA] bg-[#F7F1F8] text-[#5A3E5D] hover:border-[#6E4B71] hover:bg-[#F0E4F1]",
-    actif: "border-[#4A334C] bg-[#6E4B71] text-white shadow-[0_6px_18px_rgba(110,75,113,0.45)]",
-    badgeInactif: "bg-[#A5473D] text-white",
-    badgeActif: "bg-[#C89F62] text-[#2B2416]",
-  },
-  membre: {
-    inactif: "border-[#8FB5BA] bg-[#EDF4F5] text-[#2A5259] hover:border-[#3D6B72] hover:bg-[#DFEDEB]",
-    actif: "border-[#22484F] bg-[#3D6B72] text-white shadow-[0_6px_18px_rgba(61,107,114,0.5)]",
-    badgeInactif: "bg-[#A5473D] text-white",
-    badgeActif: "bg-[#C89F62] text-[#2B2416]",
-  },
-  creer: {
-    inactif: "border-[#153F2C] bg-[#1F5B3F] text-white shadow-[0_4px_14px_rgba(31,91,63,0.35)] hover:bg-[#184A33]",
-    actif: "border-[#8A6420] bg-[#C89F62] text-[#2B2416] shadow-[0_6px_18px_rgba(200,159,98,0.5)]",
-    badgeInactif: "bg-[#C89F62] text-[#2B2416]",
-    badgeActif: "bg-[#1F5B3F] text-white",
-  },
-};
-const themeOnglet = (key: TabKey): ThemeOnglet =>
-  key === "codes" ? "creer"
-  : key === "m-cotis" || key === "m-epargne" || key === "m-prets" || key === "parametres" ? "membre"
-  : "bureau";
 
 function tabFromHash(): TabKey {
   try {
@@ -596,28 +567,6 @@ export function MaquetteSecretaire() {
     return () => clearTimeout(t0);
   }, [tab]);
 
-  const renderTab = (t: (typeof TABS)[number], actif: boolean) => {
-    const badge = badgeDe(t.key);
-    const th = THEME_ONGLETS[themeOnglet(t.key)];
-    return (
-      <button
-        key={t.key}
-        type="button"
-        onClick={() => goTab(t.key)}
-        aria-current={actif ? "page" : undefined}
-        className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border-2 px-3 py-2 text-[12.5px] font-bold transition-all sm:min-h-[48px] sm:gap-2 sm:px-3.5 sm:py-2.5 sm:text-[14px] ${actif ? th.actif : th.inactif}`}
-      >
-        {t.icon}
-        {t.label}
-        {badge > 0 && (
-          <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-black ${actif ? th.badgeActif : th.badgeInactif}`}>
-            {badge}
-          </span>
-        )}
-      </button>
-    );
-  };
-
   const jourReunion = annee != null && moisIdx != null ? secondSunday(annee, moisIdx) : 0;
   const taux = regl ? regl.epargne.tauxMensuel || 3 : 3;
   const [tauxPropose, setTauxPropose] = useState<number | null>(null);
@@ -652,11 +601,13 @@ export function MaquetteSecretaire() {
         }
       />
 
-      {/* ── onglets (v24 : 4 SECTIONS libellées — fini le rang mélangé) ── */}
-      <NavOnglets
+      {/* ── v30 : MENU HAMBURGER — la barre ☰ + le tiroir des 4 sections
+              (Mémoire de la réunion, Gestion de la tontine, Membres & suivi,
+              Mon espace membre & outils) : les 20 onglets ne dévorent plus
+              la page, le contenu redevient lisible ── */}
+      <MenuHamburger
         ariaLabel="Sections du secrétariat"
-        etiquette={`Secrétariat — ${GROUPES.length} sections · ${TABS.length} onglets, chacun avec son URL`}
-        etiquetteCourte={`Secrétariat — ${GROUPES.length} sections · ${TABS.length} onglets`}
+        libelle={`${GROUPES.length} sections · ${TABS.length} onglets`}
         couleurPoint="#6E4B71"
         groupes={GROUPES.map((g) => ({
           label: g.label,
@@ -666,7 +617,6 @@ export function MaquetteSecretaire() {
         }))}
         actif={tab}
         goTab={goTab}
-        render={renderTab}
       />
 
       {/* ── contenu ── */}

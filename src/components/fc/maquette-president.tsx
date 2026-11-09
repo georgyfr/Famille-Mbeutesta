@@ -28,7 +28,7 @@ import {
   Trash2, Ticket, Undo2, UserCheck, UserPlus, Users, Vote, Wallet, XCircle,
 } from "lucide-react";
 import { FcCard } from "./ui";
-import { useOngletsVus, useHorsEcranNav, PastilleOnglets } from "./maquette-ui";
+import { useOngletsVus, MenuHamburger } from "./maquette-ui";
 import { ReglageNotifications } from "./reglage-notifications";
 import {
   MEMBRES_FICTIFS, MOIS_FR, ROLE_META, TONTINE, TAUX_DEFAUT, loadMontants, saveMontants,
@@ -963,37 +963,6 @@ export function MaquettePresident() {
   );
   const tabsGestion = tabsVisibles.filter((t) => !t.membre);
   const tabsMembre = tabsVisibles.filter((t) => t.membre);
-  const renderTab = (t: (typeof TABS)[number]) => {
-    const actif = tab === t.key;
-    const badge = badgeVu(t.key);
-    return (
-      <button
-        key={t.key}
-        type="button"
-        onClick={() => goTab(t.key)}
-        aria-current={actif ? "page" : undefined}
-        className={`inline-flex min-h-[46px] items-center gap-2 rounded-xl border-2 px-3.5 py-2.5 text-[13px] font-bold transition-all sm:min-h-[48px] sm:text-[14px] ${
-          actif
-            ? t.membre ? "border-[#22484F] bg-[#3D6B72] text-white shadow-[0_6px_18px_rgba(61,107,114,0.5)]" : "border-[#153D22] bg-[#1E4D2B] text-white shadow-[0_6px_18px_rgba(30,77,43,0.45)]"
-            : t.membre ? "border-[#8FB5BA] bg-[#EDF4F3] text-[#2A5259] hover:border-[#3D6B72] hover:bg-[#DFEDEB]" : "border-[#C4AE85] bg-white text-[#463C28] hover:border-[#C89F62] hover:bg-[#F7EFDB]"
-        }`}
-      >
-        {t.icon}
-        {t.label}
-        {badge > 0 && (
-          <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-black ${actif ? "bg-[#C89F62] text-[#2B2416]" : "bg-[#A5473D] text-white"}`}>
-            {badge}
-          </span>
-        )}
-      </button>
-    );
-  };
-
-  /* v25 : nav d'onglets NON collante — elle défile avec la page ; la pastille
-   *    flottante la fait remonter dès qu'elle sort de l'écran. */
-  const navRef = useRef<HTMLElement | null>(null);
-  const navHorsEcran = useHorsEcranNav(navRef);
-  const remonterOnglets = () => navRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   return (
     <div className="mx-auto w-full max-w-3xl px-3 pb-10 pt-3 sm:px-4">
@@ -1021,27 +990,30 @@ export function MaquettePresident() {
         </div>
       </FcCard>
 
-      {/* ── onglets — TOUS visibles (pas de coupure), GRANDS et CONTRASTÉS :
-              arrière-plan blanc, bordure épaisse, texte 14px — chaque onglet a
-              son URL : #president/<onglet> — partageable, rafraîchissable.
-              v25 : nav STATIQUE (plus de sticky — elle ne masque plus le
-              contenu en scollant) + pastille « Onglets » pour la remonter ── */}
-      <nav ref={navRef} aria-label="Sections du poste de commandement" className="relative -mx-3 mt-3 bg-[#F6EFE2]/95 px-3 py-2 backdrop-blur scroll-mt-14 sm:-mx-4 sm:px-4">
-        <div className="rounded-2xl border-2 border-[#B8A87E] bg-white p-2.5 shadow-[0_10px_30px_rgba(42,74,58,0.14)]">
-          {/* v17 : DEUX FAMILLES DE COULEURS — vert = gestion du bureau,
-           *    sarcelle = espace membre personnel ; le président voit du premier
-           *    coup d’œil à quelle section appartient chaque onglet. — */}
-          <p className="flex items-center gap-1.5 px-1 pb-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#1E4D2B]">
-            <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-full bg-[#1E4D2B]" /> Gestion de la Tontine
-          </p>
-          <div className="flex flex-wrap gap-2">{tabsGestion.map(renderTab)}</div>
-          <p className="flex items-center gap-1.5 px-1 pb-2 pt-3 text-[10px] font-black uppercase tracking-[0.16em] text-[#2A5259]">
-            <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-full bg-[#3D6B72]" /> Espace membre — le président cotise, épargne et emprunte comme tous
-          </p>
-          <div className="flex flex-wrap gap-2">{tabsMembre.map(renderTab)}</div>
-        </div>
-      </nav>
-      <PastilleOnglets visible={navHorsEcran} couleurPoint="#1E4D2B" onClick={remonterOnglets} />
+      {/* ── v30 : MENU HAMBURGER — les deux familles d'onglets (Gestion de la
+              Tontine en vert, Espace membre en sarcelle) dans un tiroir
+              latéral ; la barre ☰ collante ne dévore plus la page. Chaque
+              onglet garde son URL : #president/<onglet> ── */}
+      <MenuHamburger
+        ariaLabel="Sections du poste de commandement"
+        libelle={`${tabsVisibles.length} onglets`}
+        couleurPoint="#1E4D2B"
+        groupes={[
+          {
+            label: "Gestion de la Tontine",
+            couleur: "#1E4D2B",
+            onglets: tabsGestion.map((t) => ({ key: t.key, label: t.label, icon: t.icon, badge: badgeVu(t.key) })),
+          },
+          {
+            label: "Espace membre",
+            note: "le président cotise, épargne et emprunte comme tous",
+            couleur: "#3D6B72",
+            onglets: tabsMembre.map((t) => ({ key: t.key, label: t.label, icon: t.icon, badge: badgeVu(t.key) })),
+          },
+        ]}
+        actif={tab}
+        goTab={goTab}
+      />
 
       {/* ── contenu ── */}
       <div className="mt-3 space-y-3.5">

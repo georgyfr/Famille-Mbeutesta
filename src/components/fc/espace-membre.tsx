@@ -50,7 +50,7 @@ import {
 import { FcCard } from "./ui";
 import { ReglageNotifications } from "./reglage-notifications";
 import {
-  Block, Btn, BtnConfirme, EnteteConsole, KpiCard, NavOnglets, P,
+  Block, Btn, BtnConfirme, EnteteConsole, KpiCard, MenuHamburger, P,
   dateCourte, fcfa, fmt, heure, nid, useOngletsVus,
   OK_CLS, OR_CLS, RJ_CLS, TE_CLS, VI_CLS, toast,
 } from "./maquette-ui";
@@ -2200,35 +2200,15 @@ export function EspaceMembre({ voirApp }: { voirApp?: () => void }) {
         }
       />
 
-      <NavOnglets<TabKey>
+      {/* v30 : MENU HAMBURGER — les 15 onglets en 3 sections dans un tiroir,
+       *    la page affiche enfin le CONTENU plutôt que des rangées de boutons */}
+      <MenuHamburger<TabKey>
         ariaLabel="Sections de l'espace membre"
-        etiquette="Espace membre — 3 sections · 15 onglets, chacun avec son URL"
-        etiquetteCourte="Espace membre"
+        libelle={`${groupes.length} sections · ${groupes.reduce((s, g) => s + g.onglets.length, 0)} onglets`}
         couleurPoint="#1E4D2B"
         groupes={groupes}
         actif={tab}
         goTab={aller}
-        render={(t, actif) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => aller(t.key)}
-            aria-current={actif ? "page" : undefined}
-            className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-full border-2 px-3 py-1.5 text-[12.5px] font-bold transition-all active:scale-[0.97] ${
-              actif
-                ? "border-[#C89F62] bg-[#C89F62] text-[#2B2416] shadow-[0_4px_14px_rgba(200,159,98,0.4)]"
-                : "border-[#E5DCC0] bg-white text-[#2B3530] hover:border-[#C89F62]/60 hover:bg-[#FBF7EA]"
-            }`}
-          >
-            {t.icon}
-            {t.label}
-            {t.badge != null && t.badge > 0 && (
-              <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-black ${actif ? "bg-[#2B2416] text-[#C89F62]" : "bg-[#A5473D] text-white"}`}>
-                {t.badge}
-              </span>
-            )}
-          </button>
-        )}
       />
 
       <div className="mt-3 space-y-3.5">{contenu[tab]}</div>

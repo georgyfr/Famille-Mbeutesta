@@ -139,6 +139,21 @@
   animation: fc-fade-up 0.35s ease-out both;
 }
 
+/* v30 — entrée du tiroir du MENU HAMBURGER (consoles du bureau) */
+@keyframes fc-drawer-in {
+  from {
+    transform: translateX(-28px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.fc-drawer-in {
+  animation: fc-drawer-in 0.22s ease-out both;
+}
+
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);

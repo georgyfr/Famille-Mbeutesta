@@ -1,7 +1,21 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BASCULE MAQUETTE ⇄ APPLICATION — Famille.Mbeutetsa (v29)
+// BASCULE MAQUETTE ⇄ APPLICATION — Famille.Mbeutetsa (v30)
+//
+// v30 — DEMANDE DE L'ADMINISTRATEUR : « les différents boutons des pages
+// occupent toute la page, ça rend la navigation difficile — organiser toutes
+// les sections dans un menu hamburger… et le même mécanisme pour tous les
+// autres membres du bureau. »
+//   · MENU HAMBURGER (MenuHamburger, maquette-ui) : UNE barre compacte
+//     collante (☰ + onglet courant) + un TIROIR latéral regroupant toutes
+//     les sections et leurs onglets (Mémoire de la réunion, Gestion de la
+//     cantine…) — le contenu redevient lisible ;
+//   · MÊME MÉCANISME sur les 4 consoles : Secrétaire (20 onglets / 4
+//     sections), Président (2 familles), Commissaire, Espace Membre ;
+//   · badges conservés : le ☰ affiche le total des actions attendues hors
+//     onglet courant, l'onglet courant garde son propre chiffre ;
+//   · chaque onglet garde son URL (#secretaire/…, #president/…).
 //
 // v29 — DEMANDE DE L'ADMINISTRATEUR : « “Recevoir la notification” — supprime
 // cette phrase car la notification automatique doit être par défaut ; ajoute
@@ -158,8 +172,8 @@ export function MaquetteGate() {
         <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#C89F62]" />
         <p className="hidden min-w-0 truncate text-[11px] font-semibold sm:block">
           {console_ === "membre"
-            ? `Espace Membre v29 — ${CONSOLES[console_]}`
-            : `Maquette v29 — ${CONSOLES[console_]}`}
+            ? `Espace Membre v30 — ${CONSOLES[console_]}`
+            : `Maquette v30 — ${CONSOLES[console_]}`}
         </p>
         {/* v21 — sélecteur de consoles : VISIBLE EN PERMANENCE (maquette comme
             application). Un clic pose le hash et ouvre la console visée. */}
