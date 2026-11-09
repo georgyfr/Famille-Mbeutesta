@@ -50,6 +50,15 @@ const FC_BROWSER_GATE =
   "var m=t()?'modern':'legacy';" +
   "e.className+=m==='modern'?' fc-modern':' fc-legacy';" +
   "try{window.sessionStorage.setItem('fc_gate',m)}catch(r){}" +
+  // v31 — MASQUE DURABLE dans <head> : React réinitialise le className de <html>
+  // à l'hydratation (perte fc-modern/fc-legacy) et les deux couches s'empilaient
+  // (écran « Bienvenue » du Lite AU-DESSUS de la maquette — capture 09/11). Ce
+  // <style> injecté hors arbre React SURVIT : moderne → le fallback Lite est
+  // caché dès le premier pixel ; legacy → la maquette et le footer sont cachés.
+  "var st=document.createElement('style');st.id='fc-gate-mask';" +
+  "st.textContent=m==='modern'?'#fc-legacy{display:none!important}'" +
+  "  :'.fc-root,.fc-footer{display:none!important}';" +
+  "(document.head||e).appendChild(st);" +
   // Legacy : injection DOM de la logique Lite ES5 (hors arbre React — aucun
   // mismatch d'hydratation ; boot() attend DOMContentLoaded si nécessaire).
   "if(m==='legacy'){var s=document.createElement('script');s.src='/fc-lite.js';" +

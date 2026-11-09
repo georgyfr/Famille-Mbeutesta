@@ -16,28 +16,11 @@ import { loadVousRole } from "./tontine-bureau";
 import { purgerAppUneFois } from "./purge-app";
 import { FcSpinner } from "./ui";
 
-/** Décision durable du browser gate (layout.tsx) — survit à l'hydratation React,
- *  qui réinitialise le className de <html>. */
-function gateMode(): "modern" | "legacy" | "" {
-  if (typeof window === "undefined") return "";
-  try {
-    const g = window.sessionStorage.getItem("fc_gate");
-    if (g === "modern" || g === "legacy") return g;
-  } catch {
-    /* rien */
-  }
-  return String(document.documentElement.className).indexOf("fc-legacy") !== -1 ? "legacy" : "";
-}
-
-/** Retire le fallback Lite (navigateurs 2015) dès que React prend le relais. */
-function removeLegacyApp() {
-  try {
-    const el = document.getElementById("fc-legacy");
-    if (el && el.parentNode) el.parentNode.removeChild(el);
-  } catch {
-    /* rien */
-  }
-}
+/** v31 — helpers du gate partagés avec MaquetteGate (voir gate-fix.ts) :
+ *  gateMode, forceLegacyDemande, removeLegacyApp, corrigerFauxNegatifLegacy. */
+import {
+  corrigerFauxNegatifLegacy, forceLegacyDemande, gateMode, removeLegacyApp,
+} from "./gate-fix";
 
 /** Écran de lancement — sensation d'application native au démarrage à froid. */
 function Splash() {
@@ -98,11 +81,18 @@ export function MainApp() {
   }, []);
 
   useEffect(() => {
-    // Appareil classé « legacy » par le gate (vieux téléphone 2015 ou #fc-force-legacy) :
-    // React s'efface devant la version Lite ES5 (style inline sur son propre nœud).
+    // Appareil classé « legacy » par le gate (détection stricte ou #fc-force-legacy).
     if (gateMode() === "legacy") {
-      if (rootRef.current) rootRef.current.style.display = "none";
-      return;
+      if (forceLegacyDemande()) {
+        // Hook de test manuel (#fc-force-legacy) : la version Lite ES5 reste
+        // maîtresse — React s'efface devant elle.
+        if (rootRef.current) rootRef.current.style.display = "none";
+        return;
+      }
+      // v31 — FAUX NÉGATIF : React s'exécute (on monte) → le navigateur est
+      // moderne. On retourne le masque, on repose les classes et on retire le
+      // fallback Lite — FINI l'empilement « Bienvenue » au-dessus de la maquette.
+      corrigerFauxNegatifLegacy();
     }
     removeLegacyApp();
     let cleanupTimers: () => void = () => undefined;

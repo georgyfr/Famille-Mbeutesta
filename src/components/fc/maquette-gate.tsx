@@ -49,6 +49,7 @@ import { MaquettePresident } from "./maquette-president";
 import { MaquetteSecretaire } from "./maquette-secretaire";
 import { MaquetteCommissaire } from "./maquette-commissaire";
 import { EspaceMembre } from "./espace-membre";
+import { corrigerFauxNegatifLegacy, forceLegacyDemande, gateMode } from "./gate-fix";
 import { Sparkles, Crown, PenLine, Landmark, Users } from "lucide-react";
 
 type ConsoleKey = "president" | "secretaire" | "commissaire" | "membre";
@@ -94,8 +95,10 @@ function hashConsoleExplicite(): boolean {
 
 export function MaquetteGate() {
   // Navigateurs 2015 (classe fc-legacy posée par le browser gate) : l'app Lite
-  // ES5 reste maîtresse — la maquette React ne s'y affiche pas.
-  const [legacy] = useState(
+  // ES5 reste maîtresse — la maquette React ne s'y affiche pas. v31 : la valeur
+  // est réévaluée après le montage — si React monte, MainApp CORRIGE le faux
+  // négatif (classe re-posée en fc-modern) et la maquette reprend la main.
+  const [legacy, setLegacy] = useState(
     () => typeof document !== "undefined" && /fc-legacy/.test(document.documentElement.className),
   );
   // v27 — L'APPLICATION TELLE QUELLE à l'ouverture : le mode initial est « app »
@@ -124,7 +127,17 @@ export function MaquetteGate() {
   };
 
   useEffect(() => {
+    // v31 — CORRECTION DU FAUX NÉGATIF AVANT TOUT : React monte (preuve
+    // vivante que le navigateur est moderne). Si le gate l'avait classé
+    // « legacy » à tort (détection stricte), on retourne le masque posé dans
+    // <head> et on retire le fallback Lite — sinon l'écran « Bienvenue » du
+    // Lite restait empilé AU-DESSUS de la maquette (capture du 09/11).
+    // #fc-force-legacy explicite reste respecté (version Lite demandée).
+    if (gateMode() === "legacy" && !forceLegacyDemande()) corrigerFauxNegatifLegacy();
     const sync = () => {
+      // v31 — réévaluation du mode Lite : la correction ci-dessus a re-posé
+      // fc-modern → la maquette React reprend la main.
+      setLegacy(/fc-legacy/.test(document.documentElement.className));
       setConsole_(consoleFromHash());
       // v20 — switcher « Mon poste au bureau » : quand le hash vise une
       // console, la vue bascule d'elle-même de l'application vers la maquette
@@ -172,8 +185,8 @@ export function MaquetteGate() {
         <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#C89F62]" />
         <p className="hidden min-w-0 truncate text-[11px] font-semibold sm:block">
           {console_ === "membre"
-            ? `Espace Membre v30 — ${CONSOLES[console_]}`
-            : `Maquette v30 — ${CONSOLES[console_]}`}
+            ? `Espace Membre v31 — ${CONSOLES[console_]}`
+            : `Maquette v31 — ${CONSOLES[console_]}`}
         </p>
         {/* v21 — sélecteur de consoles : VISIBLE EN PERMANENCE (maquette comme
             application). Un clic pose le hash et ouvre la console visée. */}

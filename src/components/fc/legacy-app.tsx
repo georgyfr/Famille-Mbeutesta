@@ -74,13 +74,9 @@ html.fc-legacy body{background:#F4F1E9;margin:0}
 .l-btn-ghost{background:none;color:#5C6B60;font-weight:normal;font-size:14px;min-height:40px}
 .l-btn[disabled]{opacity:.5}
 
-/* ── Auth : en-tête de marque ── */
-.l-auth-head{text-align:center;padding:8px 0 14px}
-.l-auth-logo{width:84px;border-radius:20px;background:#FBF7EA;padding:5px;
-  border:1px solid #E5DCC0}
-.l-auth-title{font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:bold;
-  color:#1E4D2B;margin-top:10px}
-.l-auth-sub{font-size:13px;color:#5C6B60;line-height:1.5;margin:6px auto 0;max-width:320px}
+/* v31 — Auth : en-tête de marque (logo 84 px + « Bienvenue 🌳 » + sous-titre)
+ * SUPPRIMÉ — la section ne servait à rien (retour terrain) ; le blason reste
+ * dans l'en-tête l-header et l'écran démarre directement sur le téléphone. */
 
 /* ── Notification simulée + étapes ── */
 .l-push{background:#fff;border:1px solid #E5DCC0;border-radius:12px;padding:12px;margin:10px 0}
@@ -202,16 +198,11 @@ export function LegacyApp() {
         </header>
 
         {/* ══ Parcours d'inscription façon WhatsApp ══ */}
+        {/* v31 — SECTION « BIENVENUE » SUPPRIMÉE (retour terrain : « elle ne
+         *    sert à rien ») : le gros logo centré + titre « Bienvenue 🌳 » +
+         *    sous-titre WhatsApp sont retirés. Le blason reste dans l'en-tête,
+         *    et l'écran va DIRECTEMENT à la carte du numéro de téléphone. */}
         <div id="l-auth">
-          <div className="l-auth-head">
-            <img src="/logo-famille.webp" alt="" className="l-auth-logo" />
-            <p className="l-auth-title">Bienvenue 🌳</p>
-            <p className="l-auth-sub">
-              Votre numéro de téléphone est votre identifiant — comme sur WhatsApp. Aucun mot de passe à
-              retenir.
-            </p>
-          </div>
-
           {/* Étape 1 — numéro */}
           <div id="l-step-phone" className="l-card">
             <p className="l-label">Votre numéro de téléphone</p>

@@ -376,9 +376,17 @@ export function MenuHamburger<T extends string>({ ariaLabel, libelle, couleurPoi
     <>
       {/* barre compacte COLLANTE (sous le bandeau de consoles, ~35 px) —
        *    48 px de haut : elle ne dévore plus l'écran, le contenu passe
-       *    dessous en scollant mais le menu reste TOUJOURS accessible. */}
+       *    dessous en scollant mais le menu reste TOUJOURS accessible.
+       *    v31 — LE LOGO (blason) est ici, AU NIVEAU DU MENU HAMBURGER
+       *    (retour terrain : « le logo doit être au niveau du menu
+       *    hamburger ») — même mécanique pour toutes les consoles du bureau. */}
       <div className="sticky top-[35px] z-20 -mx-3 mt-3 px-3 sm:-mx-4 sm:px-4">
         <div className="flex items-center gap-2 rounded-2xl border-2 border-[#B8A87E] bg-white/95 py-1.5 pl-2 pr-2.5 shadow-[0_8px_24px_rgba(42,74,58,0.16)] backdrop-blur sm:pl-2.5">
+          <img
+            src="/logo-famille.webp"
+            alt="Armoiries de la famille Mbeutetsa"
+            className="h-9 w-9 shrink-0 rounded-xl border-2 border-[#E5DCC0] bg-[#FBF7EA] object-cover p-0.5"
+          />
           <button
             ref={btnRef}
             type="button"
