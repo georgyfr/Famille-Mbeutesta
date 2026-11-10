@@ -1,19 +1,31 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Page d'authentification — Famille.Mbeutetsa (refonte complète)
+// Authentification — Famille.Mbeutetsa (v32 — le CODE est la porte d'entrée)
 //
-// DEUX PARCOURS D'INSCRIPTION :
-//  1. PAR NUMÉRO DE TÉLÉPHONE (recommandé, façon WhatsApp) :
-//     numéro → vérification → nom & prénom (ou au moins un pseudo) → compte.
-//  2. PAR IDENTIFIANT & MOT DE PASSE :
-//     identifiant + mot de passe → pseudo + numéro de téléphone → compte.
-//     Le numéro sert à DÉTECTER l'utilisateur (compte existant retrouvé et
-//     relié à l'identifiant, alertes push, annuaire familial).
+// DEMANDE DE L'ADMINISTRATEUR : « je pensais avoir été clair que tout le
+// monde se connecte avec le code qu'on lui a généré. D'où vient encore cette
+// page ? Je veux une première page uniquement avec le code à coller qui va le
+// rediriger vers une autre page de renseignement. Je veux la page en
+// interface mobile. »
 //
-// DEUX PARCOURS DE CONNEXION :
-//  • numéro + code de vérification (compte retrouvé par le numéro) ;
-//  • identifiant + mot de passe (l'identifiant accepte aussi le numéro).
+// DEUX PAGES, INTERFACE MOBILE (une seule colonne, grands boutons tactiles) :
+//   PAGE 1 — LE CODE : UNIQUEMENT un champ « collez votre code » (FCM-XXXXXX).
+//     · code valide et vierge → PAGE 2 ;
+//     · code déjà utilisé → bouton « Se reconnecter avec mon numéro »
+//       (numéro du code prérempli) — personne ne crée de double compte ;
+//     · code inconnu → message clair (vérifier auprès du bureau).
+//   PAGE 2 — RENSEIGNEMENTS : nom & prénom (ou pseudo) + numéro de téléphone
+//     PRÉREMPLI depuis le code (modifiable si besoin) → la notification de
+//     vérification part automatiquement → le compte est créé DIRECTEMENT avec
+//     le nom saisi (l'ancien écran « Comment souhaitez-vous être appelé » a
+//     disparu) → géolocalisation → accueil avec le rôle attribué par le bureau.
+//
+// RECONNEXION (session perdue, autre appareil) : la personne recolle SON code
+// → « déjà utilisé » → se reconnecte avec son numéro (OTP automatique).
+//
+// LIEN CLIQUABLE (v28, conservé) : « ?code=FCM-XXXXXX » (ou #code=…) ouvre
+// l'app DIRECTEMENT sur la PAGE 2, code déjà accepté et numéro prérempli.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -32,33 +44,13 @@ import { FcButton, FcCard, FcInput, FcSpinner, FcWatermark } from "./ui";
 import { clearVousRole, saveVousRole } from "./tontine-bureau";
 import { ROLE_META } from "./tontine-data";
 import {
-  appliquerCotisationCode, codeInviteEnAttente, consommerCode, poserCodeInvite, trouverCode,
-  retirerCodeInvite, type CodeMembre,
+  appliquerCotisationCode, codeInviteEnAttente, consommerCode, LIBELLES_BUREAU,
+  poserCodeInvite, retirerCodeInvite, trouverCode, type CodeMembre,
 } from "./codes-membres";
 import {
-  ArrowLeft, AtSign, Check, ChevronRight, Eye, EyeOff, KeyRound,
-  Lock, Phone, RefreshCw, ShieldCheck, Smartphone, Ticket, UserRound,
+  ArrowLeft, AtSign, Check, ChevronRight, RefreshCw, ShieldCheck, Smartphone,
+  Ticket, UserRound,
 } from "lucide-react";
-
-const UNIVERSES: { icon: string; label: string; wide?: boolean }[] = [
-  { icon: "👨‍👩‍👧‍👦", label: "U1 · La Famille" },
-  { icon: "📅", label: "U2 · Vie familiale" },
-  { icon: "🤝", label: "U3 · Solidarité" },
-  { icon: "💰", label: "U4 · Finances" },
-  { icon: "🗳️", label: "U5 · Gouvernance" },
-  { icon: "📜", label: "U6 · La Mémoire" },
-  { icon: "🌐", label: "U7 · Réseau & Diaspora", wide: true },
-];
-
-type Step =
-  | { k: "welcome" }
-  | { k: "login-choice" }
-  | { k: "phone"; mode: "signup" | "login" }
-  | { k: "verify"; verifyToken: string; digits: string; demoCode: string; dial: string; iso: string }
-  | { k: "profile"; registerToken: string; digits: string; dial: string; iso: string }
-  | { k: "creds" }
-  | { k: "id-profile"; identifier: string; password: string }
-  | { k: "login-creds" };
 
 function onlyDigits(s: string): string {
   return s.replace(/\D/g, "");
@@ -86,16 +78,13 @@ function placeholderFor(country: Country): string {
   return country.iso === "CM" ? "6 91 23 45 67" : "Numéro sans l'indicatif";
 }
 
-/* ─── Validation identifiant : 3-30, lettres/chiffres/._- ─── */
-const IDENT_RE = /^[a-zA-Z0-9._-]{3,30}$/;
-
 /* ═══════════════ CODE D'INVITATION (Task 67) ═══════════════
  * Le bureau (secrétaire, président) crée les membres AVANT leur arrivée et
- * leur remet un code « FCM-XXXXXX ». La personne le colle à l'inscription :
- * son téléphone est prérempli, puis À LA CRÉATION DU COMPTE son rôle et sa
- * cotisation sont appliqués automatiquement (appliquerCodeInvitation, plus
- * bas) — SA page s'ouvre directement, l'assistant de rôle est sauté. Un code
- * n'expire JAMAIS. */
+ * leur remet un code « FCM-XXXXXX ». v32 : la personne colle le code SUR LA
+ * PREMIÈRE PAGE — c'est la SEULE façon d'entrer. Son téléphone est prérempli,
+ * puis À LA CRÉATION DU COMPTE son rôle et sa cotisation sont appliqués
+ * automatiquement (appliquerCodeInvitation, plus bas) — SA page s'ouvre
+ * directement, l'assistant de rôle est sauté. Un code n'expire JAMAIS. */
 /* Déduit le PAYS d'un numéro international (« +237 6… » → Cameroun) — sert au
  * préremplissage depuis un code d'invitation : le pays ET le numéro sont
  * posés, quelle que soit la détection automatique du navigateur. */
@@ -130,379 +119,378 @@ function appliquerCodeInvitation(codeAtt: string | null, fullName: string, uid: 
   });
 }
 
-/* Champ « J'ai un code d'invitation » — v27 : PORTE D'ENTRÉE du parcours
- * (1ʳᵉ ouverture de l'app = insertion du code → puis le nom → puis la
- * détection de position → l'accueil). OUVERT par défaut ; repliable d'un clic
- * (« Je n'ai pas de code ») pour le parcours sans invitation.
- * onCodeValide permet à l'écran hôte de PRÉREMPLIR le numéro de téléphone.
- * v28 — codeInitial : le code arrive PRÉCHARGÉ par un LIEN CLIQUABLE
- * (?code=FCM-XXXXXX partagé par le bureau) — le champ s'affiche déjà
- * « accepté », la personne ne colle rien. */
-function ChampCodeInvitation({
-  onCodeValide,
-  codeInitial,
-}: {
-  onCodeValide?: (c: CodeMembre) => void;
-  codeInitial?: CodeMembre | null;
-}) {
-  const [ouvert, setOuvert] = useState(true);
-  const [saisie, setSaisie] = useState(codeInitial?.code ?? "");
-  const [valide, setValide] = useState<CodeMembre | null>(codeInitial ?? null);
+/* Nom saisi sur la PAGE 2 — reporté jusqu'à la création du compte (l'ancien
+ * écran « Comment souhaitez-vous être appelé ? » a été supprimé : le compte
+ * est créé DIRECTEMENT après la vérification du numéro). */
+type NomChoisi = { firstName: string; lastName: string; pseudo: string };
 
-  const verifier = () => {
+type Step =
+  | { k: "code" } // PAGE 1 — UNIQUEMENT le code à coller (interface mobile)
+  | { k: "renseignement"; code: CodeMembre } // PAGE 2 — nom + téléphone (prérempli)
+  | { k: "phone"; prefillTel: string | null } // reconnexion — numéro prérempli si code déjà utilisé
+  | {
+      k: "verify";
+      verifyToken: string;
+      digits: string;
+      demoCode: string;
+      dial: string;
+      iso: string;
+      /** Nom saisi en PAGE 2 (inscription) — null = reconnexion par numéro. */
+      nom: NomChoisi | null;
+      /** Retour : PAGE 2 (inscription) ou écran numéro (reconnexion). */
+      codeM: CodeMembre | null;
+      prefillTel: string | null;
+    };
+
+/* Crée le compte DIRECTEMENT après la vérification du numéro (v32) — le nom
+ * vient de la PAGE 2. Remplace l'ancien ProfileScreen (écran « être appelé »
+ * supprimé : plus aucune redemande du nom). */
+async function creerCompteVerifie(registerToken: string, nom: NomChoisi): Promise<{ id: string; fullName: string }> {
+  const res = await api<{ user: { id: string; fullName: string } }>("/api/auth/phone", {
+    body: {
+      action: "register",
+      registerToken,
+      firstName: nom.firstName.trim(),
+      lastName: nom.lastName.trim(),
+      pseudo: nom.pseudo.trim(),
+      deviceName: deviceName(),
+    },
+  });
+  if (!res.ok) throw new Error(res.error);
+  try {
+    localStorage.setItem("fc_uid", res.user.id);
+    localStorage.setItem("fc_name", res.user.fullName);
+    // Nouveau compte → parcours d'accueil complet : localisation puis rôle.
+    localStorage.removeItem("fc_loc_skipped");
+  } catch {
+    /* rien */
+  }
+  // Nouveau compte → le rôle de l'appareil repart à zéro : l'assistant
+  // « Votre rôle dans la Tontine » viendra juste après la géolocalisation —
+  // SAUF si un code d'invitation a été collé : son rôle s'applique déjà ici
+  // (page directe, assistant sauté).
+  clearVousRole();
+  appliquerCodeInvitation(codeInviteEnAttente(), res.user.fullName, res.user.id);
+  toast.success(`Bienvenue dans la famille, ${res.user.fullName.split(" ")[0]} ! 🌳`);
+  void afterAuthPush(true);
+  void familyNotify({
+    title: "Nouveau membre inscrit 🌳",
+    body: `${res.user.fullName} vient de rejoindre Famille.Mbeutetsa.`,
+    tag: "fc-register",
+  });
+  return res.user;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * PAGE 1 — LE CODE. Uniquement le code à coller (demande explicite de
+ * l'administrateur) : pas de choix d'inscription, pas de bouton « Se
+ * connecter » — tout le monde entre avec le code reçu du bureau.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+function CodeScreen({ goto }: { goto: (s: Step) => void }) {
+  const [saisie, setSaisie] = useState("");
+  // Code reconnu mais DÉJÀ UTILISÉ → c'est une reconnexion, pas une création.
+  const [utilise, setUtilise] = useState<CodeMembre | null>(null);
+
+  const valider = () => {
+    if (!saisie.trim()) {
+      toast.error("Collez le code reçu du bureau — format FCM-XXXXXX.");
+      return;
+    }
     const c = trouverCode(saisie);
     if (!c) {
+      setUtilise(null);
       toast.error("Code inconnu — vérifiez auprès du secrétaire ou du président qui l'a généré.");
       return;
     }
     if (c.utiliseLe) {
-      toast.error("Ce code a déjà été utilisé", { description: "Demandez un nouveau code au bureau de la Tontine." });
+      setUtilise(c);
+      toast.error("Ce code a déjà servi à créer un compte.", {
+        description: "Si c'est votre compte, reconnectez-vous avec votre numéro — le bouton ci-dessous préremplit tout.",
+      });
       return;
     }
-    setValide(c);
+    setUtilise(null);
     poserCodeInvite(c.code); // mémorisé jusqu'à la création du compte (consommé ensuite)
-    onCodeValide?.(c);
-    toast.success("Code d'invitation accepté 🎟️", {
-      description: `Bienvenue${c.nomOptionnel ? ` ${c.nomOptionnel}` : ""} ! Votre page s'ouvrira avec le rôle qui vous a été attribué par le bureau.`,
+    toast.success("Code accepté 🎟️", {
+      description: `Bienvenue${c.nomOptionnel ? ` ${c.nomOptionnel}` : ""} ! Complétez vos renseignements — votre page s'ouvrira avec le rôle attribué par le bureau.`,
     });
+    goto({ k: "renseignement", code: c });
   };
 
-  if (!ouvert) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOuvert(true)}
-        className="mt-3 flex w-full items-center gap-2 rounded-xl border border-dashed border-[#C9B98A] bg-[#FBF7EA] px-3 py-2.5 text-left text-[12.5px] font-semibold text-[#5C6B60] transition hover:border-[#C89F62] hover:text-[#7A5B2E]"
-      >
-        <Ticket className="h-4 w-4 shrink-0 text-[#C89F62]" />
-        J&apos;ai un code d&apos;invitation du bureau — le coller ici
-      </button>
-    );
-  }
-
   return (
-    <div className="mt-3 rounded-xl border border-[#C89F62]/60 bg-[#FBF7EA] p-3 ring-1 ring-[#C89F62]/25">
-      <div className="flex items-center justify-between gap-2">
-        <p className="flex items-center gap-1.5 text-[12px] font-bold text-[#2B3530]">
-          <Ticket className="h-4 w-4 text-[#C89F62]" /> Votre code d&apos;invitation
+    <div className="space-y-3">
+      <FcCard className="p-6 sm:p-8">
+        <h2 className="fc-serif mb-1 text-center text-2xl font-bold text-[#1E4D2B]">Ouvrez votre page</h2>
+        <p className="mb-6 text-center text-[14px] leading-relaxed text-[#5C6B60]">
+          Collez le code que le bureau de la Tontine vous a remis.
         </p>
-        <button
-          type="button"
-          onClick={() => setOuvert(false)}
-          className="shrink-0 text-[11px] font-semibold text-[#8A9288] underline hover:text-[#5C6B60]"
-        >
-          Je n&apos;ai pas de code
-        </button>
-      </div>
-      <p className="mt-0.5 text-[11px] leading-snug text-[#8A9288]">
-        Première étape : collez le code reçu du bureau (secrétaire ou président) — format FCM-XXXXXX. Il ne périme jamais.
-      </p>
-      <div className="mt-2 flex items-stretch gap-2">
+
+        <label htmlFor="fc-code-invitation" className="sr-only">
+          Code d&apos;invitation du bureau
+        </label>
         <input
+          id="fc-code-invitation"
           value={saisie}
-          onChange={(e) => setSaisie(e.target.value.toUpperCase())}
-          onKeyDown={(e) => e.key === "Enter" && saisie.trim() && verifier()}
+          onChange={(e) => {
+            setSaisie(e.target.value.toUpperCase());
+            if (utilise) setUtilise(null);
+          }}
+          onKeyDown={(e) => e.key === "Enter" && saisie.trim() && valider()}
           placeholder="FCM-AB12CD"
           aria-label="Code d'invitation du bureau"
           autoCapitalize="characters"
-          className="min-w-0 flex-1 rounded-lg border border-[#C9B98A] bg-white px-3 py-2.5 font-mono text-[14px] font-black tracking-wider text-[#2B3530] outline-none placeholder:font-semibold placeholder:tracking-normal placeholder:text-[#8A9288] focus:border-[#C89F62]"
+          autoComplete="off"
+          spellCheck={false}
+          className="mb-4 h-[64px] w-full rounded-2xl border-2 border-[#C9B98A] bg-white px-4 text-center font-mono text-[22px] font-black tracking-[0.18em] text-[#2B3530] outline-none placeholder:font-semibold placeholder:tracking-[0.12em] placeholder:text-[#B8B2A0] focus:border-[#C89F62] focus:ring-2 focus:ring-[#C89F62]/25"
         />
-        <FcButton onClick={verifier} disabled={!saisie.trim()} className="h-auto min-h-[44px] w-auto shrink-0 px-3 text-[12px]">
-          Utiliser
+
+        <FcButton onClick={valider} disabled={!saisie.trim()} className="h-[56px] w-full text-[16px]">
+          <Ticket className="h-5 w-5" /> Continuer <ChevronRight className="h-5 w-5" />
         </FcButton>
-      </div>
-      {valide && (
-        <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-[#2F6B45]/10 px-2.5 py-2 text-[11.5px] font-semibold leading-snug text-[#2F6B45]">
-          <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>
-            Code <strong className="font-mono">{valide.code}</strong> accepté — {valide.typeMembre === "bureau" ? "membre du bureau" : "membre simple"}
-            {valide.cotisationTypeId ? `, cotisation « ${valide.cotisationNom} »` : ""}. Votre numéro est prérempli ci-dessus.
-          </span>
+
+        {/* Code déjà utilisé → RECONNEXION (jamais un second compte) : le
+            numéro du code est prérempli, la vérification part toute seule. */}
+        {utilise && (
+          <div className="mt-4 rounded-xl border border-[#C89F62]/50 bg-[#FBF7EA] p-3.5">
+            <p className="text-[12.5px] font-semibold leading-snug text-[#7A5B2E]">
+              Le code <strong className="font-mono">{utilise.code}</strong> a déjà servi — s&apos;il était pour vous,
+              reconnectez-vous avec votre numéro :
+            </p>
+            <FcButton
+              variant="outline"
+              onClick={() => goto({ k: "phone", prefillTel: utilise.telephone })}
+              className="mt-2.5 h-[48px] w-full"
+            >
+              Se reconnecter avec mon numéro
+            </FcButton>
+          </div>
+        )}
+
+        <p className="mt-5 text-center text-[12px] leading-relaxed text-[#8A9288]">
+          Le code vous a été remis par le secrétaire ou le président (format FCM-XXXXXX).
+          Il ne périme jamais.
         </p>
-      )}
+      </FcCard>
+
+      <p className="px-2 text-center text-[12.5px] leading-relaxed text-[#5C6B60]">
+        Pas encore reçu de code ? Demandez-le au secrétaire ou au président de votre tontine.
+      </p>
     </div>
   );
 }
 
-/* v28 — LIEN CLIQUABLE du bureau : « ?code=FCM-XXXXXX » (ou #code=…) ouvre
- * l'app DIRECTEMENT sur l'inscription, code déjà accepté et numéro prérempli
- * — la personne clique, tape son nom, sa page s'ouvre. Lecture UNE fois à
- * l'initialisation du composant (le contenu du lien est statique) — JAMAIS
- * dans un effet (setState en effet interdit) : initialisateurs paresseux. */
-type LienCode =
-  | { statut: "absent"; code: null }
-  | { statut: "ok"; code: CodeMembre }
-  | { statut: "inconnu" | "utilise"; code: null };
-
-function lireCodeDuLien(): LienCode {
-  if (typeof window === "undefined") return { statut: "absent", code: null };
-  try {
-    const lire = (s: string) => new URLSearchParams(s.startsWith("#") ? s.slice(1) : s);
-    const q = lire(window.location.search);
-    const h = lire(window.location.hash);
-    const brut =
-      q.get("code") ?? q.get("invitation") ?? q.get("invite") ??
-      h.get("code") ?? h.get("invitation") ?? h.get("invite");
-    if (!brut) return { statut: "absent", code: null };
-    const c = trouverCode(brut);
-    if (!c) return { statut: "inconnu", code: null };
-    if (c.utiliseLe) return { statut: "utilise", code: null };
-    return { statut: "ok", code: c };
-  } catch {
-    return { statut: "absent", code: null };
-  }
-}
-
-export function AuthFlow({ onReady }: { onReady: (name: string) => void }) {
-  // Code préchargé par le lien (null = parcours normal) — lu UNE fois.
-  const [lien] = useState<LienCode>(lireCodeDuLien);
-  const precharge = lien.statut === "ok" ? lien.code : null;
-  const [busy, setBusy] = useState(false);
-  // Lien valide → saut direct à l'inscription par numéro (pas d'écran d'accueil).
-  const [step, setStep] = useState<Step>(() =>
-    precharge ? { k: "phone", mode: "signup" } : { k: "welcome" },
-  );
-
-  return (
-    <div className="relative flex w-full flex-1 flex-col lg:flex-row">
-      {/* ══════════ Panneau gauche — branding (desktop) ══════════ */}
-      <aside className="relative hidden w-[46%] shrink-0 flex-col justify-between overflow-hidden bg-[#2A4A3A] p-10 text-white lg:flex xl:p-12">
-        <svg
-          className="pointer-events-none absolute -bottom-24 -right-24 opacity-10"
-          width="520"
-          height="520"
-          viewBox="0 0 200 200"
-          fill="currentColor"
-          aria-hidden="true"
-        >
-          <circle cx="100" cy="35" r="16" />
-          <circle cx="50" cy="100" r="16" />
-          <circle cx="150" cy="100" r="16" />
-          <circle cx="100" cy="165" r="16" />
-          <line x1="100" y1="51" x2="100" y2="84" stroke="currentColor" strokeWidth="6" />
-          <line x1="100" y1="84" x2="55" y2="96" stroke="currentColor" strokeWidth="6" />
-          <line x1="100" y1="84" x2="145" y2="96" stroke="currentColor" strokeWidth="6" />
-          <line x1="100" y1="116" x2="100" y2="149" stroke="currentColor" strokeWidth="6" />
-        </svg>
-
-        <div className="relative z-10">
-          <div className="mb-12 flex items-center gap-4">
-            <img
-              src="/logo-famille.webp"
-              alt="Armoiries de la famille Mbeutetsa"
-              className="h-16 w-16 rounded-2xl bg-[#FBF7EA] p-1.5 shadow-lg ring-1 ring-[#C89F62]/70"
-            />
-            <div>
-              <p className="fc-serif text-2xl font-bold tracking-tight">Famille.Mbeutetsa</p>
-              <p className="text-sm text-white/60">Espace numérique de la famille</p>
-            </div>
-          </div>
-
-          <h1 className="fc-serif mb-4 max-w-md text-4xl font-bold leading-tight">
-            « Une famille unie est une force inébranlable. »
-          </h1>
-          <p className="mb-10 max-w-md text-lg text-white/70">
-            Retrouvez vos proches, la caisse familiale, les votes et la mémoire des Mbeutetsa — réunis dans une
-            seule application.
-          </p>
-
-          <div className="grid max-w-md grid-cols-2 gap-3">
-            {UNIVERSES.map((u) => (
-              <div
-                key={u.label}
-                className={`flex items-center gap-3 rounded-lg bg-white/10 px-4 py-2.5 ${
-                  u.wide ? "col-span-2 justify-center" : ""
-                }`}
-              >
-                <span className="text-xl" aria-hidden="true">{u.icon}</span>
-                <span className="text-sm">{u.label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <p className="relative z-10 text-sm text-white/40">© Famille.Mbeutetsa · 2026 · Cameroun</p>
-      </aside>
-
-      {/* ══════════ Panneau droit — parcours d'authentification ══════════ */}
-      <div className="relative flex min-h-full flex-1 flex-col items-center px-4 py-8 sm:py-12">
-        <FcWatermark />
-
-        <div className="relative z-10 mb-2 flex w-full max-w-md items-center justify-center gap-3 lg:hidden">
-          <img
-            src="/logo-famille.webp"
-            alt="Armoiries de la famille Mbeutetsa"
-            className="h-16 w-auto drop-shadow-sm"
-          />
-          <div>
-            <p className="fc-serif text-xl font-bold leading-tight text-[#1E4D2B]">Famille.Mbeutetsa</p>
-            <p className="text-[11px] text-[#8A9288]">Espace numérique de la famille</p>
-          </div>
-        </div>
-
-        <div className="relative z-10 w-full max-w-md space-y-4">
-          {/* v28 — signalement inline si le lien portait un code inutilisable */}
-          {lien.statut === "utilise" && (
-            <div
-              role="status"
-              className="rounded-xl border border-[#C89F62]/50 bg-[#FBF7EA] px-4 py-3 text-[12.5px] font-semibold leading-snug text-[#7A5B2E]"
-            >
-              Le code de ce lien a déjà été utilisé — si c&apos;est votre compte, connectez-vous avec votre numéro.
-              Sinon, demandez un nouveau code au bureau de la Tontine.
-            </div>
-          )}
-          {lien.statut === "inconnu" && (
-            <div
-              role="status"
-              className="rounded-xl border border-[#C89F62]/50 bg-[#FBF7EA] px-4 py-3 text-[12.5px] font-semibold leading-snug text-[#7A5B2E]"
-            >
-              Le code contenu dans ce lien est inconnu — vérifiez auprès du bureau de la Tontine.
-            </div>
-          )}
-          {step.k === "welcome" && <WelcomeScreen goto={setStep} />}
-          {step.k === "login-choice" && <LoginChoiceScreen goto={setStep} />}
-          {step.k === "phone" && (
-            <PhoneScreen
-              mode={step.mode}
-              busy={busy}
-              setBusy={setBusy}
-              goto={setStep}
-              precharge={precharge}
-            />
-          )}
-          {step.k === "verify" && (
-            <VerifyScreen state={step} busy={busy} setBusy={setBusy} goto={setStep} onReady={onReady} />
-          )}
-          {step.k === "profile" && (
-            <ProfileScreen state={step} busy={busy} setBusy={setBusy} goto={setStep} onReady={onReady} />
-          )}
-          {step.k === "creds" && <CredsScreen busy={busy} setBusy={setBusy} goto={setStep} />}
-          {step.k === "id-profile" && (
-            <IdProfileScreen
-              state={step}
-              busy={busy}
-              setBusy={setBusy}
-              goto={setStep}
-              onReady={onReady}
-            />
-          )}
-          {step.k === "login-creds" && (
-            <LoginCredsScreen busy={busy} setBusy={setBusy} goto={setStep} onReady={onReady} />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ───────────────────────── Écran d'accueil : choix d'inscription ───────────────────────── */
-
-function WelcomeScreen({ goto }: { goto: (s: Step) => void }) {
-  return (
-    <FcCard className="p-6 sm:p-8">
-      <h2 className="fc-serif mb-1 text-center text-3xl font-bold text-[#1E4D2B]">Bienvenue 🌳</h2>
-      <p className="mb-6 text-center text-[15px] leading-relaxed text-[#5C6B60]">
-        Rejoignez le registre vivant des Mbeutetsa. Créez votre compte de la façon qui vous convient.
-      </p>
-
-      <div className="space-y-3">
-        <OptionCard
-          icon={<Phone className="h-5 w-5" />}
-          badge="Recommandé"
-          title="Avec mon numéro de téléphone"
-          desc="La façon WhatsApp : aucun mot de passe à retenir. On vous demandera votre nom ou votre pseudo."
-          onClick={() => goto({ k: "phone", mode: "signup" })}
-        />
-        <OptionCard
-          icon={<KeyRound className="h-5 w-5" />}
-          title="Avec un identifiant & mot de passe"
-          desc="Vous choisirez un identifiant, un mot de passe, votre pseudo et votre numéro de téléphone."
-          onClick={() => goto({ k: "creds" })}
-        />
-      </div>
-
-      <div className="mt-6 border-t border-[#E5DCC0] pt-5 text-center">
-        <p className="mb-2 text-[13px] text-[#8A9288]">Vous avez déjà un compte ?</p>
-        <FcButton variant="outline" onClick={() => goto({ k: "login-choice" })} className="h-[48px]">
-          <Lock className="h-4 w-4" /> Se connecter
-        </FcButton>
-      </div>
-    </FcCard>
-  );
-}
-
-/* ───────────────────────── Choix du mode de connexion ───────────────────────── */
-
-function LoginChoiceScreen({ goto }: { goto: (s: Step) => void }) {
-  return (
-    <FcCard className="p-6 sm:p-8">
-      <BackButton onClick={() => goto({ k: "welcome" })} />
-      <h2 className="fc-serif mb-1 text-center text-2xl font-bold text-[#1E4D2B]">Connexion</h2>
-      <p className="mb-6 text-center text-[14px] leading-relaxed text-[#5C6B60]">
-        Comment souhaitez-vous vous connecter ?
-      </p>
-
-      <div className="space-y-3">
-        <OptionCard
-          icon={<Phone className="h-5 w-5" />}
-          title="Avec mon numéro de téléphone"
-          desc="Un code de vérification vous est envoyé — comme la première fois. Aucun mot de passe."
-          onClick={() => goto({ k: "phone", mode: "login" })}
-        />
-        <OptionCard
-          icon={<KeyRound className="h-5 w-5" />}
-          title="Avec mon identifiant & mot de passe"
-          desc="Votre identifiant ou votre numéro, accompagnés de votre mot de passe."
-          onClick={() => goto({ k: "login-creds" })}
-        />
-      </div>
-
-      <p className="mt-6 border-t border-[#E5DCC0] pt-4 text-center text-[13px] text-[#8A9288]">
-        Pas encore de compte ?{" "}
-        <button
-          className="font-semibold text-[#C89F62] hover:underline"
-          onClick={() => goto({ k: "welcome" })}
-        >
-          Inscrivez-vous
-        </button>
-      </p>
-    </FcCard>
-  );
-}
-
-/* ───────────────────────── Saisie du numéro (inscription & connexion) ───────────────────────── */
-
-function PhoneScreen({
-  mode,
+/* ═══════════════════════════════════════════════════════════════════════════
+ * PAGE 2 — RENSEIGNEMENTS. La personne arrive du code (collé ou lien
+ * cliquable) : nom & prénom (ou pseudo), numéro PRÉREMPLI depuis le code
+ * (modifiable si elle emprunte un autre téléphone). « Continuer » déclenche
+ * la vérification automatique — le compte est créé juste après, sans
+ * redemander le nom.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+function RenseignementScreen({
+  state,
   busy,
   setBusy,
   goto,
-  precharge,
 }: {
-  mode: "signup" | "login";
+  state: Extract<Step, { k: "renseignement" }>;
   busy: boolean;
   setBusy: (b: boolean) => void;
   goto: (s: Step) => void;
-  /** v28 — code préchargé par un LIEN CLIQUABLE (?code=…) : numéro prérempli. */
-  precharge?: CodeMembre | null;
+}) {
+  const c = state.code;
+
+  // Nom éventuellement indiqué par le bureau (« Jean Mbeutetsa ») → prérempli.
+  const parties = c.nomOptionnel.trim().split(/\s+/).filter(Boolean);
+  const [firstName, setFirstName] = useState(parties.length >= 2 ? parties[0] : c.nomOptionnel.trim());
+  const [lastName, setLastName] = useState(parties.length >= 3 ? parties.slice(1).join(" ") : (parties.length === 2 ? parties[1] : ""));
+  const [pseudo, setPseudo] = useState("");
+
+  const { country, setCountry, ready } = usePhoneCountry();
+  const [digits, setDigits] = useState("");
+  const maxD = maxDigitsFor(country);
+
+  // Le préremplissage depuis le code s'applique UNE fois, APRÈS la détection
+  // automatique du pays (sinon elle l'écraserait) — le code fait foi.
+  const prechargeFait = useRef(false);
+  useEffect(() => {
+    if (!ready || prechargeFait.current) return;
+    prechargeFait.current = true;
+    const pays = paysDepuisTelephone(c.telephone);
+    if (pays) setCountry(pays);
+    const dial = pays?.dial ?? country.dial;
+    const brut = c.telephone.replace(/^\+/, "");
+    const d = brut.startsWith(dial) ? brut.slice(dial.length) : brut;
+    if (d) setDigits(onlyDigits(d).slice(0, maxDigitsFor(pays ?? country)));
+  }, [ready, c.telephone, country, setCountry]);
+
+  const nomComplet = (firstName.trim().length >= 2 && lastName.trim().length >= 2) || pseudo.trim().length >= 2;
+  const toutComplet = nomComplet && phoneDigitsOk(country, digits);
+
+  const continuer = async () => {
+    if (!nomComplet) {
+      toast.error("Indiquez votre prénom et votre nom — ou au moins un pseudo.");
+      return;
+    }
+    if (!phoneDigitsOk(country, digits)) {
+      toast.error(
+        country.iso === "CM"
+          ? "Entrez un numéro camerounais à 9 chiffres (ex : 6 91 23 45 67)."
+          : `Entrez votre numéro ${country.fr} sans l'indicatif +${country.dial}.`,
+      );
+      return;
+    }
+    setBusy(true);
+    try {
+      poserCodeInvite(c.code); // mémorisé jusqu'à la création du compte (consommé ensuite)
+      const res = await api<{ verifyToken: string; demoCode: string; known: boolean }>("/api/auth/phone", {
+        body: { action: "request", phone: country.dial + digits, country: country.iso, deviceName: deviceName() },
+      });
+      if (!res.ok) throw new Error(res.error);
+      try {
+        localStorage.setItem("fc_phone", "+" + country.dial + digits);
+      } catch {
+        /* rien */
+      }
+      toast.success(`Notification de vérification envoyée au +${country.dial} ${groupPhone(digits)}`, {
+        description: "Consultez vos notifications — l'application vérifie ensuite votre appareil.",
+      });
+      goto({
+        k: "verify",
+        verifyToken: res.verifyToken,
+        digits,
+        demoCode: res.demoCode,
+        dial: country.dial,
+        iso: country.iso,
+        nom: { firstName: firstName.trim(), lastName: lastName.trim(), pseudo: pseudo.trim() },
+        codeM: c,
+        prefillTel: null,
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Envoi de la notification impossible.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const libelleRole =
+    c.typeMembre === "bureau" && c.bureauRole ? LIBELLES_BUREAU[c.bureauRole] : "Membre simple";
+
+  return (
+    <FcCard className="p-6 sm:p-8">
+      <BackButton onClick={() => goto({ k: "code" })} />
+      <StepBadge current={1} total={2} label="Inscription" />
+      <h2 className="fc-serif mb-1 text-center text-2xl font-bold text-[#1E4D2B]">Vos renseignements</h2>
+      <p className="mb-5 text-center text-[14px] leading-relaxed text-[#5C6B60]">
+        Votre code est accepté ✓ — dites-nous qui vous êtes.
+      </p>
+
+      {/* Ce que le bureau a déjà préparé pour cette personne (rôle, tontine,
+          cotisation) — 100 % déduit du code, rien à choisir ici. */}
+      <div className="mb-5 rounded-xl border border-[#2F6B45]/25 bg-[#2F6B45]/8 p-3.5">
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] font-semibold leading-snug text-[#2F6B45]">
+          <span className="font-mono text-[13px] font-black tracking-wider">{c.code}</span>
+          <span>· {libelleRole}</span>
+          <span>· Tontine de {c.ville}</span>
+          {c.cotisationMontant > 0 && (
+            <span>· {c.cotisationMontant.toLocaleString("fr-FR")} FCFA/mois</span>
+          )}
+        </p>
+      </div>
+
+      <div className="mb-3 space-y-2">
+        <FcInput
+          icon={<UserRound className="h-5 w-5" />}
+          placeholder="Prénom (ex : Jean)"
+          value={firstName}
+          onChange={(e) => setFirstName(e.target.value)}
+          autoComplete="given-name"
+          aria-label="Prénom"
+        />
+        <FcInput
+          icon={<UserRound className="h-5 w-5" />}
+          placeholder="Nom (ex : Mbeutetsa)"
+          value={lastName}
+          onChange={(e) => setLastName(e.target.value)}
+          autoComplete="family-name"
+          aria-label="Nom"
+        />
+        <FcInput
+          icon={<AtSign className="h-5 w-5" />}
+          placeholder="Pseudo — facultatif (ex : Grand Frère)"
+          value={pseudo}
+          onChange={(e) => setPseudo(e.target.value)}
+          aria-label="Pseudo, facultatif"
+        />
+        <div className="flex items-stretch gap-2">
+          <PhoneCountrySelect
+            value={country}
+            onChange={(nc) => {
+              setCountry(nc);
+              setDigits(""); // nouveau pays → nouveau numéro
+            }}
+          />
+          <FcInput
+            className="flex-1"
+            placeholder={placeholderFor(country)}
+            value={groupPhone(digits)}
+            onChange={(e) => setDigits(onlyDigits(e.target.value).slice(0, maxD))}
+            onKeyDown={(e) => e.key === "Enter" && toutComplet && void continuer()}
+            inputMode="tel"
+            autoComplete="tel-national"
+            maxLength={20}
+            aria-label="Numéro de téléphone (sans indicatif)"
+          />
+        </div>
+      </div>
+      <p className="mb-4 px-1 text-center text-[12px] leading-relaxed text-[#8A9288]">
+        Votre numéro est prérempli depuis votre code — vérifiez-le et corrigez-le si nécessaire.
+      </p>
+
+      <FcButton onClick={() => void continuer()} disabled={busy || !toutComplet} className="h-[54px] w-full text-[16px]">
+        {busy ? <FcSpinner /> : <ShieldCheck className="h-5 w-5" />}
+        Continuer <ChevronRight className="h-5 w-5" />
+      </FcButton>
+
+      <p className="mt-3 text-center text-[12px] leading-relaxed text-[#8A9288]">
+        {pseudo.trim().length >= 2 && !nomComplet
+          ? `Vous serez affiché sous le pseudo « ${pseudo.trim()} ».`
+          : "Étape suivante : la vérification du numéro — la notification part toute seule."}
+      </p>
+    </FcCard>
+  );
+}
+
+/* ───────────────────────── Reconnexion par numéro (code déjà utilisé) ───────────────────────── */
+
+function PhoneScreen({
+  busy,
+  setBusy,
+  goto,
+  prefillTel,
+}: {
+  busy: boolean;
+  setBusy: (b: boolean) => void;
+  goto: (s: Step) => void;
+  /** Numéro prérempli quand la personne arrive d'un code « déjà utilisé ». */
+  prefillTel?: string | null;
 }) {
   const [digits, setDigits] = useState("");
   const { country, setCountry, ready } = usePhoneCountry();
   const maxD = maxDigitsFor(country);
-  // Le préremplissage depuis le lien s'applique UNE fois, APRÈS la détection
-  // automatique du pays (sinon elle l'écraserait) — le code fait foi.
+
+  // Préremplissage depuis le code « déjà utilisé » — UNE fois, après la
+  // détection automatique du pays (le code fait foi).
   const prechargeFait = useRef(false);
   useEffect(() => {
-    if (!precharge || !ready || prechargeFait.current) return;
+    if (!prefillTel || !ready || prechargeFait.current) return;
     prechargeFait.current = true;
-    poserCodeInvite(precharge.code); // mémorisé jusqu'à la création du compte (consommé ensuite)
-    const pays = paysDepuisTelephone(precharge.telephone);
+    const pays = paysDepuisTelephone(prefillTel);
     if (pays) setCountry(pays);
     const dial = pays?.dial ?? country.dial;
-    const brut = precharge.telephone.replace(/^\+/, "");
+    const brut = prefillTel.replace(/^\+/, "");
     const d = brut.startsWith(dial) ? brut.slice(dial.length) : brut;
     if (d) setDigits(onlyDigits(d).slice(0, maxDigitsFor(pays ?? country)));
-  }, [precharge, ready, country, setCountry]);
+  }, [prefillTel, ready, country, setCountry]);
 
   const send = async () => {
     if (!phoneDigitsOk(country, digits)) {
@@ -528,20 +516,27 @@ function PhoneScreen({
       toast.success(`Notification de vérification envoyée au +${country.dial} ${groupPhone(digits)}`, {
         description: "Consultez vos notifications — l'application vérifie ensuite votre appareil.",
       });
-      goto({ k: "verify", verifyToken: res.verifyToken, digits, demoCode: res.demoCode, dial: country.dial, iso: country.iso });
+      goto({
+        k: "verify",
+        verifyToken: res.verifyToken,
+        digits,
+        demoCode: res.demoCode,
+        dial: country.dial,
+        iso: country.iso,
+        nom: null, // reconnexion — pas de création de compte
+        codeM: null,
+        prefillTel: prefillTel ?? null,
+      });
     } catch (e) {
-      setEnvoiRate(true); // v29 — repli discret : un bouton « Renvoyer » apparaît
+      setEnvoiRate(true); // repli discret : un bouton « Renvoyer » apparaît
       toast.error(e instanceof Error ? e.message : "Envoi de la notification impossible.");
     } finally {
       setBusy(false);
     }
   };
 
-  /* v29 — NOTIFICATION AUTOMATIQUE (demande de l'administrateur : « la
-   * notification automatique doit être par défaut ») : le bouton « Recevoir
-   * la notification » est SUPPRIMÉ. Dès que le numéro est complet, la
-   * vérification part TOUTE SEULE après un léger délai (anti-course entre
-   * les touches). Le réglage notifications vit dans les PARAMÈTRES. — */
+  /* NOTIFICATION AUTOMATIQUE (v29) : dès que le numéro est complet, la
+   * vérification part TOUTE SEULE après un léger délai (anti-course). */
   const [envoiRate, setEnvoiRate] = useState(false);
   const envoyePourRef = useRef("");
   const cleNum = phoneDigitsOk(country, digits) ? `${country.dial}|${onlyDigits(digits)}` : "";
@@ -557,13 +552,11 @@ function PhoneScreen({
 
   return (
     <FcCard className="p-6 sm:p-8">
-      <BackButton onClick={() => goto(mode === "signup" ? { k: "welcome" } : { k: "login-choice" })} />
-      <StepBadge current={1} total={mode === "signup" ? 3 : 2} label={mode === "signup" ? "Inscription" : "Connexion"} />
-      <h2 className="fc-serif mb-1 text-center text-2xl font-bold text-[#1E4D2B]">Votre numéro de téléphone</h2>
+      <BackButton onClick={() => goto({ k: "code" })} />
+      <StepBadge current={1} total={2} label="Connexion" />
+      <h2 className="fc-serif mb-1 text-center text-2xl font-bold text-[#1E4D2B]">Se reconnecter</h2>
       <p className="mb-6 text-center text-[14px] leading-relaxed text-[#5C6B60]">
-        {mode === "signup"
-          ? "Votre numéro est votre identifiant — dès qu'il est complet, la notification de vérification part automatiquement."
-          : "Dès que votre numéro est complet, une notification avec un code part automatiquement — sans mot de passe."}
+        Entrez le numéro avec lequel votre compte a été créé — la notification part automatiquement, sans mot de passe.
       </p>
 
       <div className="mb-4 flex items-stretch gap-2">
@@ -587,9 +580,6 @@ function PhoneScreen({
         />
       </div>
 
-      {/* v29 — plus AUCUN bouton « Recevoir la notification » : l'envoi est
-       *    AUTOMATIQUE dès que le numéro est complet. En cas d'échec réseau,
-       *    un bouton « Renvoyer la vérification » apparaît (repli discret). — */}
       <div aria-live="polite">
         {busy ? (
           <p className="flex min-h-[54px] items-center justify-center gap-2 rounded-xl bg-[#1E4D2B]/8 px-4 text-[13.5px] font-bold text-[#1E4D2B]">
@@ -605,26 +595,6 @@ function PhoneScreen({
           </p>
         )}
       </div>
-
-      {/* — CODE D'INVITATION (Task 67) : le bureau a créé ce membre avant son
-       *    arrivée — il colle le code reçu, son numéro est prérempli et, dès
-       *    la création du compte, son rôle et sa cotisation s'appliquent.
-       *    v28 : ou préchargé par le LIEN CLIQUABLE du bureau (?code=…). — */}
-      {mode === "signup" && (
-        <ChampCodeInvitation
-          codeInitial={precharge}
-          onCodeValide={(c) => {
-            /* le numéro du code fait FOI : on bascule le pays sur SON indicatif
-             * puis on préremplit le numéro national (préfixe retiré). */
-            const pays = paysDepuisTelephone(c.telephone);
-            const dial = pays?.dial ?? country.dial;
-            if (pays && pays.iso !== country.iso) setCountry(pays);
-            const brut = c.telephone.replace(/^\+/, "");
-            const d = brut.startsWith(dial) ? brut.slice(dial.length) : brut;
-            if (d) setDigits(onlyDigits(d).slice(0, maxDigitsFor(pays ?? country)));
-          }}
-        />
-      )}
 
       <p className="mt-4 text-center text-[12px] text-[#8A9288]">
         {country.iso === "CM"
@@ -655,6 +625,11 @@ function VerifyScreen({
   const [phase, setPhase] = useState<"sent" | "reading" | "detected">("sent");
   const verifiedRef = useRef(false);
 
+  const retourVers = useCallback(
+    () => goto(state.codeM ? { k: "renseignement", code: state.codeM } : { k: "phone", prefillTel: state.prefillTel }),
+    [goto, state.codeM, state.prefillTel],
+  );
+
   const doVerify = useCallback(
     async (c: string) => {
       if (verifiedRef.current) return;
@@ -673,13 +648,26 @@ function VerifyScreen({
           throw new Error(res.error);
         }
         if (res.registered && res.user) {
-          // Le numéro est déjà enregistré → session ouverte, entrée directe
+          // Le numéro est déjà enregistré → session ouverte, entrée directe.
           toast.success(`Content de vous revoir, ${res.user.fullName.split(" ")[0]} !`);
+          // v32 — si un CODE D'INVITATION attendait (collé en PAGE 1 ou lien
+          // cliquable) et que le numéro correspond à un compte EXISTANT
+          // (ex. le bureau régénère un code pour un membre qui avait déjà un
+          // compte « Georges »), le rôle et la cotisation du code s'appliquent
+          // QUAND MÊME — sinon la personne entre sans son poste du bureau.
+          appliquerCodeInvitation(codeInviteEnAttente(), res.user.fullName, res.user.id);
           void afterAuthPush(false);
           onReady(res.user.fullName);
+        } else if (res.registerToken && state.nom) {
+          // v32 — le nom vient de la PAGE 2 : le compte est créé DIRECTEMENT
+          // (fini l'ancien écran « Comment souhaitez-vous être appelé ? »).
+          const u = await creerCompteVerifie(res.registerToken, state.nom);
+          onReady(u.fullName);
         } else if (res.registerToken) {
-          toast.info("Numéro vérifié — complétez votre profil pour créer votre compte.");
-          goto({ k: "profile", registerToken: res.registerToken, digits: state.digits, dial: state.dial, iso: state.iso });
+          // Reconnexion avec un numéro SANS compte → retour au code (seule
+          // porte d'entrée d'une création de compte).
+          toast.info("Aucun compte avec ce numéro — collez le code reçu du bureau pour créer votre compte.");
+          goto({ k: "code" });
         } else {
           throw new Error("Réponse inattendue du serveur.");
         }
@@ -692,7 +680,7 @@ function VerifyScreen({
         setBusy(false);
       }
     },
-    [state.verifyToken, state.digits, setBusy, goto, onReady]
+    [state.verifyToken, state.nom, setBusy, goto, onReady],
   );
 
   // Séquence automatique : la notification arrive, l'application lit le code
@@ -721,8 +709,8 @@ function VerifyScreen({
 
   return (
     <FcCard className="p-6 sm:p-8">
-      <BackButton onClick={() => goto({ k: "phone", mode: "signup" })} />
-      <StepBadge current={2} total={3} label="Inscription" />
+      <BackButton onClick={retourVers} />
+      <StepBadge current={2} total={2} label={state.nom ? "Inscription" : "Connexion"} />
       <h2 className="fc-serif mb-1 text-center text-2xl font-bold text-[#1E4D2B]">Vérification du numéro</h2>
       <p className="mb-5 text-center text-[14px] text-[#5C6B60]">
         Notification envoyée au <strong>{prettyState(state)}</strong>
@@ -790,10 +778,7 @@ function VerifyScreen({
         {manual ? (
           <button
             className="flex items-center gap-1.5 text-sm text-[#C89F62] hover:underline"
-            onClick={() => {
-              setCode("");
-              goto({ k: "phone", mode: "signup" });
-            }}
+            onClick={retourVers}
             disabled={busy}
           >
             <RefreshCw className="h-3.5 w-3.5" /> Renvoyer la notification
@@ -804,461 +789,6 @@ function VerifyScreen({
           </button>
         )}
       </div>
-    </FcCard>
-  );
-}
-
-/* ───────────────────────── Profil (parcours numéro) : nom & prénom ou pseudo ───────────────────────── */
-
-function ProfileScreen({
-  state,
-  busy,
-  setBusy,
-  goto,
-  onReady,
-}: {
-  state: Extract<Step, { k: "profile" }>;
-  busy: boolean;
-  setBusy: (b: boolean) => void;
-  goto: (s: Step) => void;
-  onReady: (name: string) => void;
-}) {
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [pseudo, setPseudo] = useState("");
-
-  const complete = (firstName.trim().length >= 2 && lastName.trim().length >= 2) || pseudo.trim().length >= 2;
-
-  const submit = async () => {
-    if (!complete) {
-      toast.error("Indiquez votre prénom et votre nom — ou au moins un pseudo.");
-      return;
-    }
-    setBusy(true);
-    try {
-      const res = await api<{ user: { id: string; fullName: string } }>("/api/auth/phone", {
-        body: {
-          action: "register",
-          registerToken: state.registerToken,
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          pseudo: pseudo.trim(),
-          deviceName: deviceName(),
-        },
-      });
-      if (!res.ok) throw new Error(res.error);
-      try {
-        localStorage.setItem("fc_uid", res.user.id);
-        localStorage.setItem("fc_name", res.user.fullName);
-        // Nouveau compte → parcours d'accueil complet : localisation puis rôle.
-        localStorage.removeItem("fc_loc_skipped");
-      } catch {
-        /* rien */
-      }
-      // Nouveau compte → le rôle de l'appareil repart à zéro : l'assistant
-      // « Votre rôle dans la Tontine » viendra juste après la géolocalisation —
-      // SAUF si un code d'invitation a été collé : son rôle s'applique déjà
-      // ici (page directe, assistant sauté).
-      clearVousRole();
-      appliquerCodeInvitation(codeInviteEnAttente(), res.user.fullName, res.user.id);
-      toast.success(`Bienvenue dans la famille, ${res.user.fullName.split(" ")[0]} ! 🌳`);
-      void afterAuthPush(true);
-      void familyNotify({
-        title: "Nouveau membre inscrit 🌳",
-        body: `${res.user.fullName} vient de rejoindre Famille.Mbeutetsa.`,
-        tag: "fc-register",
-      });
-      onReady(res.user.fullName);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Inscription impossible.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <FcCard className="p-6 sm:p-8">
-      <BackButton onClick={() => goto({ k: "phone", mode: "signup" })} />
-      <StepBadge current={3} total={3} label="Inscription" />
-      <h2 className="fc-serif mb-1 text-center text-2xl font-bold text-[#1E4D2B]">
-        Comment souhaitez-vous être appelé ?
-      </h2>
-      <p className="mb-6 text-center text-[14px] leading-relaxed text-[#5C6B60]">
-        Votre numéro <strong>{prettyState(state)}</strong> est vérifié ✓. Indiquez votre nom et votre
-        prénom — ou au moins un pseudo.
-      </p>
-
-      <div className="mb-3 space-y-2">
-        <FcInput
-          icon={<UserRound className="h-5 w-5" />}
-          placeholder="Prénom (ex : Jean)"
-          value={firstName}
-          onChange={(e) => setFirstName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-          autoComplete="given-name"
-          aria-label="Prénom"
-        />
-        <FcInput
-          icon={<UserRound className="h-5 w-5" />}
-          placeholder="Nom (ex : Mbeutetsa)"
-          value={lastName}
-          onChange={(e) => setLastName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-          autoComplete="family-name"
-          aria-label="Nom"
-        />
-        <FcInput
-          icon={<AtSign className="h-5 w-5" />}
-          placeholder="Pseudo — facultatif (ex : Grand Frère)"
-          value={pseudo}
-          onChange={(e) => setPseudo(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-          aria-label="Pseudo, facultatif"
-        />
-      </div>
-      <p className="mb-3 text-center text-[12px] leading-relaxed text-[#8A9288]">
-        {pseudo.trim().length >= 2
-          ? `Vous serez affiché sous le pseudo « ${pseudo.trim()} ».`
-          : "Si vous préférez rester discret, laissez prénom et nom vides et indiquez juste un pseudo."}
-      </p>
-
-      <FcButton onClick={submit} disabled={busy || !complete} className="h-[54px] text-[17px]">
-        {busy ? <FcSpinner /> : <Check className="h-5 w-5" />}
-        Créer mon compte
-      </FcButton>
-    </FcCard>
-  );
-}
-
-/* ───────────────────────── Inscription (parcours identifiant) : 1/2 — identifiant & mot de passe ───────────────────────── */
-
-function CredsScreen({
-  busy,
-  setBusy,
-  goto,
-}: {
-  busy: boolean;
-  setBusy: (b: boolean) => void;
-  goto: (s: Step) => void;
-}) {
-  const [identifier, setIdentifier] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [show, setShow] = useState(false);
-
-  const valid = IDENT_RE.test(identifier.trim()) && password.length >= 6 && password === confirm;
-
-  const submit = () => {
-    if (!IDENT_RE.test(identifier.trim())) {
-      toast.error("Identifiant invalide : 3 à 30 caractères — lettres, chiffres, point, tiret ou underscore.");
-      return;
-    }
-    if (password.length < 6) {
-      toast.error("Mot de passe trop court : au moins 6 caractères.");
-      return;
-    }
-    if (password !== confirm) {
-      toast.error("Les deux mots de passe ne correspondent pas.");
-      return;
-    }
-    goto({ k: "id-profile", identifier: identifier.trim().toLowerCase(), password });
-  };
-
-  return (
-    <FcCard className="p-6 sm:p-8">
-      <BackButton onClick={() => goto({ k: "welcome" })} />
-      <StepBadge current={1} total={2} label="Inscription" />
-      <h2 className="fc-serif mb-1 text-center text-2xl font-bold text-[#1E4D2B]">
-        Votre identifiant & mot de passe
-      </h2>
-      <p className="mb-6 text-center text-[14px] leading-relaxed text-[#5C6B60]">
-        Choisissez un identifiant et un mot de passe. À l&apos;étape suivante, on vous demandera votre pseudo
-        et votre numéro de téléphone.
-      </p>
-
-      <div className="mb-3 space-y-2">
-        <FcInput
-          icon={<AtSign className="h-5 w-5" />}
-          placeholder="Identifiant (ex : jean.mbeutetsa)"
-          value={identifier}
-          onChange={(e) => setIdentifier(e.target.value.replace(/\s/g, ""))}
-          onKeyDown={(e) => e.key === "Enter" && valid && submit()}
-          autoComplete="username"
-          autoCapitalize="none"
-          aria-label="Identifiant"
-        />
-        <PasswordInput
-          value={password}
-          onChange={setPassword}
-          show={show}
-          toggle={() => setShow((v) => !v)}
-          placeholder="Mot de passe (au moins 6 caractères)"
-          autoComplete="new-password"
-        />
-        <PasswordInput
-          value={confirm}
-          onChange={setConfirm}
-          show={show}
-          toggle={() => setShow((v) => !v)}
-          placeholder="Confirmez le mot de passe"
-          autoComplete="new-password"
-          onEnter={valid ? submit : undefined}
-        />
-      </div>
-
-      <FcButton onClick={submit} disabled={busy || !valid} className="h-[54px]">
-        Continuer <ChevronRight className="h-5 w-5" />
-      </FcButton>
-
-      {/* — CODE D'INVITATION (Task 67) : applicable aussi au parcours par
-       *    identifiant — le rôle du code sera appliqué à la création du compte. — */}
-      <ChampCodeInvitation />
-
-      <p className="mt-4 text-center text-[12px] text-[#8A9288]">
-        Lettres, chiffres, point, tiret ou underscore uniquement — ex : <code className="rounded bg-black/5 px-1">jean.m</code>
-      </p>
-    </FcCard>
-  );
-}
-
-/* ───────────────────────── Inscription (parcours identifiant) : 2/2 — pseudo + téléphone (détection) ───────────────────────── */
-
-function IdProfileScreen({
-  state,
-  busy,
-  setBusy,
-  goto,
-  onReady,
-}: {
-  state: Extract<Step, { k: "id-profile" }>;
-  busy: boolean;
-  setBusy: (b: boolean) => void;
-  goto: (s: Step) => void;
-  onReady: (name: string) => void;
-}) {
-  const [pseudo, setPseudo] = useState("");
-  const [digits, setDigits] = useState("");
-  const { country, setCountry } = usePhoneCountry();
-  const maxD = maxDigitsFor(country);
-
-  const valid = pseudo.trim().length >= 2 && phoneDigitsOk(country, digits);
-
-  const submit = async () => {
-    if (!valid) {
-      toast.error("Indiquez votre pseudo et votre numéro de téléphone.");
-      return;
-    }
-    setBusy(true);
-    try {
-      const res = await api<{ linked?: boolean; user: { id: string; fullName: string } }>(
-        "/api/auth/identifier",
-        {
-          body: {
-            action: "register",
-            identifier: state.identifier,
-            password: state.password,
-            pseudo: pseudo.trim(),
-            phone: country.dial + digits,
-            country: country.iso,
-            deviceName: deviceName(),
-          },
-        }
-      );
-      if (!res.ok) throw new Error(res.error);
-      try {
-        localStorage.setItem("fc_uid", res.user.id);
-        localStorage.setItem("fc_name", res.user.fullName);
-        localStorage.setItem("fc_phone", "+" + country.dial + digits);
-        // Nouveau compte → parcours d'accueil complet : localisation puis rôle.
-        localStorage.removeItem("fc_loc_skipped");
-      } catch {
-        /* rien */
-      }
-      // Nouveau compte → le rôle de l'appareil repart à zéro : l'assistant
-      // « Votre rôle dans la Tontine » viendra juste après la géolocalisation —
-      // SAUF si un code d'invitation a été collé (rôle appliqué automatiquement).
-      clearVousRole();
-      appliquerCodeInvitation(codeInviteEnAttente(), res.user.fullName, res.user.id);
-      if (res.linked) {
-        // DÉTECTION : le numéro correspondait à un compte existant → identifiant associé
-        toast.success(
-          `Numéro reconnu — compte de ${res.user.fullName}. Votre identifiant « ${state.identifier} » y est désormais associé.`
-        );
-        void afterAuthPush(false);
-      } else {
-        toast.success(`Bienvenue dans la famille, ${res.user.fullName.split(" ")[0]} ! 🌳`);
-        void afterAuthPush(true);
-        void familyNotify({
-          title: "Nouveau membre inscrit 🌳",
-          body: `${res.user.fullName} vient de rejoindre Famille.Mbeutetsa.`,
-          tag: "fc-register",
-        });
-      }
-      onReady(res.user.fullName);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Inscription impossible.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <FcCard className="p-6 sm:p-8">
-      <BackButton onClick={() => goto({ k: "creds" })} />
-      <StepBadge current={2} total={2} label="Inscription" />
-      <h2 className="fc-serif mb-1 text-center text-2xl font-bold text-[#1E4D2B]">Votre pseudo & votre numéro</h2>
-      <p className="mb-6 text-center text-[14px] leading-relaxed text-[#5C6B60]">
-        Votre numéro <strong className="whitespace-nowrap">+{country.dial} …</strong> permet de vous détecter : si
-        un compte existe déjà avec ce numéro, il sera automatiquement relié à votre identifiant.
-      </p>
-
-      <div className="mb-3 space-y-2">
-        <FcInput
-          icon={<UserRound className="h-5 w-5" />}
-          placeholder="Pseudo (ex : Grand Frère)"
-          value={pseudo}
-          onChange={(e) => setPseudo(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && valid && submit()}
-          aria-label="Pseudo"
-        />
-        <div className="flex items-stretch gap-2">
-          <PhoneCountrySelect
-            value={country}
-            onChange={(c) => {
-              setCountry(c);
-              setDigits(""); // nouveau pays → nouveau numéro
-            }}
-          />
-          <FcInput
-            className="flex-1"
-            placeholder={placeholderFor(country)}
-            value={groupPhone(digits)}
-            onChange={(e) => setDigits(onlyDigits(e.target.value).slice(0, maxD))}
-            onKeyDown={(e) => e.key === "Enter" && valid && submit()}
-            inputMode="tel"
-            autoComplete="tel-national"
-            maxLength={20}
-            aria-label="Numéro de téléphone (sans indicatif)"
-          />
-        </div>
-        <p className="px-1 text-[12px] text-[#8A9288]">
-          {country.iso === "CM"
-            ? "9 chiffres commençant par 6 (mobile) ou 2 (fixe)."
-            : `Numéro national ${country.fr} — l'indicatif +${country.dial} est ajouté automatiquement.`}
-        </p>
-      </div>
-
-      <div className="mb-4 flex items-start gap-2 rounded-xl border border-[#C89F62]/40 bg-[#C89F62]/10 p-3">
-        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#7A5B2E]" />
-        <p className="text-[12px] leading-relaxed text-[#7A5B2E]">
-          Ce numéro ne sera pas vérifié par code maintenant — il sert à vous retrouver dans la famille et à
-          recevoir les alertes. Vous pourrez toujours ajouter la vérification plus tard.
-        </p>
-      </div>
-
-      <FcButton onClick={submit} disabled={busy || !valid} className="h-[54px] text-[17px]">
-        {busy ? <FcSpinner /> : <Check className="h-5 w-5" />}
-        Créer mon compte
-      </FcButton>
-    </FcCard>
-  );
-}
-
-/* ───────────────────────── Connexion identifiant + mot de passe ───────────────────────── */
-
-function LoginCredsScreen({
-  busy,
-  setBusy,
-  goto,
-  onReady,
-}: {
-  busy: boolean;
-  setBusy: (b: boolean) => void;
-  goto: (s: Step) => void;
-  onReady: (name: string) => void;
-}) {
-  const [identifier, setIdentifier] = useState("");
-  const [password, setPassword] = useState("");
-  const [show, setShow] = useState(false);
-
-  const valid = identifier.trim().length >= 3 && password.length >= 6;
-
-  const submit = async () => {
-    setBusy(true);
-    try {
-      const res = await api<{ user: { id: string; fullName: string } }>("/api/auth/identifier", {
-        body: {
-          action: "login",
-          identifier: identifier.trim(),
-          password,
-          deviceName: deviceName(),
-        },
-      });
-      if (!res.ok) throw new Error(res.error);
-      try {
-        localStorage.setItem("fc_uid", res.user.id);
-        localStorage.setItem("fc_name", res.user.fullName);
-      } catch {
-        /* rien */
-      }
-      toast.success(`Content de vous revoir, ${res.user.fullName.split(" ")[0]} !`);
-      void afterAuthPush(false);
-      onReady(res.user.fullName);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Connexion impossible.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <FcCard className="p-6 sm:p-8">
-      <BackButton onClick={() => goto({ k: "login-choice" })} />
-      <StepBadge current={1} total={1} label="Connexion" />
-      <h2 className="fc-serif mb-1 text-center text-2xl font-bold text-[#1E4D2B]">
-        Identifiant & mot de passe
-      </h2>
-      <p className="mb-6 text-center text-[14px] leading-relaxed text-[#5C6B60]">
-        Votre identifiant — ou votre numéro de téléphone si vous l&apos;avez relié à un mot de passe.
-      </p>
-
-      <div className="mb-3 space-y-2">
-        <FcInput
-          icon={<AtSign className="h-5 w-5" />}
-          placeholder="Identifiant ou numéro de téléphone"
-          value={identifier}
-          onChange={(e) => setIdentifier(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && valid && submit()}
-          autoComplete="username"
-          autoCapitalize="none"
-          aria-label="Identifiant ou numéro de téléphone"
-        />
-        <PasswordInput
-          value={password}
-          onChange={setPassword}
-          show={show}
-          toggle={() => setShow((v) => !v)}
-          placeholder="Mot de passe"
-          autoComplete="current-password"
-          onEnter={valid ? submit : undefined}
-        />
-      </div>
-
-      <FcButton onClick={submit} disabled={busy || !valid} className="h-[54px]">
-        {busy ? <FcSpinner /> : <Lock className="h-5 w-5" />}
-        Se connecter
-      </FcButton>
-
-      <p className="mt-4 text-center text-[12px] leading-relaxed text-[#8A9288]">
-        Mot de passe oublié ?{" "}
-        <button
-          className="font-semibold text-[#C89F62] hover:underline"
-          onClick={() => goto({ k: "phone", mode: "login" })}
-        >
-          Connectez-vous avec votre numéro
-        </button>{" "}
-        — il est reconnu même sans code.
-      </p>
     </FcCard>
   );
 }
@@ -1289,90 +819,6 @@ function StepBadge({ current, total, label }: { current: number; total: number; 
     <p className="mb-2 text-center text-[11px] font-bold uppercase tracking-wider text-[#C89F62]">
       {label} · étape {current} sur {total}
     </p>
-  );
-}
-
-/** Carte de choix : icône ronde + titre + description + chevron. */
-function OptionCard({
-  icon,
-  title,
-  desc,
-  badge,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  desc: string;
-  badge?: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="group flex w-full items-center gap-3.5 rounded-2xl border border-[#E5DCC0] bg-white p-4 text-left transition-all hover:border-[#2A4A3A]/40 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#2A4A3A]/20 active:scale-[0.99]"
-      aria-label={title}
-    >
-      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#2A4A3A]/8 text-[#2A4A3A] transition-colors group-hover:bg-[#2A4A3A] group-hover:text-white">
-        {icon}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="flex flex-wrap items-center gap-2">
-          <span className="text-[15px] font-bold text-[#2B3530]">{title}</span>
-          {badge && (
-            <span className="rounded-full bg-[#C89F62]/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#7A5B2E]">
-              {badge}
-            </span>
-          )}
-        </span>
-        <span className="mt-0.5 block text-[12.5px] leading-snug text-[#8A9288]">{desc}</span>
-      </span>
-      <ChevronRight className="h-5 w-5 shrink-0 text-[#C9B98A] transition-transform group-hover:translate-x-0.5 group-hover:text-[#2A4A3A]" />
-    </button>
-  );
-}
-
-/** Champ mot de passe avec bouton afficher/masquer. */
-function PasswordInput({
-  value,
-  onChange,
-  show,
-  toggle,
-  placeholder,
-  autoComplete,
-  onEnter,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  show: boolean;
-  toggle: () => void;
-  placeholder: string;
-  autoComplete?: string;
-  onEnter?: () => void;
-}) {
-  return (
-    <div className="relative">
-      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#1E4D2B]">
-        <Lock className="h-5 w-5" />
-      </span>
-      <input
-        type={show ? "text" : "password"}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && onEnter && onEnter()}
-        placeholder={placeholder}
-        autoComplete={autoComplete}
-        aria-label={placeholder}
-        className="h-[54px] w-full rounded-xl border border-[#C9B98A] bg-[#FFFDF6] pl-12 pr-12 text-[16px] text-[#2B3530] placeholder:text-[#8A9288] focus:border-[#2A4A3A] focus:outline-none focus:ring-2 focus:ring-[#2A4A3A]/15"
-      />
-      <button
-        type="button"
-        onClick={toggle}
-        className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-[#8A9288] hover:bg-black/5 hover:text-[#2A4A3A]"
-        aria-label={show ? "Masquer le mot de passe" : "Afficher le mot de passe"}
-      >
-        {show ? <EyeOff className="h-4.5 w-4.5" /> : <Eye className="h-4.5 w-4.5" />}
-      </button>
-    </div>
   );
 }
 
@@ -1413,4 +859,98 @@ export function roleLabel(role: string): string {
     JUNIOR: "Junior (moins de 18 ans)",
   };
   return map[role] ?? role;
+}
+
+/* ───────────────────────── Racine du parcours (interface mobile) ───────────────────────── */
+
+/* v28 — LIEN CLIQUABLE du bureau : « ?code=FCM-XXXXXX » (ou #code=…) ouvre
+ * l'app DIRECTEMENT sur la PAGE 2, code déjà accepté et numéro prérempli —
+ * la personne clique, tape son nom, sa page s'ouvre. Lecture UNE fois à
+ * l'initialisation du composant (le contenu du lien est statique) — JAMAIS
+ * dans un effet (setState en effet interdit) : initialisateurs paresseux. */
+type LienCode =
+  | { statut: "absent"; code: null }
+  | { statut: "ok"; code: CodeMembre }
+  | { statut: "inconnu"; code: null }
+  | { statut: "utilise"; code: CodeMembre };
+
+function lireCodeDuLien(): LienCode {
+  if (typeof window === "undefined") return { statut: "absent", code: null };
+  try {
+    const lire = (s: string) => new URLSearchParams(s.startsWith("#") ? s.slice(1) : s);
+    const q = lire(window.location.search);
+    const h = lire(window.location.hash);
+    const brut =
+      q.get("code") ?? q.get("invitation") ?? q.get("invite") ??
+      h.get("code") ?? h.get("invitation") ?? h.get("invite");
+    if (!brut) return { statut: "absent", code: null };
+    const c = trouverCode(brut);
+    if (!c) return { statut: "inconnu", code: null };
+    if (c.utiliseLe) return { statut: "utilise", code: c };
+    return { statut: "ok", code: c };
+  } catch {
+    return { statut: "absent", code: null };
+  }
+}
+
+export function AuthFlow({ onReady }: { onReady: (name: string) => void }) {
+  // Code préchargé par le lien (null = parcours normal) — lu UNE fois.
+  const [lien] = useState<LienCode>(lireCodeDuLien);
+  const precharge = lien.statut === "ok" ? lien.code : null;
+  const [busy, setBusy] = useState(false);
+  // v32 — Lien valide → PAGE 2 directement ; sinon PAGE 1 (le code) — JAMAIS
+  // l'ancien écran « Bienvenue » (choix inscription/connexion) : supprimé.
+  const [step, setStep] = useState<Step>(() =>
+    precharge ? { k: "renseignement", code: precharge } : { k: "code" },
+  );
+
+  return (
+    <div className="relative flex w-full flex-1 flex-col items-center px-4 py-8 sm:py-12">
+      <FcWatermark />
+
+      {/* En-tête compact (interface mobile) — logo + marque */}
+      <div className="relative z-10 mb-4 flex flex-col items-center gap-2.5 text-center">
+        <img
+          src="/logo-famille.webp"
+          alt="Armoiries de la famille Mbeutetsa"
+          className="h-16 w-16 rounded-2xl bg-[#FBF7EA] p-1.5 shadow-lg ring-1 ring-[#C89F62]/70"
+        />
+        <div>
+          <p className="fc-serif text-xl font-bold leading-tight text-[#1E4D2B]">Famille.Mbeutetsa</p>
+          <p className="text-[11px] text-[#8A9288]">Espace numérique de la famille</p>
+        </div>
+      </div>
+
+      <div className="relative z-10 w-full max-w-md space-y-4">
+        {/* v28 — signalement inline si le lien portait un code inutilisable */}
+        {lien.statut === "utilise" && (
+          <div
+            role="status"
+            className="rounded-xl border border-[#C89F62]/50 bg-[#FBF7EA] px-4 py-3 text-[12.5px] font-semibold leading-snug text-[#7A5B2E]"
+          >
+            Le code de ce lien a déjà été utilisé — si c&apos;est votre compte, reconnectez-vous avec votre numéro.
+            Sinon, demandez un nouveau code au bureau de la Tontine.
+          </div>
+        )}
+        {lien.statut === "inconnu" && (
+          <div
+            role="status"
+            className="rounded-xl border border-[#C89F62]/50 bg-[#FBF7EA] px-4 py-3 text-[12.5px] font-semibold leading-snug text-[#7A5B2E]"
+          >
+            Le code contenu dans ce lien est inconnu — vérifiez auprès du bureau de la Tontine.
+          </div>
+        )}
+        {step.k === "code" && <CodeScreen goto={setStep} />}
+        {step.k === "renseignement" && (
+          <RenseignementScreen state={step} busy={busy} setBusy={setBusy} goto={setStep} />
+        )}
+        {step.k === "phone" && (
+          <PhoneScreen busy={busy} setBusy={setBusy} goto={setStep} prefillTel={step.prefillTel} />
+        )}
+        {step.k === "verify" && (
+          <VerifyScreen state={step} busy={busy} setBusy={setBusy} goto={setStep} onReady={onReady} />
+        )}
+      </div>
+    </div>
+  );
 }

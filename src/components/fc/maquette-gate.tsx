@@ -1,7 +1,20 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BASCULE MAQUETTE ⇄ APPLICATION — Famille.Mbeutetsa (v30)
+// BASCULE MAQUETTE ⇄ APPLICATION — Famille.Mbeutetsa (v32)
+//
+// v32 — DEMANDE DE L'ADMINISTRATEUR : « tout le monde se connecte avec le
+// code qu'on lui a généré — je veux une première page UNIQUEMENT avec le code
+// à coller qui va le rediriger vers une autre page de renseignement, en
+// interface mobile. »
+//   · PAGE 1 « Ouvrez votre page » : UNIQUEMENT le champ code (FCM-XXXXXX) —
+//     l'ancien écran « Bienvenue 🌳 » (choix inscription/connexion) est
+//     SUPPRIMÉ — plus AUCUNE autre porte d'entrée ;
+//   · PAGE 2 « Vos renseignements » : nom + téléphone PRÉREMPLI depuis le
+//     code (modifiable) → vérification automatique → compte créé DIRECTEMENT
+//     avec le nom saisi (l'ancien écran « être appelé » a disparu) ;
+//   · code déjà utilisé → reconnexion par numéro (prérempli depuis le code) —
+//     jamais de double compte.
 //
 // v30 — DEMANDE DE L'ADMINISTRATEUR : « les différents boutons des pages
 // occupent toute la page, ça rend la navigation difficile — organiser toutes
@@ -185,8 +198,8 @@ export function MaquetteGate() {
         <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#C89F62]" />
         <p className="hidden min-w-0 truncate text-[11px] font-semibold sm:block">
           {console_ === "membre"
-            ? `Espace Membre v31 — ${CONSOLES[console_]}`
-            : `Maquette v31 — ${CONSOLES[console_]}`}
+            ? `Espace Membre v32 — ${CONSOLES[console_]}`
+            : `Maquette v32 — ${CONSOLES[console_]}`}
         </p>
         {/* v21 — sélecteur de consoles : VISIBLE EN PERMANENCE (maquette comme
             application). Un clic pose le hash et ouvre la console visée. */}
