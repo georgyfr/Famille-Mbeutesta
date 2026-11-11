@@ -1760,3 +1760,35 @@ Stage Summary:
   · /?code=FCM-A3V29V → page renseignements PRÉREMPLIE (Albert / Fotsos / 6 77 92 53 22, indicatif +237, badge bureau, Président · Yaoundé · 50 000) — code NON consommé en production (le test s'arrête avant la création du compte : aucune notification réelle déclenchée) ;
   · /?code=FCM-PL82US → « code inconnu » ✓ ; saisie manuelle « fcm-a3v29v » (minuscules) acceptée ✓ ; accueil = champ code seul ✓ ; 0 erreur console/page.
 - DÉPLOIEMENTS : moteur push fc-push (worker, excludePhone) puis Pages v34 (1abeade9). Marqueur de purge INCHANGÉ (fc_purge_app_v28).
+
+## Task 78-ter — v34 : FIN DES DONNÉES FICTIVES (comptes réels coordonnés) + GÉOLOCALISATION RÉPARÉE (429 Nominatim) + APPLICATION INTUITIVE
+
+- DEMANDE DE L'ADMINISTRATEUR : « Je suis surpris que l'application n'arrive pas à détecter le département ni le quartier — quelle API utilises-tu ? Existe-t-il des API gratuites ? » ; « Concernant la page du président, je t'avais demandé de supprimer toutes les données fictives : toujours 13 membres et 4 présents, le président reste Joseph Meutetsa alors que je viens de m'inscrire avec le compte du président » ; « beaucoup de textes explicatifs inutiles — l'application doit être intuitive et non explicative » ; « lorsqu'on est président : notre nom, notre compte, notre statut, nos tableaux, nos prêts, nos cotisations propres à nous et non des éléments fictifs — les tables sont-elles réellement bien coordonnées ? ».
+- 1. CAUSE RACINE GÉOLOCALISATION TROUVÉE (test direct des APIs) : Nominatim renvoie 429 « Too many requests » dès que l'IP est partagée (NAT opérateurs mobiles — cas réel au Cameroun) ; la cascade retombait alors sur BigDataCloud DONT LE CODE IGNORAIT localityInfo : département et arrondissement restaient VIDES.
+- 2. NOUVELLE CASCADE PARALLÈLE (fc-geo.ts, toutes gratuites, sans clé) :
+  · BigDataCloud « reverse-geocode-client » = BASE GARANTIE : lecture complète de localityInfo.administrative → adminLevel 4 = région, 6 = DÉPARTEMENT (Mfoundi/Wouri), 7 = ville, 8 = ARRONDISSEMENT (Yaoundé I/Douala I) — vérifié en direct sur Yaoundé (3.8667/11.5167 → Centre · Mfoundi · Yaoundé · Yaounde I) et Douala (4.048/9.700 → Littoral · Wouri · Douala · Douala I) ;
+  · Nominatim (zoom 18) tourné EN PARALLÈLE pour le QUARTIER, avec 1 relance automatique si 429 (délai 1,2 s) ;
+  · GeoCode.xyz en dernier secours pour le quartier (gratuit, sans clé) ;
+  · FUSION champ par champ (fusionnerDraft) : aucun champ ne peut rester vide s'il existe chez l'un des fournisseurs ;
+  · forwardGeocode : secours Open-Meteo geocoding (gratuit, sans clé, jamais de 429) ;
+  · E2E INSCRIPTION RÉELLE : session.location = Cameroun · Centre · Mfoundi · Yaoundé · Yaoundé I · Nlongkak (3.887/11.519) — département, arrondissement et quartier détectés automatiquement.
+- 3. FIN DES DONNÉES FICTIVES — CONSOLE PRÉSIDENT (maquette-president.tsx) :
+  · ROSTER RÉEL : [compte connecté, ...annuaire de l'app (hors vous), ...futurs membres (codes en attente)] — les 10 « membres de démonstration » (dont Joseph Mbeutetsa) sont SUPPRIMÉS ; l'en-tête affiche le nom du compte connecté (« Albert Fotsos (vous) ») ;
+  · IDENTITÉ RÉELLE : chargerCompteConnecte() (fc_uid/fc_name → app-<uid>) + filet SESSION (/api/auth/session) si le stockage a perdu les clés ; aperçu neutre « Président » (aucun nom inventé) sans compte connecté ;
+  · DONNÉES VIDES (réel) : présences toutes « en attente » (fini les « 4 présents »), cotisations/collations du mois à 0, retards/prêts/votes de solidarité/candidats/paroles/journal/historique/épargneOps/caisse de secours = zéro — rien n'apparaît tant que la famille n'a rien créé ;
+  · VOTEURS RÉELS : vice-président/trésorier/censeur cherchés DANS le roster réel par poste (fin des noms Marie-Louise/Émile/Roger) — même mécanique pour les votants de solidarité ;
+  · OJ nettoyé (« Bénéficiaire : Chantal Djuidje (donnée de démonstration) » → libellé neutre) ; toast « Émile Tchoumi encaisse » → « Le trésorier encaisse ».
+- 4. TABLES COORDONNÉES (même identifiant « app-<uid> » partout) :
+  · Mes cotisations lit le type attribué au COMPTE (50 000 FCFA du code président) → « Cotiser 50 000 FCFA » → « cotisation à jour » → la collecte du mois passe à « 50 000 FCFA encaissés · Cotisations 1/3 » ;
+  · Mes épargnes = fusion registre du bureau (membreId = app-<uid>) + opérations personnelles ; Mes prêts : avaliste ≠ soi-même ;
+  · typesCotis/cotisations-types, registres-bureau, cotisMois : une seule source de vérité partagée avec l'espace membre et la secrétaire.
+- 5. FIN DES DONNÉES FICTIVES — AUTRES CONSOLES :
+  · SECRÉTAIRE (maquette-secretaire.tsx, même pattern) : identité réelle + filet session, roster réel, « Françoise Mbeutetsa » ne reste qu'en commentaire, visas/courriers signés par le compte connecté, m.id === "f06" → moiId ;
+  · ESPACE MEMBRE (espace-membre.tsx) : roster réel (fin des 10 fictifs), resoudreMoi résout le compte connecté MÊME hors annuaire (filet fc_uid/fc_name) — « Espace Membre — Patrick Talla » devient « Espace Membre — Albert Fotsos » ; chargerCotisMois démo vidé.
+- 6. ROBUSTESSE DU STOCKAGE (cause profonde des « comptes perdus ») :
+  · MIROIR (fc-storage-mirror.ts) : fc_uid + fc_name AJOUTÉS aux clés sauvegardées (IndexedDB) et RENDUS par la restauration cookie (fc_anchor) — le nom du membre survit au vidage du localStorage ;
+  · GUÉRISON DE SESSION : main-app.loadSession ET MaquetteGate reposent fc_uid/fc_name depuis /api/auth/session (mode maquette : MainApp non monté — le gate guérit lui-même puis re-synchronise le poste, isolation applicable d'emblée) ;
+  · poste-console.roleDuCompteConnecte : filet sur la session de l'annuaire (fc_demo_db_v2.d.session) — l'isolation des statuts reste stricte après une perte de stockage.
+- 7. APPLICATION INTUITIVE (≈ 230 textes raccourcis dans 13 fichiers) : longs paragraphes explicatifs remplacés par des phrases d'action (3-8 mots) — wizard de localisation (intro ramenée au bouton « Détecter ma position »), encarts ville de tontine, tableau de bord (paragraphe « Les autres pages… » supprimé), notes des registres prêts/épargnes, Mes cotisations/Mes prêts, types de cotisations, consoles secrétaire/commissaire, espace membre, page Tontine (84 textes), auth-flow, role-wizard, réglages notifications, sections codes.
+- 8. E2E LOCAL (agent-browser 390, parcours complet FCM-A3V29V) : code tolérant (« fcm a3v29v ») → préremplissage Albert/Fotsos/6 77 92 53 22 → OTP auto → accueil « Bienvenue, Albert Fotsos · 📍 Yaoundé, Centre, Cameroun » → console président « Albert Fotsos (vous) · 3 membres · 0 présents » (réel) → cotisation 50 000 → « cotisation à jour » + collecte 50 000/1-3 → ISOLATION #secretaire → REDIRIGÉ #membre (toast + pastille « Président » seule) → navigation basse SANS bouton « Bureau » → 0 nouvelle erreur (l'unique avertissement d'hydratation est PRÉEXISTANT, confirmé par test stash sur v33 ; React régénère l'arbre et tout fonctionne).
+- TSC : 44 erreurs TOUTES préexistantes — 0 nouvelle. LINT : 0 erreur src.

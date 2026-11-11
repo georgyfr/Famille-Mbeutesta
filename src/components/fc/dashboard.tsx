@@ -326,10 +326,6 @@ function HomeTab({
               <PageCard key={t.label} icon={t.icon} label={t.label} description={t.description} onClick={t.onClick} tone={t.tone} wide={t.wide} />
             ))}
         </div>
-        <p className="mt-3 px-1 text-[11.5px] leading-relaxed text-[#8A9288]">
-          Les autres pages de la famille (registre, carte, solidarité, gouvernance, mémoire…) seront ajoutées
-          ici au fur et à mesure.
-        </p>
       </div>
 
       {/* Mon poste au bureau — carte UNIQUE du poste enregistré (v27) : le

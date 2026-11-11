@@ -32,10 +32,15 @@ const SIGNALEMENTS_KEY = "fc_tontine_signalements_v1"; // signalements du groupe
 const DECISIONS_KEY = "fc_tontine_decisions_v1"; // journal des décisions du bureau
 const LOC_SKIP_KEY = "fc_loc_skipped"; // « localisation plus tard » — à retenir aussi
 
-/** Clés dont une copie de sécurité est tenue en permanence. */
+/** Clés dont une copie de sécurité est tenue en permanence.
+ *  v34 — « fc_uid » et « fc_name » (le COMPTE COURANT) y sont ajoutés : sans
+ *  eux, un navigateur qui vide le localStorage restaurait la session démo
+ *  (IndexedDB) mais la console du poste perdait le NOM du membre connecté
+ *  (elle affichait « Président » au lieu d'« Albert Fotsos »). */
 const MIRRORED_KEYS = [
   DB_KEY, TAUX_KEY, EPARGNES_KEY, PRETS_KEY, PAYES_KEY,
   ROLE_TONTINE_KEY, SIGNALEMENTS_KEY, DECISIONS_KEY, LOC_SKIP_KEY,
+  "fc_uid", "fc_name",
 ];
 
 const MIRROR_DB = "fc-mirror";
@@ -414,6 +419,14 @@ export async function restoreFromMirror(): Promise<"idb" | "cookie" | null> {
           const data = readCookie(DATA_COOKIE) ?? "";
           const { epargnes, prets, taux } = unpackData(data);
           localStorage.setItem(DB_KEY, seedMinimalDb(a, epargnes, prets, taux));
+          // v34 — le compte courant est RENDU à l'app (fc_uid/fc_name) :
+          // les consoles du poste retrouvent le nom du membre connecté.
+          try {
+            localStorage.setItem("fc_uid", a.uid);
+            localStorage.setItem("fc_name", a.name);
+          } catch {
+            /* quota */
+          }
           try {
             sessionStorage.setItem("fc_restored", "cookie");
           } catch {

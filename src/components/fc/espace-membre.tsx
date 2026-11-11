@@ -56,7 +56,7 @@ import {
 } from "./maquette-ui";
 import type { GroupeOnglets, OngletItem } from "./maquette-ui";
 import {
-  MEMBRES_FICTIFS, MOIS_FR, MOIS_FR_SHORT, ROLE_META, ROLES_BUREAU, TONTINE, buildRoster, dettePretAuMois,
+  MOIS_FR, MOIS_FR_SHORT, ROLE_META, ROLES_BUREAU, TONTINE, buildRoster, dettePretAuMois,
   loadMontants, loadPrets, loadEpargnes, moisDuTour, saveEpargnes, savePrets, secondSunday,
   type Epargne, type Member, type Pret, type RoleKey,
 } from "./tontine-data";
@@ -81,7 +81,7 @@ import {
   type DecisionTaux, type MotifSignalement, type Signalement,
 } from "./tontine-bureau";
 import { GARANTIES_LABELS, loadReglement, type Reglement } from "./reglement";
-import { loadMembresApplication } from "./membres-app";
+import { chargerRosterReel, loadMembresApplication } from "./membres-app";
 import { futursMembres } from "./premembres";
 import { loadPostes, posteDeMembre, POSTES_BUREAU, type PostesMap } from "./postes-bureau";
 import { loadTypesSolidarite, loadVisitesSolidarite, type TypeSolidarite, type VisiteSolidarite } from "./solidarite-bureau";
@@ -143,9 +143,7 @@ type DossierPret = {
 };
 
 function chargerCotisMois(): Record<string, MouvementCotisMois> {
-  const demo: Record<string, MouvementCotisMois> = {};
-  for (const m of MEMBRES_FICTIFS) demo[m.id] = { cotisation: false, collation: false };
-  return lireJSON<Record<string, MouvementCotisMois>>(CLE_COTIS_MOIS, demo);
+  return lireJSON<Record<string, MouvementCotisMois>>(CLE_COTIS_MOIS, {});
 }
 
 function chargerDossiers(): DossierPret[] {
@@ -158,25 +156,44 @@ function chargerDossiers(): DossierPret[] {
   return brut.filter((x) => x && typeof x?.id === "string" && typeof x?.membreId === "string");
 }
 
-/** Résout QUI est le membre : compte réel (fc_uid → annuaire), sinon nom,
- *  sinon l'aperçu de démonstration (Patrick Talla, membre simple).
- *  v27 — les FUTURS MEMBRES (codes en attente) figurent dans le roster : le
- *  bureau les voit partout et peut déjà travailler pour eux. */
+/** Résout QUI est le membre : compte réel (fc_uid → annuaire), sinon la
+ *  session (filet v34), sinon l'aperçu de démonstration — puis construit le
+ *  ROSTER RÉEL autour de ce moi (v34 — fin des données fictives : l'effectif
+ *  est le compte connecté + l'annuaire de l'application + les futurs membres,
+ *  JAMAIS les 10 membres de démonstration). Chaque appel recrée le roster à
+ *  jour (montage initial + synchro storage) ; lit window/localStorage, donc
+ *  n'est appelée QUE côté client après montage — sûr pour l'hydratation. */
 function resoudreMoi(): { moi: Moi; roster: Member[] } {
-  const roster = [...MEMBRES_FICTIFS, ...loadMembresApplication(), ...futursMembres()];
+  let moi: Moi = DEMO_MOI;
+  let moiMembre: Member | null = null; // le « moi » du roster — compte réel uniquement
   try {
     const uid = window.localStorage.getItem("fc_uid");
+    const nom = (window.localStorage.getItem("fc_name") ?? "").trim();
     if (uid) {
-      const m = roster.find((x) => x.id === `app-${uid}`);
+      const m = loadMembresApplication().find((x) => x.id === `app-${uid}`);
       if (m) {
-        return {
-          moi: { id: m.id, nom: m.name, phone: m.phone, city: m.city, tour: m.tour, role: loadVousRole() ?? "membre", connecte: true },
-          roster,
+        moi = { id: m.id, nom: m.name, phone: m.phone, city: m.city, tour: m.tour, role: loadVousRole() ?? "membre", connecte: true };
+        moiMembre = m;
+      } else if (nom) {
+        // Filet v34 — compte connecté absent de l'annuaire local : le compte
+        // EXISTE (fc_uid + fc_name) → SON espace s'ouvre avec SON identité.
+        const phone = (window.localStorage.getItem("fc_phone") ?? "").trim();
+        moi = { id: `app-${uid}`, nom, phone, city: "Ma position", tour: 1, role: loadVousRole() ?? "membre", connecte: true };
+        moiMembre = {
+          id: moi.id, name: moi.nom, role: moi.role, phone: moi.phone, city: moi.city,
+          since: String(new Date().getFullYear()), tour: moi.tour, fictif: false, isVous: true,
         };
       }
     }
   } catch { /* rien */ }
-  return { moi: DEMO_MOI, roster };
+  const futurs = futursMembres();
+  const roster = [
+    ...(moiMembre ? [moiMembre] : []),
+    // Annuaire réel hors « vous » — sans doublon si l'annuaire contient déjà le compte.
+    ...chargerRosterReel().filter((m) => !m.isVous && m.id !== moi.id),
+    ...futurs,
+  ];
+  return { moi, roster };
 }
 
 /** Clés de mois → libellés des états de présence (couleurs maison). */
@@ -240,7 +257,7 @@ function RecorderVocal(p: { onResultat: (dataUrl: string | null) => void; accent
         nettoyerTimer();
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
         if (blob.size > 600_000) {
-          toast.error("Message vocal trop long", { description: "Restez sous ~30 secondes — l'application garde les messages courts en mémoire locale." });
+          toast.error("Message vocal trop long", { description: "Restez sous ~30 secondes." });
           setEtat("idle");
           return;
         }
@@ -323,19 +340,19 @@ const SECTIONS_MEMBRE: GroupeOnglets<TabKey>[] = [
   {
     label: "Mon espace",
     couleur: "#3D6B72",
-    note: "Ma vie de membre : ce que je cotise, ce que j'épargne, ce que j'emprunte, ce que je dois.",
+    note: "Ce que je cotise, épargne et dois.",
     onglets: ONGLETS_MEMBRE.slice(0, 5),
   },
   {
     label: "La vie de la Tontine",
     couleur: "#8A6420",
-    note: "Les convocations, les réunions, les décisions du bureau, la famille et la solidarité.",
+    note: "Convocations, réunions, décisions, solidarité.",
     onglets: ONGLETS_MEMBRE.slice(5, 10),
   },
   {
     label: "Ma voix & mon compte",
     couleur: "#A5473D",
-    note: "Je valide les décisions du bureau, je signale, je suis les notifications et je gère mon profil.",
+    note: "Valider, signaler, notifications, mon profil.",
     onglets: ONGLETS_MEMBRE.slice(10),
   },
 ];
@@ -448,7 +465,7 @@ function MembreAccueil(p: { ctx: CtxMembre; aller: (t: TabKey) => void }): React
             <div className="min-w-0 flex-1">
               <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Prochaine séance</p>
               <p className="fc-serif text-[16px] font-bold text-[#2B3530]">{TONTINE.jourLabel} — {MOIS_FR[moisCourantIdx]} {p.ctx.annee}</p>
-              <p className="mt-0.5 text-[11.5px] font-semibold text-[#8A6420]">Le {prochainDimanche} {MOIS_FR[moisCourantIdx]} — assiduité de rigueur : même le bénéficiaire cotise son taux.</p>
+              <p className="mt-0.5 text-[11.5px] font-semibold text-[#8A6420]">Le {prochainDimanche} {MOIS_FR[moisCourantIdx]}.</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {convosMienne.length > 0 ? (
                   <button type="button" onClick={() => p.aller("convocations")} className="inline-flex">
@@ -469,7 +486,7 @@ function MembreAccueil(p: { ctx: CtxMembre; aller: (t: TabKey) => void }): React
               <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Mon tour de bénéficiaire</p>
               <p className="fc-serif text-[16px] font-bold text-[#2B3530]">{monMoisTour.charAt(0).toUpperCase() + monMoisTour.slice(1)} — tour n°{moi.tour}</p>
               <p className="mt-0.5 text-[11.5px] leading-snug text-[#5C6B60]">
-                Le mois de mon tour, je reçois l&apos;addition des taux de TOUS les membres — et je cotise moi aussi, comme chacun.
+                Le mois de mon tour, je reçois le pot du mois.
               </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <P cls={VI_CLS}><UserCheck className="h-3 w-3" /> Rôle : {ROLE_META[moi.role].short}</P>
@@ -482,7 +499,7 @@ function MembreAccueil(p: { ctx: CtxMembre; aller: (t: TabKey) => void }): React
 
       {/* — mes actions rapides — */}
       <Block title="Mes actions rapides" icon={<Send className="h-4.5 w-4.5" />} accent="#3D6B72"
-        note="Tout ce que je fais ici rejoint les registres du bureau : la secrétaire et le président le voient aussitôt.">
+        note="Vos actions rejoignent les registres du bureau.">
         <div className="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-4">
           {([
             ["cotisations", <Wallet key="w" className="h-4 w-4" />, "Cotiser", monMois.cotisation ? "à jour" : "à faire", monMois.cotisation ? OK_CLS : OR_CLS],
@@ -504,7 +521,7 @@ function MembreAccueil(p: { ctx: CtxMembre; aller: (t: TabKey) => void }): React
 
       {/* — dernières notifications — */}
       <Block title="Dernières notifications du bureau" icon={<ReceiptText className="h-4.5 w-4.5" />} accent="#A5473D"
-        note={`Journal du membre — ${mesNotifs.length} non lue(s). L'onglet Notifications porte le journal complet.`}>
+        note={`Journal du membre — ${mesNotifs.length} non lue(s).`}>
         {mesNotifs.length === 0 ? (
           <p className="px-4 py-3 text-[12px] font-semibold text-[#8A9288]">Aucune notification non lue — vous êtes à jour.</p>
         ) : (
@@ -565,7 +582,7 @@ function MesCotisationsTab(p: { ctx: CtxMembre }): ReactNode {
     const t = types.find((x) => x.id === id);
     toast.success("Votre type de cotisation est enregistré", {
       description: t
-        ? `Vous cotiserez ${fcfa(t.montant)} par mois (« ${t.nom} ») — comme tout membre de ce type.`
+        ? `Vous cotiserez ${fcfa(t.montant)} par mois (« ${t.nom} »).`
         : `Vous revenez à la cotisation de base (${fcfa(TONTINE.montantCotisation)}/mois).`,
     });
   };
@@ -579,10 +596,10 @@ function MesCotisationsTab(p: { ctx: CtxMembre }): ReactNode {
       id: `cotis-membre:${moi.id}:${p.ctx.moisKey}`, le: `${dateCourte()} ${heure()}`,
       destinataire: "president", destinataireNom: "Président", type: "rappel",
       titre: `Cotisation enregistrée — ${moi.nom}`,
-      message: `${moi.nom} a enregistré sa cotisation du mois (${fcfa(total)}) depuis son Espace Membre — à encaisser et viser au registre.`,
+      message: `${moi.nom} a enregistré sa cotisation du mois (${fcfa(total)}) — à encaisser.`,
     });
     toast.success("Votre cotisation est enregistrée", {
-      description: `${fcfa(total)} — la secrétaire voit votre versement dans « Cotisations & collations » (même registre).`,
+      description: `${fcfa(total)} — versement visible au registre.`,
     });
   };
 
@@ -592,10 +609,9 @@ function MesCotisationsTab(p: { ctx: CtxMembre }): ReactNode {
         <div className="flex items-start gap-3 bg-[#3D6B72] px-4 py-3.5 text-white">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/15"><Wallet className="h-4.5 w-4.5" /></span>
           <div>
-            <p className="fc-serif text-[15px] font-bold">Je cotise comme tout le monde — aucun privilège</p>
+            <p className="fc-serif text-[15px] font-bold">Je cotise comme tout le monde</p>
             <p className="mt-0.5 text-[12px] leading-relaxed text-white/85">
-              Mêmes montants, mêmes pénalités, même ordre des tours. Ici je CHOISIS mon type de cotisation
-              (une seule somme mensuelle), je cotise et ma part de collation suit.
+              Choisissez votre type puis cotisez.
             </p>
           </div>
         </div>
@@ -603,7 +619,7 @@ function MesCotisationsTab(p: { ctx: CtxMembre }): ReactNode {
           <div className="rounded-2xl border-2 border-[#3D6B72]/40 bg-[#3D6B72]/8 px-3.5 py-3">
             <p className="text-[11.5px] font-black uppercase tracking-wide text-[#3D6B72]">Quel type de cotisation faites-vous ?</p>
             <p className="mt-0.5 text-[10.5px] leading-snug text-[#5C6B60]">
-              Règle de la maison : un membre ne cotise qu&apos;UNE seule somme mensuelle — choisissez un type du bureau, ou restez à la cotisation de base.
+              Choisissez un type ou restez à la base.
             </p>
             <select
               value={monType?.id ?? ""}
@@ -639,19 +655,19 @@ function MesCotisationsTab(p: { ctx: CtxMembre }): ReactNode {
             <div className="rounded-2xl border border-[#E5DCC0] bg-white px-3.5 py-3">
               <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Ma part de collation</p>
               <p className="flex items-center gap-1.5 text-[13.5px] font-black text-[#2B3530]"><Coffee className="h-4 w-4 text-[#8A6420]" /> {fcfa(mesCollations)}</p>
-              <p className="mt-0.5 text-[10.5px] text-[#8A9288]">Somme des collations où je suis désigné — la part de chaque membre, comme pour tous.</p>
+              <p className="mt-0.5 text-[10.5px] text-[#8A9288]">Somme des collations où je suis désigné.</p>
             </div>
             <div className="rounded-2xl border border-[#E5DCC0] bg-white px-3.5 py-3">
               <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Reçu de cotisation</p>
               <p className="flex items-center gap-1.5 text-[13.5px] font-black text-[#2F6B45]"><ReceiptText className="h-4 w-4" /> Reçu remis par le trésorier</p>
-              <p className="mt-0.5 text-[10.5px] text-[#8A9288]">Chaque versement est encaissé et inscrit au journal de caisse.</p>
+              <p className="mt-0.5 text-[10.5px] text-[#8A9288]">Encaissé et inscrit au journal de caisse.</p>
             </div>
           </div>
         </div>
       </FcCard>
 
       <Block title="Mon historique du mois" icon={<CalendarCheck className="h-4.5 w-4.5" />} accent="#3D6B72"
-        note="Mon encaissement apparaît dans la gestion du secrétariat, membre par membre — la même source, aucune double saisie.">
+        note="Votre encaissement apparaît au registre du secrétariat.">
         <div className="flex flex-wrap gap-1.5 p-3.5">
           <P cls={aJour ? OK_CLS : OR_CLS}>
             {aJour ? <CheckCircle2 className="h-3 w-3" /> : <Coins className="h-3 w-3" />} {moisLabel} {aJour ? "— cotisé" : "— à cotiser"}
@@ -714,10 +730,10 @@ function MesEpargnesTab(p: { ctx: CtxMembre }): ReactNode {
       id: `epargne-membre:${next[next.length - 1].id}`, le: `${dateCourte()} ${heure()}`,
       destinataire: "president", destinataireNom: "Président", type: "visa",
       titre: `Épargne inscrite — ${moi.nom}`,
-      message: `${moi.nom} a inscrit ${fcfa(n)} d'épargne (${MOIS_FR[Math.min(11, Math.max(0, mi))]}) depuis son Espace Membre — à viser au registre.`,
+      message: `${moi.nom} a inscrit ${fcfa(n)} d'épargne (${MOIS_FR[Math.min(11, Math.max(0, mi))]}) — à viser.`,
     });
     toast.success("Votre épargne est inscrite au registre du bureau", {
-      description: `${fcfa(n)} rattaché à ${MOIS_FR[Math.min(11, Math.max(0, mi))]} — visible aussi dans les registres du président et du secrétariat.`,
+      description: `${fcfa(n)} rattaché à ${MOIS_FR[Math.min(11, Math.max(0, mi))]}.`,
     });
   };
 
@@ -727,7 +743,7 @@ function MesEpargnesTab(p: { ctx: CtxMembre }): ReactNode {
     const next = epargnes.filter((x) => x.id !== id);
     setEpargnes(next);
     saveEpargnesReunion(next);
-    toast.success("Versement retiré du registre", { description: `${fcfa(e.montant)} (${MOIS_FR[Math.min(11, Math.max(0, e.moisIdx))]}) — le registre partagé est mis à jour.` });
+    toast.success("Versement retiré du registre", { description: `${fcfa(e.montant)} (${MOIS_FR[Math.min(11, Math.max(0, e.moisIdx))]}) retiré.` });
   };
 
   return (
@@ -768,13 +784,13 @@ function MesEpargnesTab(p: { ctx: CtxMembre }): ReactNode {
             <Btn tone="teal" onClick={mAttribuer}><PiggyBank className="h-4 w-4" /> Épargner {montant ? fcfa(Number(montant)) : ""}</Btn>
           </div>
           <p className="mt-2 text-[10.5px] leading-snug text-[#5C6B60]">
-            Intérêts au taux en vigueur ({taux} %/mois) — collecte : {COLLECTE_COURTE(regl)}. Le registre est partagé : président et secrétariat le voient aussitôt.
+            Intérêts à {taux} %/mois — collecte : {COLLECTE_COURTE(regl)}.
           </p>
         </div>
       </FcCard>
 
       <Block title="Mes intérêts mois par mois" icon={<TrendingUp className="h-4.5 w-4.5" />} accent="#3D6B72"
-        note={`Chaque mois où votre épargne est en place rapporte ${taux} % : intérêts réalisés jusqu'au mois en cours, projection pour les mois à venir.`}>
+        note={`Intérêts de ${taux} %/mois — réalisés et projetés.`}>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[440px] border-collapse text-[12px]">
             <thead>
@@ -811,9 +827,9 @@ function MesEpargnesTab(p: { ctx: CtxMembre }): ReactNode {
       </Block>
 
       <Block title="Mes versements — registre du bureau" icon={<ReceiptText className="h-4.5 w-4.5" />} accent="#3D6B72"
-        note="Chaque ligne est un de vos versements au registre partagé. Une erreur se retire d'un geste (double confirmation) — le bureau suit aussitôt.">
+        note="Retirez un versement erroné d'un geste.">
         {mes.length === 0 ? (
-          <p className="px-4 py-3 text-[12px] font-semibold text-[#8A9288]">Aucun versement à votre nom — utilisez « M&apos;attribuer une épargne » ci-dessus.</p>
+          <p className="px-4 py-3 text-[12px] font-semibold text-[#8A9288]">Aucun versement — utilisez le formulaire ci-dessus.</p>
         ) : (
           <ul className="divide-y divide-[#E5DCC0]">
             {mes.map((e) => {
@@ -902,11 +918,11 @@ function MesPretsTab(p: { ctx: CtxMembre }): ReactNode {
       id: `pret-demande:${nd.id}`, le: `${dateCourte()} ${heure()}`,
       destinataire: "president", destinataireNom: "Président", type: "decision",
       titre: `Demande de prêt — ${moi.nom}`,
-      message: `${moi.nom} demande ${fcfa(n)} (${MOIS_FR[Math.min(11, Math.max(0, mi))]}) depuis son Espace Membre — dossier à instruire : avaliste${regl.prets.cosignTresorier ? " + co-signature trésorier" : ""}, puis décision du bureau.`,
+      message: `${moi.nom} demande ${fcfa(n)} (${MOIS_FR[Math.min(11, Math.max(0, mi))]}) — dossier à instruire.`,
     });
     setMontant(""); setMotif(""); setGaranties("");
     toast.success("Votre demande de prêt est déposée", {
-      description: `${fcfa(n)} rattaché à ${MOIS_FR[Math.min(11, Math.max(0, mi))]} — le dossier rejoint la file du secrétariat : avaliste, co-signature, décision du bureau.`,
+      description: `${fcfa(n)} rattaché à ${MOIS_FR[Math.min(11, Math.max(0, mi))]}.`,
     });
   };
 
@@ -921,9 +937,9 @@ function MesPretsTab(p: { ctx: CtxMembre }): ReactNode {
       id: `pret-rembourse:${id}`, le: `${dateCourte()} ${heure()}`,
       destinataire: "president", destinataireNom: "Président", type: "decision",
       titre: `Remboursement déclaré — ${moi.nom}`,
-      message: `${moi.nom} déclare avoir remboursé ${fcfa(solde)} (prêt de ${fcfa(d.capital)}, ${MOIS_FR[Math.min(11, Math.max(0, d.month0))]}) — à confirmer au registre du bureau.`,
+      message: `${moi.nom} déclare avoir remboursé ${fcfa(solde)} (prêt de ${fcfa(d.capital)}) — à confirmer.`,
     });
-    toast.success("Remboursement déclaré", { description: `${fcfa(solde)} — le bureau confirme et clôt la ligne au registre.` });
+    toast.success("Remboursement déclaré", { description: `${fcfa(solde)} — à confirmer par le bureau.` });
   };
 
   const STATUT: Record<DossierPret["statut"], { label: string; cls: string }> = {
@@ -938,9 +954,8 @@ function MesPretsTab(p: { ctx: CtxMembre }): ReactNode {
         <div className="flex items-start gap-2.5">
           <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#B85C33]/12 text-[#B85C33]"><Landmark className="h-4 w-4" /></span>
           <p className="text-[13px] leading-relaxed text-[#5C6B60]">
-            <strong className="text-[#B85C33]">Emprunter à la caisse de la Tontine — les mêmes règles pour tous.</strong>{" "}
+            <strong className="text-[#B85C33]">Emprunter à la caisse de la Tontine.</strong>{" "}
             {taux} %/mois, échéance {duree} mois{regl.prets.plafondFcfa > 0 ? `, plafond ${fcfa(regl.prets.plafondFcfa)}` : ""}.
-            Votre dossier rejoint la file commune : avaliste, co-signature{regl.prets.cosignTresorier ? " du trésorier" : ""}, décision du bureau.
           </p>
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -991,7 +1006,7 @@ function MesPretsTab(p: { ctx: CtxMembre }): ReactNode {
 
       {/* — mes dettes — */}
       <Block title="Mes dettes envers la Tontine" icon={<Coins className="h-4.5 w-4.5" />} accent="#B85C33"
-        note="Les prêts qui vous ont été accordés (registre du bureau) : la dette gagne des intérêts selon le règlement. Déclarez votre remboursement — le bureau confirme et clôt.">
+        note="Déclarez votre remboursement — le bureau confirme.">
         {mesDettes.length === 0 ? (
           <p className="px-4 py-3 text-[12px] font-semibold text-[#8A9288]">Aucune dette à votre nom — tant mieux !</p>
         ) : (
@@ -1026,7 +1041,7 @@ function MesPretsTab(p: { ctx: CtxMembre }): ReactNode {
 
       {/* — mes dossiers — */}
       <Block title="Mes demandes de prêt (caisse de la Tontine)" icon={<HandCoins className="h-4.5 w-4.5" />} accent="#B85C33"
-        note="Chaque demande rejoint la file commune des dossiers : le secrétariat instruit (avaliste, garanties), le bureau statue. Suivez ici vos dossiers.">
+        note="Suivez ici vos dossiers de prêt.">
         {mesDossiers.length === 0 ? (
           <p className="px-4 py-3 text-[12px] font-semibold text-[#8A9288]">Aucune demande à votre nom — remplissez le formulaire ci-dessus.</p>
         ) : (
@@ -1058,11 +1073,11 @@ function MesPretsTab(p: { ctx: CtxMembre }): ReactNode {
 
       {/* — prêter à la réunion — */}
       <Block title="Prêter à la réunion — l'argent que la réunion me doit" icon={<TrendingUp className="h-4.5 w-4.5" />} accent="#B85C33"
-        note="Un prêt FAIT à la réunion est inscrit au registre partagé (président inclus) et produit des intérêts au taux en vigueur jusqu'au remboursement confirmé par le bureau.">
+        note="Inscrits au registre partagé, intérêts jusqu'au remboursement.">
         <div className="p-4">
           {mesPretsReunion.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-[#C9B98A] bg-[#FBF7EA] px-3 py-2.5 text-[11.5px] text-[#8A9288]">
-              Aucun prêt à la réunion à votre nom — vous pouvez en inscrire un depuis la réunion (registre du bureau) ; il apparaîtra ici aussitôt.
+              Aucun prêt à la réunion à votre nom.
             </p>
           ) : (
             <ul className="divide-y divide-[#E5DCC0] rounded-2xl border border-[#E5DCC0] bg-white">
@@ -1117,7 +1132,7 @@ function MesAmendesTab(p: { ctx: CtxMembre }): ReactNode {
       </div>
 
       <Block title="Mon historique de présence — 12 derniers mois" icon={<CalendarCheck className="h-4.5 w-4.5" />} accent="#A5473D"
-        note="L'appel est fait par la secrétaire à chaque réunion : présent, excusé (justifié), absent. Le mois en cours reste en attente tant que l'appel n'est pas clos.">
+        note="Appel fait par la secrétaire à chaque réunion.">
         <div className="flex flex-wrap gap-1.5 p-4">
           {fenetre.map((mk) => {
             const etat: PresenceEtat = presences?.[mk]?.[moi.id] ?? "attente";
@@ -1127,16 +1142,16 @@ function MesAmendesTab(p: { ctx: CtxMembre }): ReactNode {
         </div>
         {stats.rachatApplique && (
           <p className="mx-4 mb-4 rounded-xl bg-[#2F6B45]/10 px-3 py-2 text-[11.5px] font-semibold text-[#2F6B45]">
-            Rachat automatique : vos {stats.rachatNb} absence(s) du mois passé ont été annulées parce que vous étiez présent ce mois-ci. La Tontine récompense l&apos;assiduité.
+            Rachat automatique : vos {stats.rachatNb} absence(s) du mois passé ont été annulées.
           </p>
         )}
       </Block>
 
       <Block title="Mes amendes" icon={<Gavel className="h-4.5 w-4.5" />} accent="#A5473D"
-        note="Les amendes sont générées AUTOMATIQUEMENT par le moteur du secrétariat selon les règles votées (absences consécutives, sur 6 mois, sur l'année, convocation confirmée puis absent). Le paiement est constaté par la secrétaire.">
+        note="Générées automatiquement selon les règles votées par le bureau.">
         {mes.length === 0 ? (
           <Vide icon={<Gavel className="h-6 w-6" />} texte="Aucune amende à votre nom"
-            note="Restez assidu : présentez-vous ou justifiez vos absences AVANT la réunion (onglet Convocations) — c'est la meilleure façon de ne jamais voir d'amende." />
+            note="Justifiez vos absences avant la réunion (onglet Convocations)." />
         ) : (
           <ul className="divide-y divide-[#E5DCC0]">
             {mes.map((a) => (
@@ -1183,9 +1198,9 @@ function MesConvocationsTab(p: { ctx: CtxMembre }): ReactNode {
       id: `conv-confirmation:${c.id}:${moi.id}`, le,
       destinataire: "president", destinataireNom: "Président", type: "convocation",
       titre: `Réception confirmée — ${moi.nom}`,
-      message: `${moi.nom} a confirmé la réception de la convocation « ${c.objet} » depuis son Espace Membre. Sans présence à la réunion, la sanction « confirmé puis absent » s'appliquera automatiquement.`,
+      message: `${moi.nom} a confirmé la réception de la convocation « ${c.objet} ».`,
     });
-    toast.success("Réception confirmée — merci !", { description: "Le secrétariat est prévenu. Sans présence à la réunion, la sanction « confirmé puis absent » s'appliquera." });
+    toast.success("Réception confirmée — merci !", { description: "Le secrétariat est prévenu." });
   };
 
   const justifier = (c: ConvocationV2) => {
@@ -1201,10 +1216,10 @@ function MesConvocationsTab(p: { ctx: CtxMembre }): ReactNode {
       id: `conv-absence:${c.id}:${moi.id}`, le,
       destinataire: "president", destinataireNom: "Président", type: "convocation",
       titre: `Absence notifiée — ${moi.nom}`,
-      message: `${moi.nom} a notifié son absence pour « ${c.objet} » depuis son Espace Membre. Justification : ${reponse.vocal ? "message vocal" : "texte"}${reponse.texte.trim() ? ` — « ${reponse.texte.trim()} »` : ""}. Absence EXCUSÉE : pas d'amende, à reporter sur la liste de présence.`,
+      message: `${moi.nom} a notifié son absence pour « ${c.objet} » — absence excusée : ${reponse.vocal ? "message vocal" : "texte"}${reponse.texte.trim() ? ` — « ${reponse.texte.trim()} »` : ""}.`,
     });
     setReponse(null);
-    toast.success("Absence notifiée — merci", { description: "Justification transmise à la secrétaire et au président : absence excusée, pas d'amende." });
+    toast.success("Absence notifiée — merci", { description: "Absence excusée — pas d'amende." });
   };
 
   return (
@@ -1213,11 +1228,9 @@ function MesConvocationsTab(p: { ctx: CtxMembre }): ReactNode {
         <div className="flex items-start gap-3 bg-[#8A6420] px-4 py-3.5 text-white">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/15"><Mail className="h-4.5 w-4.5" /></span>
           <div>
-            <p className="fc-serif text-[15px] font-bold">Mes convocations — je confirme, je m&apos;excuse, je m&apos;exprime</p>
+            <p className="fc-serif text-[15px] font-bold">Mes convocations — je confirme, je m&apos;excuse</p>
             <p className="mt-0.5 text-[12px] leading-relaxed text-white/85">
-              Chaque convocation du secrétariat arrive ici. Confirmez votre réception OU notifiez votre absence
-              avec une justification (texte ou message vocal au micro) — votre réponse rejoint aussitôt le
-              secrétariat et le président.
+              Confirmez la réception ou justifiez votre absence.
             </p>
           </div>
         </div>
@@ -1225,7 +1238,7 @@ function MesConvocationsTab(p: { ctx: CtxMembre }): ReactNode {
 
       {miennes.length === 0 ? (
         <Vide icon={<Mail className="h-6 w-6" />} texte="Aucune convocation reçue"
-          note="Dès que la secrétaire vous convoque (réunion ordinaire, bureau, discipline…), elle apparaît ici avec le message complet." />
+          note="Les convocations de la secrétaire apparaissent ici." />
       ) : (
         miennes.map((c) => {
           const r = c.destinataires[moi.id];
@@ -1249,7 +1262,7 @@ function MesConvocationsTab(p: { ctx: CtxMembre }): ReactNode {
                   )}
                   {r.statut === "envoyee" && (
                     <div className="space-y-2.5">
-                      <p className="text-[12px] font-bold text-[#A5473D]">En attente de votre réponse — confirmez ou justifiez une absence :</p>
+                      <p className="text-[12px] font-bold text-[#A5473D]">Confirmez ou justifiez une absence :</p>
                       <div className="flex flex-wrap gap-2">
                         <Btn tone="vert" onClick={() => confirmer(c)}><CheckCircle2 className="h-4 w-4" /> Je confirme ma présence</Btn>
                         <Btn tone="or" onClick={() => setReponse({ convoId: c.id, texte: "", vocal: null })}>
@@ -1271,7 +1284,7 @@ function MesConvocationsTab(p: { ctx: CtxMembre }): ReactNode {
                             <Btn tone="vert" onClick={() => justifier(c)}><Send className="h-4 w-4" /> Envoyer la justification</Btn>
                             <Btn tone="neutre" onClick={() => setReponse(null)}><X className="h-4 w-4" /> Annuler</Btn>
                           </div>
-                          <p className="mt-2 text-[10.5px] text-[#8A6420]">Une absence NOTIFIÉE est excusée : pas d&apos;amende. Une absence non justifiée après confirmation sera amendée par le moteur.</p>
+                          <p className="mt-2 text-[10.5px] text-[#8A6420]">Une absence notifiée est excusée : pas d&apos;amende.</p>
                         </div>
                       )}
                     </div>
@@ -1313,7 +1326,7 @@ function ReunionsTab(p: { ctx: CtxMembre }): ReactNode {
           <div className="min-w-0 flex-1">
             <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">La réunion du mois</p>
             <p className="fc-serif text-[17px] font-bold text-[#2B3530]">Le {jour} {MOIS_FR[moisCourantIdx]} {annee} — {TONTINE.jourLabel}</p>
-            <p className="mt-0.5 text-[11.5px] text-[#5C6B60]">Lieu habituel : domicile de la famille. Le pot du mois = addition des taux de TOUS (bénéficiaire compris).</p>
+            <p className="mt-0.5 text-[11.5px] text-[#5C6B60]">Lieu habituel : domicile de la famille.</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               <P cls={COULEUR_PRESENCE[etatMois]}>{ETATS_PRESENCE.find((e) => e.cle === etatMois)?.label ?? "Appel en attente"}</P>
               <P cls={TE_CLS}><Users className="h-3 w-3" /> {roster.length} membres convoqués</P>
@@ -1339,7 +1352,7 @@ function ReunionsTab(p: { ctx: CtxMembre }): ReactNode {
       </FcCard>
 
       <Block title="Le calendrier des tours — qui reçoit quoi" icon={<Crown className="h-4.5 w-4.5" />} accent="#8A6420"
-        note="L'ordre des tours suit l'ancienneté. Mon tour est surligné : le mois venu, je reçois le pot du mois — et je cotise comme tout le monde.">
+        note="Mon tour est surligné — le mois venu, je reçois le pot.">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[420px] border-collapse text-[12px]">
             <thead>
@@ -1388,7 +1401,7 @@ function PvTab(p: { ctx: CtxMembre }): ReactNode {
   return (
     <>
       <Block title="Les procès-verbaux de la famille" icon={<ScrollText className="h-4.5 w-4.5" />} accent="#6E4B71"
-        note="Ce que la réunion DÉCIDE est écrit par la secrétaire, finalisé puis archivé. Les brouillons ne sont pas visibles — seuls les PV finalisés et archivés le sont.">
+        note="PV finalisés et archivés uniquement.">
         {pvs.length === 0 ? (
           <p className="px-4 py-3 text-[12px] font-semibold text-[#8A9288]">Aucun procès-verbal publié pour le moment.</p>
         ) : (
@@ -1410,7 +1423,7 @@ function PvTab(p: { ctx: CtxMembre }): ReactNode {
       </Block>
 
       <Block title="Le journal des décisions du bureau" icon={<ClipboardList className="h-4.5 w-4.5" />} accent="#6E4B71"
-        note="Chaque décision prise en réunion (financière, discipline, solidarité…) avec son responsable et son suivi d'actions.">
+        note="Décisions du bureau avec responsable et suivi.">
         {decisions.length === 0 ? (
           <p className="px-4 py-3 text-[12px] font-semibold text-[#8A9288]">Le journal est vide pour le moment.</p>
         ) : (
@@ -1440,7 +1453,7 @@ function AnnuaireTab(p: { ctx: CtxMembre }): ReactNode {
   const { moi, roster, postes } = p.ctx;
   return (
     <Block title="L'annuaire de la Tontine" icon={<Users className="h-4.5 w-4.5" />} accent="#8A6420"
-      note="Tous les membres : le bureau (avec son poste) et les membres simples. Je peux joindre n'importe qui par WhatsApp ou téléphone.">
+      note="Joignez n'importe quel membre par WhatsApp ou téléphone.">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[560px] border-collapse text-[12px]">
           <thead>
@@ -1517,7 +1530,7 @@ function SolidariteTab(p: { ctx: CtxMembre }): ReactNode {
       </div>
 
       <Block title="Les types de solidarité en vigueur" icon={<HandHeart className="h-4.5 w-4.5" />} accent="#A5473D"
-        note="Créés par le président : chacun sait ce que la famille doit quand le malheur ou la joie frappe — et ce que chacun verse.">
+        note="Montants votés par le président.">
         {types.length === 0 ? (
           <p className="px-4 py-3 text-[12px] font-semibold text-[#8A9288]">Aucun type de solidarité défini pour le moment.</p>
         ) : (
@@ -1542,7 +1555,7 @@ function SolidariteTab(p: { ctx: CtxMembre }): ReactNode {
       </Block>
 
       <Block title="Le calendrier des visites" icon={<CalendarDays className="h-4.5 w-4.5" />} accent="#A5473D"
-        note="La Tontine se déplace : deuils, mariages, naissances, maladies — c'est la famille qui se voit.">
+        note="La famille se déplace : deuils, mariages, naissances, maladies.">
         {visites.length === 0 ? (
           <p className="px-4 py-3 text-[12px] font-semibold text-[#8A9288]">Aucune visite programmée pour le moment.</p>
         ) : (
@@ -1610,10 +1623,9 @@ function ValidationsTab(p: { ctx: CtxMembre }): ReactNode {
         <div className="flex items-start gap-3 bg-[#A5473D] px-4 py-3.5 text-white">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/15"><CheckCircle2 className="h-4.5 w-4.5" /></span>
           <div>
-            <p className="fc-serif text-[15px] font-bold">Le bureau propose — je valide : la règle de la maison</p>
+            <p className="fc-serif text-[15px] font-bold">Le bureau propose — je valide</p>
             <p className="mt-0.5 text-[12px] leading-relaxed text-white/85">
-              Toute décision du bureau (taux, épargne, dette) vous est soumise. Vous avez {DELAI_VALIDATION_JOURS} jours pour la
-              valider — sans action de votre part, elle est validée par défaut (le bureau en est informé). Ici, tout est transparent.
+              Validez dans les {DELAI_VALIDATION_JOURS} jours — sinon validée par défaut.
             </p>
           </div>
         </div>
@@ -1623,7 +1635,7 @@ function ValidationsTab(p: { ctx: CtxMembre }): ReactNode {
       </FcCard>
 
       <Block title="Décisions de taux à valider" icon={<TrendingUp className="h-4.5 w-4.5" />} accent="#A5473D"
-        note="Le taux mensuel des épargnes et des prêts : signé par le bureau, validé par les membres.">
+        note="Validez le taux proposé par le bureau.">
         {aValiderTaux.length === 0 ? (
           <p className="px-4 py-3 text-[12px] font-semibold text-[#8A9288]">Aucune décision de taux en attente.</p>
         ) : (
@@ -1642,7 +1654,7 @@ function ValidationsTab(p: { ctx: CtxMembre }): ReactNode {
       </Block>
 
       <Block title="Mes lignes d'épargne à valider" icon={<PiggyBank className="h-4.5 w-4.5" />} accent="#A5473D"
-        note="Les épargnes inscrites pour vous (page Finances → Épargnes de l'application) attendent votre accord.">
+        note="Validez vos épargnes inscrites.">
         {aValiderEpargnes.length === 0 ? (
           <p className="px-4 py-3 text-[12px] font-semibold text-[#8A9288]">Aucune épargne en attente.</p>
         ) : (
@@ -1661,7 +1673,7 @@ function ValidationsTab(p: { ctx: CtxMembre }): ReactNode {
       </Block>
 
       <Block title="Mes dettes à valider" icon={<HandCoins className="h-4.5 w-4.5" />} accent="#A5473D"
-        note="Les prêts qui vous sont accordés attendent aussi votre accord — rien n'est inscrit sans vous.">
+        note="Validez vos prêts accordés.">
         {aValiderPrets.length === 0 ? (
           <p className="px-4 py-3 text-[12px] font-semibold text-[#8A9288]">Aucune dette en attente.</p>
         ) : (
@@ -1715,7 +1727,7 @@ function SignalementsTab(p: { ctx: CtxMembre }): ReactNode {
       titre: `Nouveau signalement — ${moi.nom}`,
       message: `${moi.nom} a signalé : ${MOTIFS_SIGNALEMENT[motif]} (${cible}) — à traiter sous 3 jours.`,
     });
-    toast.success("Signalement déposé", { description: "Le bureau est notifié — vous suivrez ici la suite donnée (rappel automatique après 3 jours sans réponse)." });
+    toast.success("Signalement déposé", { description: "Le bureau est notifié." });
   };
 
   return (
@@ -1724,8 +1736,7 @@ function SignalementsTab(p: { ctx: CtxMembre }): ReactNode {
         <div className="flex items-start gap-2.5">
           <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#A5473D]/12 text-[#A5473D]"><MessageSquarePlus className="h-4 w-4" /></span>
           <p className="text-[13px] leading-relaxed text-[#5C6B60]">
-            <strong className="text-[#A5473D]">Ma voix compte.</strong> Un montant erroné, une dette mal insérée, un taux
-            mal appliqué ? Signalez — le bureau est notifié et doit répondre ; sans réponse, un rappel part automatiquement.
+            <strong className="text-[#A5473D]">Ma voix compte.</strong> Décrivez le problème puis déposez.
           </p>
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -1761,9 +1772,9 @@ function SignalementsTab(p: { ctx: CtxMembre }): ReactNode {
       </FcCard>
 
       <Block title="Le suivi de mes signalements" icon={<ClipboardList className="h-4.5 w-4.5" />} accent="#A5473D"
-        note="Chaque signalement déposé est suivi : le bureau marque la suite donnée (résolu ou rejeté, avec sa note).">
+        note="Le bureau marque la suite donnée.">
         {mesSignalements.length === 0 ? (
-          <p className="px-4 py-3 text-[12px] font-semibold text-[#8A9288]">Aucun signalement à votre nom — utilisez le formulaire ci-dessus si quelque chose cloche.</p>
+          <p className="px-4 py-3 text-[12px] font-semibold text-[#8A9288]">Aucun signalement — utilisez le formulaire ci-dessus.</p>
         ) : (
           <ul className="divide-y divide-[#E5DCC0]">
             {mesSignalements.map((s) => (
@@ -1825,9 +1836,9 @@ function NotificationsTab(p: { ctx: CtxMembre }): ReactNode {
       </FcCard>
 
       <Block title="Tout ce que le bureau m'a notifié" icon={<ReceiptText className="h-4.5 w-4.5" />} accent="#A5473D"
-        note="Absences & amendes, rachats, visas, convocations à confirmer, décisions, courriers — le journal complet de ma vie de membre.">
+        note="Le journal complet des notifications du bureau.">
         {mesNotifs.length === 0 ? (
-          <Vide icon={<ReceiptText className="h-6 w-6" />} texte="Aucune notification" note="Dès que le secrétariat vous notifie quelque chose, cela arrive ici (et le badge de l'onglet s'allume)." />
+          <Vide icon={<ReceiptText className="h-6 w-6" />} texte="Aucune notification" note="Les notifications du bureau arrivent ici." />
         ) : (
           <ul className="divide-y divide-[#E5DCC0]">
             {mesNotifs.map((n) => (
@@ -1902,7 +1913,7 @@ function ReglementTab(p: { ctx: CtxMembre }): ReactNode {
       </FcCard>
 
       <Block title="Les chiffres en vigueur" icon={<Coins className="h-4.5 w-4.5" />} accent="#1E4D2B"
-        note="Fixés par le bureau dans ses consoles (Paramètres) — ce que je vois ici est exactement ce que le bureau a publié.">
+        note="Fixés par le bureau.">
         <dl className="grid gap-x-4 gap-y-0 p-4 sm:grid-cols-2">
           {lignes.map(([k, v]) => (
             <div key={k} className="flex items-center justify-between border-b border-[#E5DCC0]/70 py-2">
@@ -1914,7 +1925,7 @@ function ReglementTab(p: { ctx: CtxMembre }): ReactNode {
       </Block>
 
       <Block title="Impayés & recouvrement — les échelons" icon={<Gavel className="h-4.5 w-4.5" />} accent="#A5473D"
-        note="Personne n'aime parler impayés — mais tout le monde sait ainsi exactement ce qui arrive, sans surprise ni faveur.">
+        note="Échelons appliqués aux impayés.">
         <div className="grid gap-2 p-4 sm:grid-cols-2">
           {echelons.map(([k, actif]) => (
             <P key={k} cls={actif ? OK_CLS : "border-[#C9D2CB] bg-[#F3F1E9] text-[#8A9288]"}>{actif ? <CheckCircle2 className="h-3 w-3" /> : <X className="h-3 w-3" />} {k}</P>
@@ -1970,8 +1981,7 @@ function ProfilTab(p: { ctx: CtxMembre }): ReactNode {
         </div>
         {!moi.connecte && (
           <p className="mt-3 rounded-xl bg-[#C89F62]/12 px-3 py-2 text-[11.5px] font-semibold text-[#8A6420]">
-            Aperçu de démonstration — connectez-vous depuis l&apos;application pour que cet espace porte VOS données
-            (cotisations, épargnes, prêts, amendes, convocations).
+            Aperçu de démonstration — connectez-vous pour voir vos données.
           </p>
         )}
         <div className="mt-3 flex flex-wrap gap-2">
@@ -1984,7 +1994,7 @@ function ProfilTab(p: { ctx: CtxMembre }): ReactNode {
       </FcCard>
 
       <Block title="Ma fiche de membre" icon={<User className="h-4.5 w-4.5" />} accent="#3D6B72"
-        note="Ce que la Tontine connaît de moi — pour corriger un détail, demandez au secrétariat (ou créez votre fiche avec un code d'invitation).">
+        note="Pour corriger un détail, demandez au secrétariat.">
         <dl className="grid gap-x-4 gap-y-0 p-4 sm:grid-cols-2">
           {([
             ["Identifiant", moi.id],
@@ -2008,7 +2018,7 @@ function ProfilTab(p: { ctx: CtxMembre }): ReactNode {
        *    défaut (demande de l'administrateur — plus de bouton « Recevoir la
        *    notification » nulle part, l'interrupteur vit ICI). — */}
       <Block title="Notifications" icon={<Bell className="h-4.5 w-4.5" />} accent="#3D6B72"
-        note="Automatiques par défaut — alertes de la famille même application fermée, avec son et vibration, comme WhatsApp. Cet interrupteur remplace l'ancien bouton : le réglage vit ICI, dans vos paramètres.">
+        note="Automatiques par défaut — l'interrupteur coupe ou relance.">
         <div className="p-4">
           <ReglageNotifications />
         </div>
@@ -2022,7 +2032,7 @@ function ProfilTab(p: { ctx: CtxMembre }): ReactNode {
 export function EspaceMembre({ voirApp }: { voirApp?: () => void }) {
   const [tab, setTab] = useState<TabKey>("accueil");
   const [moi, setMoi] = useState<Moi>(DEMO_MOI);
-  const [roster, setRoster] = useState<Member[]>(MEMBRES_FICTIFS);
+  const [roster, setRoster] = useState<Member[]>([]);
   const [postes, setPostes] = useState<PostesMap>(loadPostes());
   const [regl, setRegl] = useState<Reglement>(() => loadReglement());
   const [annee, setAnnee] = useState(2026);
@@ -2180,8 +2190,8 @@ export function EspaceMembre({ voirApp }: { voirApp?: () => void }) {
         surtitre="Espace Membre — la Tontine au quotidien"
         titre={`Espace Membre — ${moi.nom}`}
         sousTitre={moi.connecte
-          ? `${ROLE_META[moi.role].label} · tour n°${moi.tour} (${moisDuTour(moi.tour)}) · ${moi.city} — tout ce que vous faites ici rejoint les registres du bureau.`
-          : "Aperçu de démonstration (Patrick Talla, membre simple) — connectez-vous pour porter vos propres données."}
+          ? `${ROLE_META[moi.role].label} · tour n°${moi.tour} (${moisDuTour(moi.tour)}) · ${moi.city}.`
+          : "Aperçu de démonstration — connectez-vous pour vos données."}
         icon={<Users className="h-6 w-6" />}
         badges={
           <>

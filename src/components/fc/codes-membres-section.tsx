@@ -108,7 +108,7 @@ export function CodesMembresSection(p: {
     if (ajoutee) {
       setVille(nom);
       toast.success(`Ville ajoutée : ${nom} (${regionChoisie})`, {
-        description: `Les codes et membres de ${nom} constituent désormais UNE tontine — cotisations et prêts additionnés entre eux.`,
+        description: `Une nouvelle tontine est créée pour ${nom}.`,
       });
     } else {
       setVille(nom);
@@ -131,7 +131,7 @@ export function CodesMembresSection(p: {
       await navigator.clipboard.writeText(code);
       setCopie(true);
       window.setTimeout(() => setCopie(false), 2500);
-      toast.success("Code copié", { description: `${code} est dans le presse-papier — collez-le dans WhatsApp, SMS ou e-mail.` });
+      toast.success("Code copié", { description: `${code} — collez-le où vous voulez.` });
     } catch {
       toast.error("Copie impossible sur ce navigateur", { description: `Sélectionnez le code à la main : ${code}` });
     }
@@ -163,7 +163,7 @@ export function CodesMembresSection(p: {
     setDigits("");
     setTypeMembre("simple");
     toast.success(`Code généré pour le futur membre de ${c.ville}`, {
-      description: `${c.code} — pas besoin de le partager tout de suite : il est gardé dans la section « Codes générés » ci-dessous. La personne peut déjà recevoir cotisations, épargnes et prêts.`,
+      description: `${c.code} — gardé dans la section « Codes générés ».`,
     });
   };
 
@@ -178,7 +178,7 @@ export function CodesMembresSection(p: {
   const cartePartage = (c: CodeMembre): ReactNode => (
     <div className="rounded-2xl border-2 p-3.5" style={{ borderColor: `${p.accent}55`, backgroundColor: `${p.accent}0D` }}>
       <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: p.accent }}>
-        {c === dernier ? "Code tout juste généré — partagez-le quand vous voulez" : "Code d'invitation"}
+        {c === dernier ? "Nouveau code — partagez quand vous voulez" : "Code d'invitation"}
       </p>
       <p className="mt-1 select-all font-mono text-[26px] font-black tracking-[0.14em] text-[#2B3530]">{c.code}</p>
       <p className="mt-0.5 text-[11.5px] font-semibold text-[#5C6B60]">
@@ -200,10 +200,7 @@ export function CodesMembresSection(p: {
         </a>
       </div>
       <p className="mt-2 text-[10.5px] leading-relaxed text-[#5C6B60]">
-        La personne ouvre l&apos;application, <strong>colle ce code</strong>, donne SON NOM : sa page
-        s&apos;ouvre avec {c.typeMembre === "bureau" ? `le poste « ${c.bureauRole ? LIBELLES_BUREAU[c.bureauRole] : "bureau"} »` : "le rôle de membre simple"}
-        {c.cotisationTypeId ? ` et sa cotisation « ${c.cotisationNom} » (${fcfa(c.cotisationMontant)}/mois)` : ` et la cotisation de base (${fcfa(c.cotisationMontant)}/mois)`} —
-        et TOUT ce que le bureau lui a déjà alloué (épargnes, prêts, cotisations) apparaît sur sa page.
+        La personne colle ce code puis donne son nom — sa page s&apos;ouvre toute seule.
       </p>
     </div>
   );
@@ -213,7 +210,7 @@ export function CodesMembresSection(p: {
       title={p.titre ?? "Créer un membre de la réunion — générer un code d'invitation"}
       icon={<Ticket className="h-4.5 w-4.5" />}
       accent={p.accent}
-      note="Le président et la secrétaire créent les membres AVANT leur arrivée : numéro de téléphone, VILLE (Yaoundé par défaut — une nouvelle ville s'ajoute en choisissant sa région), type de cotisation et type de membre. Pas besoin de partager le code tout de suite : il est gardé dans la section « Codes générés », prêt à être partagé quand vous voulez. Dès la génération, la personne peut recevoir cotisations, épargnes et prêts."
+      note="Tapez le numéro, choisissez la ville et la cotisation, puis générez le code."
     >
       <div className="space-y-3 p-4">
         {/* ─── formulaire ─── */}
@@ -271,7 +268,7 @@ export function CodesMembresSection(p: {
               </button>
             </span>
             <p className="mt-1 text-[10.5px] text-[#8A9288]">
-              Tous les membres d&apos;une même ville forment UNE tontine — leurs cotisations, prêts et épargnes sont additionnés entre eux.
+              Une ville = une tontine.
             </p>
 
             {panneauVille && (
@@ -332,7 +329,7 @@ export function CodesMembresSection(p: {
           <label className="mt-3 block">
             <span className="block text-[11.5px] font-bold text-[#2B3530]">Type de cotisation qu&apos;il effectuera</span>
             <span className="mt-0.5 block text-[10.5px] text-[#8A9288]">
-              Selon les paramétrages faits par le bureau (types de cotisations mensuelles) — ou la cotisation de base.
+              Choisissez un type ou restez à la cotisation de base.
             </span>
             <select
               value={cotisChoix}
@@ -375,7 +372,7 @@ export function CodesMembresSection(p: {
             {typeMembre === "bureau" && (
               <label className="mt-2 block rounded-xl border-2 px-3 py-2.5" style={{ borderColor: `${p.accent}66`, backgroundColor: `${p.accent}0A` }}>
                 <span className="block text-[11.5px] font-bold" style={{ color: p.accent }}>
-                  Quel poste du bureau ? — la page du poste sera SA page
+                  Quel poste du bureau ?
                 </span>
                 <select
                   value={bureauRole}
@@ -396,7 +393,7 @@ export function CodesMembresSection(p: {
               <KeyRound className="h-4 w-4" /> Générer le code d&apos;invitation
             </Btn>
             <p className="text-[10.5px] font-semibold text-[#8A9288]">
-              Le code est unique, dicté sans confusion (sans O/I/0/1) et reste valable sans limite de temps.
+              Le code reste valable sans limite de temps.
             </p>
           </div>
         </div>
@@ -410,12 +407,11 @@ export function CodesMembresSection(p: {
             <Users className="h-4 w-4" /> Codes générés — à partager quand vous voulez ({codes.length})
           </p>
           <p className="mt-0.5 text-[11px] leading-relaxed text-[#8A9288]">
-            Pas besoin de partager un code dès sa création : il est gardé ici, avec le numéro de la personne, sa ville
-            et ses boutons de partage (WhatsApp ou copier-coller). Un code en attente attend son propriétaire sans limite de temps.
+            Partagez chaque code quand vous voulez, via WhatsApp ou copier.
           </p>
           {codes.length === 0 ? (
             <p className="mt-2 rounded-2xl border border-dashed border-[#C9B98A] bg-[#FBF7EA] px-3 py-3 text-[12px] leading-relaxed text-[#8A9288]">
-              Aucun code pour l&apos;instant — remplissez le formulaire ci-dessus puis cliquez « Générer le code d&apos;invitation ».
+              Aucun code — remplissez le formulaire ci-dessus.
             </p>
           ) : (
             <div className="mt-2 max-h-96 overflow-y-auto rounded-2xl border border-[#E5DCC0] bg-white pr-0.5 fc-scroll">
@@ -488,10 +484,7 @@ export function CodesMembresSection(p: {
         <p className="flex items-start gap-2 rounded-xl border border-[#C89F62]/45 bg-[#C89F62]/10 px-3 py-2.5 text-[11.5px] leading-relaxed text-[#7A5B2E]">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            <strong>Comment ça marche :</strong> générez le code — il reste ICI, prêt à être partagé plus tard. Pendant ce
-            temps, allouez déjà cotisations, épargnes et prêts au futur membre (il figure dans vos listes). Quand la personne
-            reçoit le code, elle ouvre l&apos;application, le colle, donne son nom : <strong>sa page s&apos;ouvre avec tout</strong> —
-            son rôle, sa ville ({VILLE_DEFAUT} par défaut), sa cotisation et l&apos;historique de ce que le bureau a préparé.
+            Générez le code, allouez ses cotisations, puis partagez-le quand vous voulez.
           </span>
         </p>
       </div>

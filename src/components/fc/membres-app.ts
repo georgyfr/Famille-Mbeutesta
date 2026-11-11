@@ -25,7 +25,8 @@
 // de pouvoir les signaler « via l'app » dans les listes.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { MEMBRES_FICTIFS, type Member } from "./tontine-data";
+import { MEMBRES_FICTIFS, type Member, type RoleKey } from "./tontine-data";
+import { loadVousRole } from "./tontine-bureau";
 
 /** Préfixe d'identifiant des membres importés de l'annuaire de l'application. */
 export const PREFIXE_ID_APP = "app-";
@@ -96,4 +97,80 @@ export function loadMembresApplication(): Member[] {
   } catch {
     return [];
   }
+}
+
+/* ═══ v34 — LE COMPTE CONNECTÉ : le VRAI membre (fin des données fictives) ═══
+ * Demande de l'administrateur : « lorsqu'on est président, que ce soit plutôt
+ * notre nom, notre compte, notre statut et nos tableaux, nos prêts, nos
+ * cotisations qui nous sont propres à nous et non des éléments fictifs. »
+ *
+ * L'identité réelle est lue du compte connecté (fc_uid + fc_name) : c'est
+ * LUI qui apparaît (ex. « Albert Fotsos »), avec SON poste (posé par son
+ * code d'invitation) et SES données (cotisation, épargnes, prêts) — les
+ * tables écrivent le MÊME identifiant « app-<uid> » que l'espace membre et
+ * les registres du bureau : tout est coordonné, une seule source de vérité.
+ * Sans compte connecté (validation de développement), null — la console
+ * affiche alors un libellé neutre « Président » SANS nom inventé. */
+
+/** Le compte connecté converti en membre de la Tontine (null si aucun compte).
+ *  Sources en cascade : fc_uid + fc_name (posés à l'inscription), sinon la
+ *  SESSION de la base démo fc_demo_db_v2 (d.session → user → member) —
+ *  robuste même si le navigateur a perdu fc_uid/fc_name en route. */
+export function chargerCompteConnecte(): Member | null {
+  try {
+    if (typeof window === "undefined") return null;
+    const uid = localStorage.getItem("fc_uid");
+    const nom = (localStorage.getItem("fc_name") ?? "").trim();
+    if (uid && nom) {
+      const phone = (localStorage.getItem("fc_phone") ?? "").trim();
+      return {
+        id: `${PREFIXE_ID_APP}${uid}`,
+        name: nom,
+        role: (loadVousRole() ?? "membre") as RoleKey,
+        phone,
+        city: "Ma position",
+        since: String(new Date().getFullYear()),
+        tour: 1,
+        fictif: false,
+        isVous: true,
+      };
+    }
+    // SECOURS — la session de l'annuaire (même source que le tableau de bord)
+    const brut = localStorage.getItem("fc_demo_db_v2");
+    if (!brut) return null;
+    const db: {
+      session?: { uid?: string } | null;
+      users?: { id?: string; fullName?: string; phone?: string }[];
+      members?: EntreeAnnuaire[];
+    } = JSON.parse(brut);
+    const suid = db.session?.uid;
+    const user = (db.users ?? []).find((u) => u.id === suid);
+    const nomSession = (user?.fullName ?? "").trim();
+    if (!suid || !nomSession) return null;
+    const phone = (user?.phone ?? "").trim();
+    const membreAnnuaire = (db.members ?? []).find((m) => m.id === suid);
+    return {
+      id: `${PREFIXE_ID_APP}${suid}`,
+      name: nomSession,
+      role: (loadVousRole() ?? "membre") as RoleKey,
+      phone,
+      city: (membreAnnuaire?.city ?? "").trim() || "Ma position",
+      since: String(new Date().getFullYear()),
+      tour: 1,
+      fictif: false,
+      isVous: true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Effectif RÉEL de la Tontine : le compte connecté (le « vous » réel, avec
+ *  SON poste) + les membres inscrits/pré-enregistrés dans l'annuaire de
+ *  l'application + les futurs membres (codes d'invitation en attente).
+ *  AUCUN membre fictif — la console reflète la vie réelle de la famille. */
+export function chargerRosterReel(): Member[] {
+  const vous = chargerCompteConnecte();
+  const app = loadMembresApplication().filter((m) => m.id !== vous?.id);
+  return vous ? [vous, ...app] : app;
 }

@@ -61,14 +61,26 @@ export function consoleDuHash(): ConsoleBureau | null {
 
 /** Le poste du compte connecté — "pas-de-compte" si aucun compte n'est
  *  connecté sur cet appareil (validation sans session : toutes les consoles
- *  restent ouvertes) ; "membre" si le compte n'a pas encore de rôle posé. */
+ *  restent ouvertes) ; "membre" si le compte n'a pas encore de rôle posé.
+ *  v34 — FILET : si fc_uid a été perdu (navigateur ayant vidé le stockage),
+ *  la session de l'annuaire (fc_demo_db_v2.d.session) tranche — l'isolation
+ *  des statuts reste stricte même après une perte de stockage. */
 export function roleDuCompteConnecte(): RoleKey | "pas-de-compte" {
+  let uid = "";
   try {
-    const uid = window.localStorage.getItem("fc_uid");
-    if (!uid) return "pas-de-compte";
+    uid = window.localStorage.getItem("fc_uid") ?? "";
+    if (!uid) {
+      // Filet : la session de la base démo (même source que le tableau de bord)
+      const brut = window.localStorage.getItem("fc_demo_db_v2");
+      if (brut) {
+        const d = JSON.parse(brut) as { session?: { uid?: string } | null };
+        uid = d.session?.uid ?? "";
+      }
+    }
   } catch {
     return "pas-de-compte";
   }
+  if (!uid) return "pas-de-compte";
   return loadVousRole() ?? "membre";
 }
 

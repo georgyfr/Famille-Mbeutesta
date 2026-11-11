@@ -97,6 +97,20 @@ export function MainApp() {
     const res = await api<{ session: SessionData | null }>("/api/auth/session");
     setSession(res.ok ? res.session : null);
     setLoading(false);
+    // v34 — GUÉRISON DU STOCKAGE : si le navigateur a perdu fc_uid/fc_name
+    // (vidage du localStorage — WebView WhatsApp/Opéra…), la session rend le
+    // compte : on les repose. Les consoles du poste (isolation des statuts,
+    // nom réel du membre connecté) retrouvent leur source de vérité.
+    if (res.ok && res.session) {
+      try {
+        const uid = res.session.user.id;
+        if (uid && localStorage.getItem("fc_uid") !== uid) localStorage.setItem("fc_uid", uid);
+        const nom = res.session.user.fullName;
+        if (nom && localStorage.getItem("fc_name") !== nom) localStorage.setItem("fc_name", nom);
+      } catch {
+        /* stockage indisponible */
+      }
+    }
     // Session restaurée automatiquement (le navigateur avait vidé le stockage)
     // → accueil chaleureux au lieu de l'écran d'inscription.
     const restored = consumedRestore();

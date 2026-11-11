@@ -58,6 +58,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { api } from "@/lib/fc-client";
 import {
   Archive, Ban, BarChart3, Bell, BookOpen, CalendarCheck, CalendarClock, CheckCircle2, ChevronDown, ChevronUp,
   ClipboardList, Coins, Copy, Download, FileEdit, HandCoins, HeartHandshake, Mail, PenLine,
@@ -68,10 +69,11 @@ import {
   Block, Btn, BtnConfirme, P, KpiCard, EnteteConsole, MenuHamburger, useOngletsVus,
   fmt, fcfa, heure, nid, dateCourte, OK_CLS, OR_CLS, RJ_CLS, TE_CLS, VI_CLS, toast,
 } from "./maquette-ui";
-import { MEMBRES_FICTIFS, MOIS_FR, ROLE_META, TONTINE, secondSunday } from "./tontine-data";
+import { MOIS_FR, ROLE_META, TONTINE, secondSunday } from "./tontine-data";
 import type { Member } from "./tontine-data";
-import { loadMembresApplication } from "./membres-app";
+import { chargerCompteConnecte, chargerRosterReel } from "./membres-app";
 import { futursMembres } from "./premembres";
+import { loadVousRole } from "./tontine-bureau";
 import { loadReglement } from "./reglement";
 import type { Reglement } from "./reglement";
 import { loadEpargnesReunion, type AttributionReunion } from "./registres-bureau";
@@ -147,7 +149,7 @@ const GROUPES: { label: string; note?: string; couleur: string; keys: TabKey[] }
   {
     label: "Mon espace membre & outils",
     couleur: "#3D6B72",
-    note: "Françoise est aussi une membre : elle cotise, épargne et emprunte comme tout le monde — et crée les nouveaux membres par code d'invitation.",
+    note: "La secrétaire est aussi une membre — et crée les nouveaux membres.",
     keys: ["m-cotis", "m-epargne", "m-prets", "codes", "parametres"],
   },
 ];
@@ -170,7 +172,21 @@ function tabFromHash(): TabKey {
 
 export function MaquetteSecretaire() {
   const [tab, setTab] = useState<TabKey>(() => "pv");
+  /* — MEMBRES RÉELS (v34) : le compte connecté (la secrétaire LUI-MÊME) et
+   *    les personnes inscrites/pré-enregistrées dans l'annuaire de
+   *    l'application. AUCUN membre fictif — la console reflète la vie
+   *    réelle de la famille. — */
   const [membresApp, setMembresApp] = useState<Member[]>([]);
+  /* — FUTURS MEMBRES (codes en attente) : lus APRÈS montage (hydratation
+   *    sûre — jamais pendant le premier rendu côté serveur). — */
+  const [futurs, setFuturs] = useState<Member[]>([]);
+  /* — IDENTITÉ RÉELLE du compte connecté (fc_uid → annuaire) : SON nom,
+   *    SON poste, SES données. null avant montage (hydratation sûre). — */
+  const [moi, setMoi] = useState<Member | null>(null);
+  /* v34 — identifiant DYNAMIQUE de la secrétaire : « app-<uid> » du compte
+   * connecté ; « app-vous » (libellé neutre) tant que le compte n'est pas
+   * résolu — AUCUN identifiant fictif. — */
+  const MOI = moi?.id ?? "app-vous";
   const [moisLabel, setMoisLabel] = useState<string | null>(null);
   const [moisIdx, setMoisIdx] = useState<number | null>(null);
   const [annee, setAnnee] = useState<number | null>(null);
@@ -197,8 +213,14 @@ export function MaquetteSecretaire() {
   useEffect(() => {
     const t0 = setTimeout(() => {
       setTab(tabFromHash());
-      const membres = loadMembresApplication();
+      // v34 — IDENTITÉ RÉELLE : le compte connecté (fc_uid → « app-<uid> »)
+      // est la SECRÉTAIRE de la console — SON nom, SON poste, SES données.
+      const moiReel = chargerCompteConnecte();
+      setMoi(moiReel);
+      const membres = chargerRosterReel().filter((m) => !m.isVous); // annuaire réel hors « vous »
       setMembresApp(membres);
+      const futursCodes = futursMembres(); // codes d'invitation en attente
+      setFuturs(futursCodes);
       const d = new Date();
       setMoisIdx(d.getMonth());
       setAnnee(d.getFullYear());
@@ -216,11 +238,37 @@ export function MaquetteSecretaire() {
       setRegl(loadReglement());
       /* LE MOTEUR tourne au chargement : les règles configurées s'appliquent
        * à l'historique existant (amendes + notifications idempotentes). */
-      const rosterInitial = [...MEMBRES_FICTIFS, ...membres];
+      const rosterInitial = [...(moiReel ? [moiReel] : []), ...membres, ...futursCodes];
       const mk = moisKeyOf(d.getFullYear(), d.getMonth());
       for (const m of rosterInitial) syncMembre(h, m.id, m.name, mk, p.presences);
       setAmendes(loadAmendes());
       setNotifs(loadNotifs());
+      // v34 — FILET : si le stockage local a perdu fc_uid/fc_name, la SESSION
+      // (même source que le tableau de bord) rend le nom et le téléphone —
+      // la console affiche TOUJOURS le vrai compte connecté.
+      void (async () => {
+        try {
+          const s = await api<{ session: { user: { id: string; fullName: string; phone?: string | null } } | null }>("/api/auth/session");
+          if (!s.ok || !s.session) return;
+          const u = s.session.user;
+          setMoi((prev) => {
+            if (prev?.id === `app-${u.id}`) return prev; // déjà résolu depuis le stockage
+            return {
+              id: `app-${u.id}`,
+              name: u.fullName,
+              role: (loadVousRole() ?? "secretariat") as Member["role"],
+              phone: u.phone ?? "",
+              city: "Ma position",
+              since: String(new Date().getFullYear()),
+              tour: 1,
+              fictif: false,
+              isVous: true,
+            };
+          });
+        } catch {
+          /* pas de session — l'aperçu neutre reste affiché */
+        }
+      })();
       setDonneesPretes(true); // v24 : dernière pose du chargement — badges fiables
     }, 0);
     const onHash = () => setTab(tabFromHash());
@@ -252,10 +300,12 @@ export function MaquetteSecretaire() {
 
   /* v27 — les FUTURS MEMBRES (codes non utilisés) rejoignent la liste : le
    * bureau peut déjà leur allouer cotisations, épargnes et prêts AVANT leur
-   * inscription — à l'activation du code, tout rejoint leur compte. */
-  const roster = useMemo(() => [...MEMBRES_FICTIFS, ...membresApp, ...futursMembres()], [membresApp]);
+   * inscription — à l'activation du code, tout rejoint leur compte.
+   * v34 — Effectif RÉEL : le compte connecté (la secrétaire LUI-MÊME) + les
+   * membres de l'annuaire de l'application + les futurs membres (codes non
+   * utilisés). AUCUN membre fictif — plus aucune donnée de démonstration. */
+  const roster = useMemo(() => [...(moi ? [moi] : []), ...membresApp, ...futurs], [moi, membresApp, futurs]);
   const parMembre = useMemo(() => new Map(roster.map((m) => [m.id, m])), [roster]);
-  const MOI = "f06"; // Françoise Mbeutetsa — la secrétaire est AUSSI une membre
 
   const presencesMois = useMemo<Record<string, PresenceEtat>>(() => (moisKey ? presHisto[moisKey] ?? {} : {}), [presHisto, moisKey]);
   const etatPresence = (id: string): PresenceEtat => presencesMois[id] ?? "attente";
@@ -288,9 +338,9 @@ export function MaquetteSecretaire() {
       setAmendes(loadAmendes());
       setNotifs(loadNotifs());
       if (apres > avant) {
-        toast.warning(`Amende automatique — ${m.name}`, { description: "Une règle configurée dans Paramètres est atteinte : l'amende est enregistrée et le membre notifié sur sa page." });
+        toast.warning(`Amende automatique — ${m.name}`, { description: "Règle atteinte — amende enregistrée, membre notifié." });
       } else if (apres < avant) {
-        toast.success(`Compteurs réduits — ${m.name}`, { description: "Son statut ne justifie plus certaines amendes « dues » : elles ont été retirées automatiquement." });
+        toast.success(`Compteurs réduits — ${m.name}`, { description: "Amendes « dues » retirées automatiquement." });
       } else {
         toast(`${m.name} : ${etat === "present" ? "présent" : etat === "excuse" ? "excusé" : etat === "absent" ? "absent" : "en attente"}`, { description: "Enregistré automatiquement — compteurs et règles recalculés." });
       }
@@ -306,13 +356,13 @@ export function MaquetteSecretaire() {
     for (const m of roster) syncMembre(h, m.id, m.name, moisKey, params.presences);
     setAmendes(loadAmendes());
     setNotifs(loadNotifs());
-    toast.success("Appel terminé — tous présents", { description: `Enregistré automatiquement pour ${roster.length} membres. Les absences du mois passé sont annulées (rachat automatique) et le trésorier peut être notifié.` });
+    toast.success("Appel terminé — tous présents", { description: `Enregistré pour ${roster.length} membres.` });
   };
 
   const transmettreAppel = () => {
     const dues = amendes.filter((a) => a.moisKey === moisKey && a.statut === "due");
     if (dues.length === 0) {
-      toast.success("Liste de présence transmise au trésorier", { description: `${nbPresent} présents · ${nbExcuse} excusés · ${nbAbsent} absents — aucune amende automatique à encaisser ce mois.` });
+      toast.success("Liste de présence transmise au trésorier", { description: `${nbPresent} présents · ${nbExcuse} excusés · ${nbAbsent} absents.` });
       return;
     }
     const total = dues.reduce((s, a) => s + a.montant, 0);
@@ -328,7 +378,7 @@ export function MaquetteSecretaire() {
       });
     }
     setNotifs(loadNotifs());
-    toast.success("Liste transmise au trésorier", { description: `${dues.length} amende(s) automatique(s) à encaisser : ${fcfa(total)} — chaque membre concerné est notifié sur sa page.` });
+    toast.success("Liste transmise au trésorier", { description: `${dues.length} amende(s) à encaisser : ${fcfa(total)}.` });
   };
 
   /* — visas du registre (membre notifié sur sa page + président informé) — */
@@ -336,7 +386,7 @@ export function MaquetteSecretaire() {
     const e = epargnes.find((x) => x.id === id);
     if (!e) return;
     const le = `${dateCourte()} ${heure()}`;
-    const v: VisasEpargnes = { ...visas, [id]: { le, par: "Françoise Mbeutetsa — Secrétaire" } };
+    const v: VisasEpargnes = { ...visas, [id]: { le, par: `${moi?.name || "Secrétaire"} — Secrétaire` } };
     setVisas(v);
     saveVisas(v);
     const m = parMembre.get(e.membreId);
@@ -345,16 +395,16 @@ export function MaquetteSecretaire() {
       id: `visa-membre:${id}`, le,
       destinataire: e.membreId, destinataireNom: m?.name ?? e.membreId, type: "visa",
       titre: `Épargne visée — ${m?.name ?? e.membreId}`,
-      message: `Votre épargne de ${MOIS_FR[mi]} (${fcfa(e.montant)}) a été VISÉE par la secrétaire le ${le} : le montant annoncé correspond au registre du bureau. Le président en a été informé.`,
+      message: `Votre épargne de ${MOIS_FR[mi]} (${fcfa(e.montant)}) a été visée par la secrétaire le ${le}.`,
     });
     pushNotif({
       id: `visa-president:${id}`, le,
       destinataire: "president", destinataireNom: "Président", type: "visa",
       titre: `Visa de la secrétaire — ${m?.name ?? e.membreId}`,
-      message: `La secrétaire a visé l'épargne de ${m?.name ?? e.membreId} (${MOIS_FR[mi]}, ${fcfa(e.montant)}) le ${le} — inscription vérifiée et contresignée.`,
+      message: `La secrétaire a visé l'épargne de ${m?.name ?? e.membreId} (${MOIS_FR[mi]}, ${fcfa(e.montant)}) le ${le}.`,
     });
     setNotifs(loadNotifs());
-    toast.success("Épargne visée", { description: `${m?.name ?? ""} est notifié sur sa page et le président est informé — la ligne est désormais verrouillée.` });
+    toast.success("Épargne visée", { description: `${m?.name ?? ""} notifié, ligne verrouillée.` });
   };
 
   const deviser = (id: string) => {
@@ -369,7 +419,7 @@ export function MaquetteSecretaire() {
         id: `visa-membre:${id}`, le: `${dateCourte()} ${heure()}`,
         destinataire: e.membreId, destinataireNom: m.name, type: "visa",
         titre: `Visa retiré — ${m.name}`,
-        message: `Le visa de votre épargne de ${MOIS_FR[Math.min(11, Math.max(0, e.moisIdx))]} (${fcfa(e.montant)}) a été retiré par la secrétaire pour vérification — il sera reposé après contrôle.`,
+        message: `Le visa de votre épargne de ${MOIS_FR[Math.min(11, Math.max(0, e.moisIdx))]} (${fcfa(e.montant)}) a été retiré par la secrétaire.`,
       });
       setNotifs(loadNotifs());
     }
@@ -380,7 +430,7 @@ export function MaquetteSecretaire() {
     if (epargnes.length === 0) { toast.error("Registre vide — rien à exporter"); return; }
     try {
       await exportRegistreEpargnesExcel(epargnes, parMembre, visas);
-      toast.success("Registre téléchargé (Excel)", { description: `${epargnes.length} inscription(s) + synthèse par membre — le fichier .xlsx est dans vos téléchargements.` });
+      toast.success("Registre téléchargé (Excel)", { description: `${epargnes.length} inscription(s) — fichier .xlsx dans vos téléchargements.` });
     } catch {
       toast.error("Le téléchargement a échoué", { description: "Réessayez — votre navigateur a peut-être bloqué le téléchargement." });
     }
@@ -391,14 +441,14 @@ export function MaquetteSecretaire() {
     const next = pvs.map((x) => (x.id === id ? { ...x, statut: "finalise" as const, le: dateCourte() } : x));
     setPvs(next);
     savePVs(next);
-    toast.success("Procès-verbal finalisé", { description: "Prêt à être LU à la prochaine réunion, puis archivé — comme à l'oral : on lit, la famille approuve." });
+    toast.success("Procès-verbal finalisé", { description: "À lire en réunion puis à archiver." });
   };
   const archiverPV = (id: string, typeArchive: string) => {
     const p = pvs.find((x) => x.id === id);
     const next = pvs.map((x) => (x.id === id ? { ...x, statut: "archive" as const, archiveType: typeArchive } : x));
     setPvs(next);
     savePVs(next);
-    toast("Procès-verbal archivé", { description: p ? `« ${p.titre} » rejoint les archives (type : ${typeArchive}) — consultables par toute la famille.` : "" });
+    toast("Procès-verbal archivé", { description: p ? `« ${p.titre} » rejoint les archives (type : ${typeArchive}).` : "" });
   };
   const majContenuPV = (id: string, contenu: string) => {
     const next = pvs.map((x) => (x.id === id ? { ...x, contenu } : x));
@@ -454,7 +504,7 @@ export function MaquetteSecretaire() {
       const next: PV[] = [{ id: nid(), titre, le: "—", statut: "brouillon", contenu }, ...pvs];
       setPvs(next); savePVs(next);
     }
-    toast.success("PV de séance rédigé (brouillon)", { description: "L'ordre du jour est repris dans le brouillon — complétez les décisions puis finalisez dans l'onglet Procès-verbaux." });
+    toast.success("PV de séance rédigé (brouillon)", { description: "Complétez-le puis finalisez dans l'onglet Procès-verbaux." });
     goTab("pv");
   };
 
@@ -469,7 +519,7 @@ export function MaquetteSecretaire() {
       message: `La secrétaire a inscrit « ${d.point} » (${d.type}) au journal des décisions — responsable : ${d.responsable}.`,
     });
     setNotifs(loadNotifs());
-    toast.success("Décision inscrite au journal", { description: "Le président est notifié — la décision peut être démarrée, relancée, marquée réalisée puis archivée." });
+    toast.success("Décision inscrite au journal", { description: "Le président est notifié." });
   };
   const actionDecision = (id: string, action: "demarrer" | "realisee" | "archiver" | "relancer") => {
     const libelles: Record<typeof action, string> = {
@@ -512,7 +562,7 @@ export function MaquetteSecretaire() {
       for (const m of roster) syncMembre(presHisto, m.id, m.name, moisKey, p.presences);
       setAmendes(loadAmendes());
       setNotifs(loadNotifs());
-      toast.success("Règles appliquées", { description: "Le moteur a recalculé les compteurs de tous les membres avec la nouvelle configuration." });
+      toast.success("Règles appliquées", { description: "Compteurs recalculés pour tous les membres." });
     }
   };
 
@@ -574,7 +624,7 @@ export function MaquetteSecretaire() {
   const proposerTaux = () => {
     if (tauxPropose == null || tauxPropose === taux) { toast.error("Choisissez un taux DIFFÉRENT du taux en vigueur"); return; }
     setProposition({ taux: tauxPropose, le: `${dateCourte()} ${heure()}` });
-    toast("Proposition transmise au président", { description: `Nouveau taux proposé : ${tauxPropose} %/mois — il ne devient officiel qu'après SA co-signature, puis publication aux membres.` });
+    toast("Proposition transmise au président", { description: `Nouveau taux proposé : ${tauxPropose} %/mois — en attente de co-signature.` });
   };
 
   const amendesMois = useMemo(() => amendes.filter((a) => a.moisKey === moisKey), [amendes, moisKey]);
@@ -587,7 +637,7 @@ export function MaquetteSecretaire() {
         accent="#5D3F60" accentClair="#6E4B71"
         surtitre="Mémoire & gestion de la tontine"
         titre="Console — Secrétaire"
-        sousTitre={`${ROLE_META.secretariat.label} : Françoise Mbeutetsa (vous) · Tontine Mbeutetsa · ${TONTINE.jourLabel}`}
+        sousTitre={`${ROLE_META.secretariat.label} : ${moi?.name || "Secrétaire"} (vous) · Tontine Mbeutetsa · ${TONTINE.jourLabel}`}
         icon={<PenLine className="h-6 w-6" />}
         badges={
           <>
@@ -629,6 +679,7 @@ export function MaquetteSecretaire() {
         )}
         {tab === "presences" && (
           <PresencesSection
+            moiId={MOI}
             roster={roster} presences={presencesMois} onMarquer={marquer} onToutPresent={toutPresent} onTransmettre={transmettreAppel}
             nbPresent={nbPresent} nbExcuse={nbExcuse} nbAbsent={nbAbsent} nbAttente={nbAttente} mois={moisLabel ?? "…"}
             amendesMois={amendesMois} notifsMois={notifsMois} dernierEnregistrement={derniereSauvegarde}
@@ -668,10 +719,10 @@ export function MaquetteSecretaire() {
           <SecSolidarite regl={regl} moisCourantIdx={moisIdx} roster={roster} parMembre={parMembre} />
         )}
         {tab === "membres" && (
-          <MembresSection roster={roster} historique={presHisto} moisKey={moisKey} rachatAuto={params.presences.rachatAuto} amendes={amendes} notifs={notifs} parMembre={parMembre} onSupprimerAmende={supprimerAmende} />
+          <MembresSection moiId={MOI} roster={roster} historique={presHisto} moisKey={moisKey} rachatAuto={params.presences.rachatAuto} amendes={amendes} notifs={notifs} parMembre={parMembre} onSupprimerAmende={supprimerAmende} />
         )}
         {tab === "codes" && (
-          <CodesMembresSection creePar="secretariat" accent="#6E4B71" creeParNom="Françoise Mbeutetsa — Secrétaire" />
+          <CodesMembresSection creePar="secretariat" accent="#6E4B71" creeParNom={`${moi?.name || "Secrétaire"} — Secrétaire`} />
         )}
         {tab === "notifications" && (
           <NotificationsSection notifs={notifs} parMembre={parMembre} onToutLu={toutLu} onBasculerLu={basculerLu} onSupprimer={supprimerNotif} />
@@ -749,7 +800,7 @@ function PvSection(p: { pvs: PV[]; onMajContenu: (id: string, contenu: string) =
       title="Les procès-verbaux de la famille"
       icon={<BookOpen className="h-4 w-4" />}
       accent="#6E4B71"
-      note="Le secrétaire écrit ce que la réunion DÉCIDE — pas ce qu'elle pense. Un PV brouillon se rédige ici, se FINALISE quand il est complet, puis s'ARCHIVE après avoir été lu et approuvé en réunion. Le type d'archive est réglable (Paramètres → types d'archives)."
+      note="Rédigez le PV, finalisez-le, puis archivez-le après la réunion."
     >
       <div className="space-y-3 p-4">
         {p.pvs.map((pv) => (
@@ -824,7 +875,7 @@ function SeancesSection(p: {
         title={`Ordre du jour — séance de ${p.moisLabel ?? "…"}`}
         icon={<CalendarClock className="h-4 w-4" />}
         accent="#6E4B71"
-        note="La secrétaire PRÉPARE la séance : elle fixe l'ordre du jour, coche les points traités au fil de l'eau, puis CLÔTURE la séance — le PV brouillon est rédigé automatiquement avec les points traités."
+        note="Fixez l'ordre du jour, cochez les points traités, puis clôturez la séance."
       >
         <div className="divide-y divide-[#E5DCC0]">
           {(p.seance?.points ?? []).map((pt, i) => (
@@ -873,6 +924,7 @@ function SeancesSection(p: {
 }
 
 function PresencesSection(p: {
+  moiId: string;
   roster: Member[]; presences: Record<string, PresenceEtat>;
   onMarquer: (id: string, etat: PresenceEtat) => void;
   onToutPresent: () => void; onTransmettre: () => void;
@@ -903,7 +955,7 @@ function PresencesSection(p: {
         title={`Liste de présence — ${p.mois}`}
         icon={<ClipboardList className="h-4 w-4" />}
         accent="#6E4B71"
-        note="Chaque clic est ENREGISTRÉ AUTOMATIQUEMENT (aucun bouton « sauver ») et déclenche les règles du bureau : avertissement dès N absences, amendes automatiques, rachat des absences du mois passé si présent ce mois. Le membre est notifié sur SA page, le président est informé."
+        note="Chaque clic est enregistré et applique les règles du bureau."
       >
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E5DCC0] bg-[#F7F1F8] px-4 py-2">
           <P cls={VI_CLS}><CheckCircle2 className="h-3 w-3" /> Sauvegarde automatique active</P>
@@ -917,7 +969,7 @@ function PresencesSection(p: {
               <div key={m.id} className="px-4 py-2.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-[#2B3530]">
-                    {m.name}{m.id === "f06" ? " (vous)" : ""}
+                    {m.name}{m.id === p.moiId ? " (vous)" : ""}
                     <span className="ml-1.5 text-[10.5px] font-semibold text-[#8A9288]">{m.city}</span>
                   </span>
                   <div className="flex gap-1">
@@ -956,10 +1008,10 @@ function PresencesSection(p: {
         title={`Amendes automatiques — ${p.mois}`}
         icon={<Ban className="h-4 w-4" />}
         accent="#6E4B71"
-        note="Générées TOUTES SEULES par les règles configurées dans Paramètres (absences consécutives, 6 mois, année, excusés consécutifs, convocation confirmée puis absent). « Transmettre » passe les amendes dues au trésorier et notifie chaque membre."
+        note="Générées automatiquement selon les règles de Paramètres — « Transmettre » les passe au trésorier."
       >
         {p.amendesMois.length === 0 ? (
-          <p className="px-4 py-3 text-[12px] font-semibold text-[#8A9288]">Aucune amende ce mois — les compteurs de tous les membres respectent les règles du bureau.</p>
+          <p className="px-4 py-3 text-[12px] font-semibold text-[#8A9288]">Aucune amende ce mois.</p>
         ) : (
           <div className="divide-y divide-[#E5DCC0]">
             {p.amendesMois.map((a) => {
@@ -992,7 +1044,7 @@ function PresencesSection(p: {
 
       {p.notifsMois.length > 0 && (
         <Block title="Notifications envoyées aujourd'hui" icon={<Bell className="h-4 w-4" />} accent="#6E4B71"
-          note="Toutes les notifications du jour — les membres les voient sur LEUR page (tableau de bord), le président les voit dans sa console et dans l'onglet Notifications.">
+          note="Notifications du jour — visibles par les membres et le président.">
           <div className="divide-y divide-[#E5DCC0]">
             {p.notifsMois.slice(0, 8).map((n) => (
               <div key={n.id} className="px-4 py-2">
@@ -1026,7 +1078,7 @@ function DecisionsSection(p: {
       title="Journal des décisions du bureau"
       icon={<ScrollText className="h-4 w-4" />}
       accent="#6E4B71"
-      note="Chaque décision porte son TYPE (réglable dans Paramètres), son responsable et son échéance. ACTIONS réelles : Démarrer (exécution en cours), Relancer le responsable (notification), Marquer réalisée, Archiver — chaque action est TRACÉE dans le suivi de la décision."
+      note="Choisissez le type, le responsable, puis inscrivez au journal."
     >
       {form && (
         <div className="space-y-2 border-b border-[#E5DCC0] bg-[#F7F1F8] p-4">
@@ -1122,7 +1174,7 @@ function ArchivesSection(p: { pvs: PV[]; decisions: DecisionJ[]; typesArchives: 
       title="Archives de la famille"
       icon={<Archive className="h-4 w-4" />}
       accent="#6E4B71"
-      note="Tout ce qui est archivé au secrétariat : procès-verbaux lus et approuvés, décisions closes. Le filtre suit les TYPES d'archives configurés dans Paramètres — ajoutez vos propres types (Rapport, Courrier, Pièce comptable…)."
+      note="PV lus et décisions closes, filtrés par type."
     >
       <div className="flex flex-wrap gap-1.5 border-b border-[#E5DCC0] bg-[#F7F1F8] px-4 py-3">
         <button type="button" onClick={() => setFiltre("tous")} aria-pressed={filtre === "tous"}
@@ -1168,7 +1220,7 @@ function TauxSection(p: {
       title="Taux des épargnes & prêts — co-signature du bureau"
       icon={<Percent className="h-4 w-4" />}
       accent="#6E4B71"
-      note="Le taux est réglé À DEUX : le président propose, la secrétaire contresigne (ou l'inverse). Tant que le président n'a pas co-signé, le taux en vigueur reste inchangé pour tous les membres."
+      note="Le président et la secrétaire co-signent le taux."
     >
       <div className="space-y-3 p-4">
         <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] px-3.5 py-3">
@@ -1178,7 +1230,7 @@ function TauxSection(p: {
         {p.proposition ? (
           <div className="rounded-2xl border-2 border-[#C89F62] bg-[#FFF8EC] px-3.5 py-3">
             <p className="text-[13px] font-bold text-[#8A6420]">Proposition en attente du président : {p.proposition.taux} %/mois</p>
-            <p className="mt-0.5 text-[11px] text-[#8A9288]">Transmise le {p.proposition.le} — le président reçoit une notification ; sans sa co-signature, rien ne change pour les membres.</p>
+            <p className="mt-0.5 text-[11px] text-[#8A9288]">Transmise le {p.proposition.le} — en attente du président.</p>
           </div>
         ) : (
           <div className="rounded-2xl border border-[#E5DCC0] bg-white px-3.5 py-3">
@@ -1216,7 +1268,7 @@ function RegistreSection(p: {
       title="Registre des épargnes — à viser par la secrétaire"
       icon={<PiggyBank className="h-4 w-4" />}
       accent="#6E4B71"
-      note="CE registre est celui du bureau — la MÊME source que la page « Épargnes » du président. VISA (double-clic de confirmation) : le montant est vérifié, la ligne VERROUILLÉE, le membre notifié sur SA page et le président informé. EXPORT EXCEL : le registre part en .xlsx (2 feuilles : détail + synthèse par membre)."
+      note="Visez chaque ligne pour la verrouiller et notifier le membre."
     >
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E5DCC0] bg-[#F7F1F8] px-4 py-2.5">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -1227,7 +1279,7 @@ function RegistreSection(p: {
         <Btn tone="vert" onClick={p.onExport}><Download className="h-4 w-4" /> Télécharger (Excel)</Btn>
       </div>
       {p.epargnes.length === 0 ? (
-        <p className="px-4 py-3 text-[12px] font-semibold text-[#8A9288]">Registre vide — les épargnes inscrites par la secrétaire ou le président apparaîtront ici.</p>
+        <p className="px-4 py-3 text-[12px] font-semibold text-[#8A9288]">Registre vide — aucune épargne inscrite.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-[12.5px]">
@@ -1277,7 +1329,7 @@ function RegistreSection(p: {
       )}
       <div className="border-t border-[#E5DCC0] bg-[#FBF7EA] px-4 py-2.5">
         <p className="text-[11px] leading-snug text-[#8A9288]">
-          <strong className="text-[#5A3E5D]">Que se passe-t-il quand une ligne est visée ?</strong> 1) la ligne est verrouillée (montant confirmé conforme au registre du bureau) ; 2) le membre reçoit sur SA page : « Votre épargne de … a été visée par la secrétaire » ; 3) le président est informé dans sa console ; 4) le visa apparaît dans l'export Excel (colonne « Visa »).
+          <strong className="text-[#5A3E5D]">Viser</strong> verrouille la ligne et notifie le membre.
         </p>
       </div>
     </Block>
@@ -1285,6 +1337,7 @@ function RegistreSection(p: {
 }
 
 function MembresSection(p: {
+  moiId: string;
   roster: Member[]; historique: HistoriquePresences; moisKey: string | null; rachatAuto: boolean;
   amendes: Amende[]; notifs: NotifBureau[]; parMembre: Map<string, Member>;
   onSupprimerAmende: (id: string) => void;
@@ -1295,7 +1348,7 @@ function MembresSection(p: {
       title="Membres & suivi disciplinaire"
       icon={<Users className="h-4 w-4" />}
       accent="#6E4B71"
-      note="Le suivi de chaque membre : absences consécutives, fenêtres 6 mois / année (après rachat automatique), amendes enregistrées et notifications reçues. Dépliez une ligne pour voir le détail et gérer les amendes."
+      note="Dépliez une ligne pour voir absences, amendes et notifications."
     >
       <div className="divide-y divide-[#E5DCC0]">
         {p.roster.map((m) => {
@@ -1309,7 +1362,7 @@ function MembresSection(p: {
               <button type="button" onClick={() => setOuvert(estOuvert ? null : m.id)} aria-expanded={estOuvert}
                 className="flex w-full flex-wrap items-center gap-2 text-left">
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-bold text-[#2B3530]">{m.name}{m.id === "f06" ? " (vous)" : ""}</span>
+                  <span className="block truncate text-[13px] font-bold text-[#2B3530]">{m.name}{m.id === p.moiId ? " (vous)" : ""}</span>
                   <span className="block text-[10.5px] font-semibold text-[#8A9288]">{ROLE_META[m.role]?.label ?? m.role} · {m.city}</span>
                 </span>
                 {stats && (
@@ -1327,8 +1380,8 @@ function MembresSection(p: {
                   {stats && (
                     <p className="text-[11.5px] leading-snug text-[#4A554E]">
                       Absences du mois passé : {stats.absMoisPrecedent} · {stats.rachatApplique
-                        ? `rachat appliqué : ${stats.rachatNb} absence(s) annulée(s) par la présence de ce mois`
-                        : p.rachatAuto ? "rachat automatique : présent ce mois ⇒ absences du mois passé annulées" : "rachat automatique désactivé"}
+                        ? `rachat appliqué : ${stats.rachatNb} absence(s) annulée(s)`
+                        : p.rachatAuto ? "rachat automatique actif" : "rachat automatique désactivé"}
                     </p>
                   )}
                   <p className="text-[11px] font-black uppercase tracking-wide text-[#5A3E5D]">Amendes ({sesAmendes.length})</p>
@@ -1388,7 +1441,7 @@ function NotificationsSection(p: {
         title="Notifications du secrétariat"
         icon={<Bell className="h-4 w-4" />}
         accent="#6E4B71"
-        note="Tout ce que le moteur et la secrétaire ont notifié : avertissements d'absences, amendes automatiques, rachats, visas, convocations et décisions. Les membres voient les leurs SUR LEUR page (tableau de bord) ; le président est informé des actions du secrétariat. Ouvrir cet onglet marque tout LU — le badge retombe ; cliquer le titre d'une notification la marque lue aussi."
+        note="Journal des notifications — ouvert, l'onglet marque tout lu."
       >
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E5DCC0] bg-[#F7F1F8] px-4 py-2.5">
           <div className="flex flex-wrap gap-1.5">
@@ -1473,7 +1526,7 @@ function StatistiquesSection(p: {
   return (
     <>
       <Block title="Taux de présence par membre (12 mois)" icon={<BarChart3 className="h-4 w-4" />} accent="#6E4B71"
-        note="Présences / (présences + excusés + absents) sur les 12 derniers mois, rachat automatique inclus dans les compteurs du bureau.">
+        note="Sur les 12 derniers mois, rachat inclus.">
         <div className="space-y-1.5 p-4">
           {parMembre.map(({ m, pres, exc, abs, tauxPct, amendesTotal }) => (
             <div key={m.id} className="flex items-center gap-2">
@@ -1524,22 +1577,22 @@ function StatistiquesSection(p: {
   );
 }
 
-function CourriersSection(p: { moisLabel: string | null; jourReunion: number; amendes: Amende[]; parMembre: Map<string, Member>; decisions: DecisionJ[]; moisIdx: number | null; annee: number | null }) {
+function CourriersSection(p: { moisLabel: string | null; jourReunion: number; amendes: Amende[]; parMembre: Map<string, Member>; decisions: DecisionJ[]; moisIdx: number | null; annee: number | null; nomSecretaire?: string }) {
   const [destAmende, setDestAmende] = useState<string | null>(p.amendes[0]?.membreId ?? null);
   const copier = async (texte: string) => {
     try {
       await navigator.clipboard.writeText(texte);
-      toast.success("Texte copié", { description: "Collez-le dans WhatsApp, un e-mail ou une lettre — le courrier partira avec le cachet du secrétariat." });
+      toast.success("Texte copié", { description: "Collez-le dans WhatsApp, un e-mail ou une lettre." });
     } catch {
       toast.error("Copie impossible dans ce navigateur — sélectionnez le texte manuellement.");
     }
   };
   const moisIdxSafe = p.moisIdx ?? 0;
-  const courrierConvocation = `FAMILLE MBEUTETSA — TONTINE\nSecrétariat\n\nObjet : Convocation à la réunion mensuelle\n\nChers membres,\n\nLa réunion mensuelle de la tontine se tiendra le ${p.jourReunion} ${MOIS_FR[moisIdxSafe]} ${p.annee ?? ""} à 14 h, au domicile de la famille Mbeutetsa (Douala).\n\nOrdre du jour : collecte des cotisations et collations, remise au bénéficiaire du mois, questions diverses.\n\nMerci de CONFIRMER votre réception depuis l'application, ou de notifier votre absence avec justification.\n\nLe Secrétaire,\nFrançoise Mbeutetsa`;
+  const courrierConvocation = `FAMILLE MBEUTETSA — TONTINE\nSecrétariat\n\nObjet : Convocation à la réunion mensuelle\n\nChers membres,\n\nLa réunion mensuelle de la tontine se tiendra le ${p.jourReunion} ${MOIS_FR[moisIdxSafe]} ${p.annee ?? ""} à 14 h, au domicile de la famille Mbeutetsa (Douala).\n\nOrdre du jour : collecte des cotisations et collations, remise au bénéficiaire du mois, questions diverses.\n\nMerci de CONFIRMER votre réception depuis l'application, ou de notifier votre absence avec justification.\n\nLe Secrétaire,\n${p.nomSecretaire ?? "Secrétaire"}`;
   const amendeM = p.amendes.find((a) => a.membreId === destAmende) ?? p.amendes[0];
-  const courrierAmende = amendeM ? `FAMILLE MBEUTETSA — TONTINE\nSecrétariat\n\nObjet : Notification d'amende automatique\n\nCher(e) ${p.parMembre.get(amendeM.membreId)?.name ?? amendeM.membreId},\n\nConformément aux règles adoptées par le bureau, votre suivi de présence fait apparaître : ${amendeM.libelle}.\n\nUne amende de ${fcfa(amendeM.montant)} est enregistrée au titre de ${amendeM.moisLabel}.\n\nVous pouvez vous rapprocher de la secrétaire pour toute précision sur vos compteurs.\n\nLe Secrétaire,\nFrançoise Mbeutetsa` : "Aucune amende enregistrée — aucun courrier de notification à préparer.";
+  const courrierAmende = amendeM ? `FAMILLE MBEUTETSA — TONTINE\nSecrétariat\n\nObjet : Notification d'amende automatique\n\nCher(e) ${p.parMembre.get(amendeM.membreId)?.name ?? amendeM.membreId},\n\nConformément aux règles adoptées par le bureau, votre suivi de présence fait apparaître : ${amendeM.libelle}.\n\nUne amende de ${fcfa(amendeM.montant)} est enregistrée au titre de ${amendeM.moisLabel}.\n\nVous pouvez vous rapprocher de la secrétaire pour toute précision sur vos compteurs.\n\nLe Secrétaire,\n${p.nomSecretaire ?? "Secrétaire"}` : "Aucune amende enregistrée — aucun courrier de notification à préparer.";
   const relance = p.decisions.find((d) => d.statut === "en_cours");
-  const courrierRelance = relance ? `FAMILLE MBEUTETSA — TONTINE\nSecrétariat\n\nObjet : Relance — décision du bureau non soldée\n\n${relance.responsable},\n\nLa décision « ${relance.point} » inscrite au journal (${relance.le}) est EN COURS : « ${relance.texte} »\n\nMerci de faire le point avec le bureau à la prochaine réunion.\n\nLe Secrétaire,\nFrançoise Mbeutetsa` : "Aucune décision en cours — aucune relance à préparer.";
+  const courrierRelance = relance ? `FAMILLE MBEUTETSA — TONTINE\nSecrétariat\n\nObjet : Relance — décision du bureau non soldée\n\n${relance.responsable},\n\nLa décision « ${relance.point} » inscrite au journal (${relance.le}) est EN COURS : « ${relance.texte} »\n\nMerci de faire le point avec le bureau à la prochaine réunion.\n\nLe Secrétaire,\n${p.nomSecretaire ?? "Secrétaire"}` : "Aucune décision en cours — aucune relance à préparer.";
   const modele = (titre: string, texte: string, icone: ReactNode) => (
     <div className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1555,7 +1608,7 @@ function CourriersSection(p: { moisLabel: string | null; jourReunion: number; am
       title="Courriers & modèles du secrétariat"
       icon={<Mail className="h-4 w-4" />}
       accent="#6E4B71"
-      note="Les courriers officiels du secrétariat, pré-remplis avec les données réelles du registre : convocation, notification d'amende, relance de décision. Copiez le texte — WhatsApp, e-mail ou papier."
+      note="Courriers pré-remplis avec les données du registre — copiez le texte."
     >
       <div className="space-y-3 p-4">
         {p.amendes.length > 0 && (
@@ -1592,12 +1645,12 @@ function ParametresSection(p: { params: ParamsSecretaire; onMaj: (p: ParamsSecre
         title="Paramètres — présences & amendes"
         icon={<ClipboardList className="h-4 w-4" />}
         accent="#6E4B71"
-        note={`Les règles s'appliquent TOUTES SEULES à chaque appel (mois courant : ${p.moisLabel}). Le membre est prévenu dès le seuil de notification ; au-delà, l'amende est ENREGISTRÉE AUTOMATIQUEMENT et le membre notifié sur sa page.`}
+        note={`Règles appliquées à chaque appel (mois courant : ${p.moisLabel}).`}
       >
         <div className="space-y-2 p-4">
-          <ToggleRow label="Moteur d'amendes actif" note="Si désactivé, aucun avertissement ni amende automatique — l'appel reste enregistré." actif={pr.activer} onToggle={() => majPresences({ activer: !pr.activer })} />
-          <ToggleRow label="Rachat automatique des absences" note="Présent ce mois ⇒ les absences du mois passé sont annulées automatiquement (compteurs + notification au membre)." actif={pr.rachatAuto} onToggle={() => majPresences({ rachatAuto: !pr.rachatAuto })} />
-          <NumField label="Avertir le membre dès N absences consécutives" note="Notification sur sa page : « vous avez N absences… à plus de X, pénalité de Y »." value={pr.notifierDes} onChange={(v) => majPresences({ notifierDes: v })} unite="abs." />
+          <ToggleRow label="Moteur d'amendes actif" note="Désactivé : aucun avertissement ni amende automatique." actif={pr.activer} onToggle={() => majPresences({ activer: !pr.activer })} />
+          <ToggleRow label="Rachat automatique des absences" note="Présent ce mois ⇒ absences du mois passé annulées." actif={pr.rachatAuto} onToggle={() => majPresences({ rachatAuto: !pr.rachatAuto })} />
+          <NumField label="Avertir le membre dès N absences consécutives" note="Le membre est notifié sur sa page." value={pr.notifierDes} onChange={(v) => majPresences({ notifierDes: v })} unite="abs." />
           <NumField label="Absences CONSÉCUTIVES → amende" value={pr.absConsSeuil} onChange={(v) => majPresences({ absConsSeuil: v })} unite="abs." />
           <NumField label="…montant de l'amende (consécutives)" value={pr.amendeAbsCons} onChange={(v) => majPresences({ amendeAbsCons: v })} unite="FCFA" />
           <NumField label="Absences sur 6 MOIS glissants → amende" value={pr.abs6Seuil} onChange={(v) => majPresences({ abs6Seuil: v })} unite="abs." />
@@ -1613,7 +1666,7 @@ function ParametresSection(p: { params: ParamsSecretaire; onMaj: (p: ParamsSecre
       </Block>
 
       <Block title="Paramètres — types de décisions" icon={<ScrollText className="h-4 w-4" />} accent="#6E4B71"
-        note="Les types proposés à l'inscription d'une décision au journal — ajoutez les vôtres (ex. : « Foncier », « Éducation »).">
+        note="Ajoutez vos propres types de décisions.">
         <div className="space-y-2 p-4">
           <div className="flex flex-wrap gap-1.5">
             {p.params.decisions.types.map((t) => (
@@ -1631,7 +1684,7 @@ function ParametresSection(p: { params: ParamsSecretaire; onMaj: (p: ParamsSecre
       </Block>
 
       <Block title="Paramètres — types d'archives" icon={<Archive className="h-4 w-4" />} accent="#6E4B71"
-        note="Les types disponibles à l'archivage d'un PV ou d'un document — le filtre de l'onglet Archives suit cette liste.">
+        note="Types proposés à l'archivage d'un PV ou document.">
         <div className="space-y-2 p-4">
           <div className="flex flex-wrap gap-1.5">
             {p.params.decisions.typesArchives.map((t) => (
@@ -1649,7 +1702,7 @@ function ParametresSection(p: { params: ParamsSecretaire; onMaj: (p: ParamsSecre
       </Block>
 
       <Block title="Paramètres — convocations & sanctions" icon={<Mail className="h-4 w-4" />} accent="#6E4B71"
-        note="Types de convocations, rappel automatique avant la réunion, et LA SANCTION : un membre qui a CONFIRMÉ la convocation et reste absent à la réunion est amendé automatiquement par le moteur.">
+        note="Types de convocations, rappel automatique et sanction « confirmé puis absent ».">
         <div className="space-y-2 p-4">
           <div className="flex flex-wrap gap-1.5">
             {p.params.convocations.types.map((t) => (
@@ -1664,7 +1717,7 @@ function ParametresSection(p: { params: ParamsSecretaire; onMaj: (p: ParamsSecre
             <Btn tone="violet" onClick={() => { const t = nouveauTypeConvo.trim(); if (!t) return; if (p.params.convocations.types.includes(t)) { toast.error("Ce type existe déjà"); return; } majConvocations({ types: [...p.params.convocations.types, t] }); setNouveauTypeConvo(""); toast.success(`Type de convocation « ${t} » ajouté`); }}><Plus className="h-4 w-4" /> Ajouter</Btn>
           </div>
           <NumField label="Rappel automatique avant la réunion" value={p.params.convocations.rappelJours} onChange={(v) => majConvocations({ rappelJours: v })} unite="jours" />
-          <ToggleRow label="Sanction « confirmé puis absent »" note="Le moteur amende automatiquement le membre qui avait confirmé la convocation du mois et est marqué ABSENT à l'appel." actif={p.params.convocations.sanctionActif} onToggle={() => majConvocations({ sanctionActif: !p.params.convocations.sanctionActif })} />
+          <ToggleRow label="Sanction « confirmé puis absent »" note="Le membre qui avait confirmé et est absent est amendé." actif={p.params.convocations.sanctionActif} onToggle={() => majConvocations({ sanctionActif: !p.params.convocations.sanctionActif })} />
           <NumField label="…montant de la sanction" value={p.params.convocations.amendeConfirmeAbsent} onChange={(v) => majConvocations({ amendeConfirmeAbsent: v })} unite="FCFA" />
         </div>
       </Block>
@@ -1673,14 +1726,14 @@ function ParametresSection(p: { params: ParamsSecretaire; onMaj: (p: ParamsSecre
        *    par défaut (demande de l'administrateur — l'interrupteur remplace le
        *    bouton « Recevoir la notification » supprimé à l'inscription). — */}
       <Block title="Paramètres — notifications de l'appareil" icon={<Bell className="h-4 w-4" />} accent="#6E4B71"
-        note="Automatiques par défaut — convocations, amendes et décisions sonnent sur le téléphone même application fermée. L'interrupteur coupe/relance sur CET appareil ; le réglage vit ICI, dans les paramètres.">
+        note="Automatiques par défaut — l'interrupteur coupe ou relance sur cet appareil.">
         <div className="p-4">
           <ReglageNotifications />
         </div>
       </Block>
 
       <Block title="Zone de démonstration" icon={<RefreshCw className="h-4 w-4" />} accent="#6E4B71"
-        note="Efface TOUTES les données du secrétariat (PV, présences, décisions, convocations, amendes, notifications, visas, paramètres) et restaure les données de démonstration — utile pour rejouer un scénario devant le bureau.">
+        note="Efface tout et restaure les données de démonstration.">
         <div className="p-4">
           <BtnConfirme tone="rouge" onConfirmer={() => { reinitialiserDonneesSecretariat(); if (typeof window !== "undefined") window.location.reload(); }} labelConfirmer="Tout effacer et recharger ?">
             <RefreshCw className="h-4 w-4" /> Réinitialiser toutes les données du secrétariat

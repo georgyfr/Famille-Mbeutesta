@@ -32,7 +32,7 @@ export function RoleWizard({ onDone }: { onDone: () => void }) {
     saveVousRole(role);
     toast.success("Votre espace est prêt 🌳", {
       description:
-        "En tant que membre, vous validez les décisions du bureau et vous pouvez signaler tout problème. Le bureau vous remettra un code d'invitation si un poste vous est confié.",
+        "Vous validez les décisions du bureau et pouvez signaler un problème.",
     });
     onDone();
   };
@@ -80,9 +80,7 @@ export function RoleWizard({ onDone }: { onDone: () => void }) {
 
         <p className="mt-4 flex items-start gap-1.5 text-[11.5px] leading-relaxed text-[#8A9288]">
           <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          Président, secrétaire, trésorier… : un poste du bureau vous est REMIS
-          par le bureau lui-même, avec votre code d&apos;invitation — il ouvre
-          votre page automatiquement.
+          Un poste du bureau se reçoit par code d&apos;invitation.
         </p>
 
         <FcButton onClick={valider} className="mt-3 h-[54px] text-[16.5px]">

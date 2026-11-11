@@ -215,10 +215,32 @@ export function MaquetteGate() {
       if (hashConsoleExplicite()) setMode("maquette");
     };
     const t0 = setTimeout(sync, 0);
+    // v34 — GUÉRISON DE SESSION + RE-SYNCHRONISATION DIFFÉRÉE : au chargement
+    // direct d'une console (#secretaire…), le stockage peut avoir perdu
+    // fc_uid/fc_name (vidage du navigateur) — la session rend le compte, on
+    // les repose, puis on relit le poste : l'isolation des statuts s'applique
+    // d'emblée, quel que soit le mode (app ou maquette).
+    void (async () => {
+      try {
+        const { api } = await import("@/lib/fc-client");
+        const s = await api<{ session: { user: { id: string; fullName: string } } | null }>("/api/auth/session");
+        if (s.ok && s.session) {
+          const uid = s.session.user.id;
+          const nom = s.session.user.fullName;
+          try {
+            if (uid && localStorage.getItem("fc_uid") !== uid) localStorage.setItem("fc_uid", uid);
+            if (nom && localStorage.getItem("fc_name") !== nom) localStorage.setItem("fc_name", nom);
+          } catch { /* stockage indisponible */ }
+          sync();
+        }
+      } catch { /* pas de session — validation hors connexion possible */ }
+    })();
+    const t1 = setTimeout(sync, 1400);
     const onHash = () => sync();
     window.addEventListener("hashchange", onHash);
     return () => {
       clearTimeout(t0);
+      clearTimeout(t1);
       window.removeEventListener("hashchange", onHash);
     };
   }, []);

@@ -18,6 +18,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
+import { api } from "@/lib/fc-client";
 import {
   AlertTriangle, ArrowDownToLine, ArrowRight, ArrowUpFromLine, BadgeCheck, Ban,
   BellRing, CalendarCheck, CalendarClock, Check, CheckCircle2, CheckSquare, ChevronDown, ChevronRight, ChevronUp,
@@ -31,11 +32,11 @@ import { FcCard } from "./ui";
 import { useOngletsVus, MenuHamburger } from "./maquette-ui";
 import { ReglageNotifications } from "./reglage-notifications";
 import {
-  MEMBRES_FICTIFS, MOIS_FR, ROLE_META, TONTINE, TAUX_DEFAUT, loadMontants, saveMontants,
-  detteParPersonne, potMensuelDynamique, secondSunday,
+  MOIS_FR, ROLE_META, TONTINE, TAUX_DEFAUT, loadMontants, saveMontants,
+  potMensuelDynamique, secondSunday,
   type Member, type ReglagesTontine,
 } from "./tontine-data";
-import { estMembreApp, loadMembresApplication } from "./membres-app";
+import { estMembreApp, chargerCompteConnecte, chargerRosterReel } from "./membres-app";
 import { futursMembres } from "./premembres";
 import {
   COLLECTE_INTERETS_LABELS, COLLECTE_INTERETS_NOTES, EVENTS_SOLIDAIRES_LABELS,
@@ -49,6 +50,7 @@ import {
   type AttributionReunion, type RemboursementPret,
 } from "./registres-bureau";
 import { CodesMembresSection } from "./codes-membres-section";
+import { loadVousRole } from "./tontine-bureau";
 import {
   loadTypesCotisation, nouveauTypeCotisation, saveTypesCotisation,
   typeDuMembre, cotisationDuMembre, fmtMontant,
@@ -248,39 +250,61 @@ const SUJETS_PAROLE = [
   "Lieu de la prochaine réunion",
 ];
 
-/** Voteurs du bureau quand le président est partie prenante (récusation). */
-const VOTEURS_PRET: { qui: "vice" | "tresorier" | "censeur"; nom: string; role: string }[] = [
-  { qui: "vice", nom: "Marie-Louise Nguetsop", role: "Vice-présidente" },
-  { qui: "tresorier", nom: "Émile Tchoumi", role: "Trésorier" },
-  { qui: "censeur", nom: "Roger Ndoumbe", role: "Censeur" },
+/** Voteurs du bureau quand le président est partie prenante (récusation) —
+ *  v34 : les POSTES seuls (libellés réels du bureau) ; les noms viennent du
+ *  roster réel via voteursPretDuRoster(). */
+const VOTEURS_POSTES: { qui: "vice" | "tresorier" | "censeur"; role: string }[] = [
+  { qui: "vice", role: "Vice-président(e)" },
+  { qui: "tresorier", role: "Trésorier" },
+  { qui: "censeur", role: "Censeur" },
 ];
 
-/** Identifiant du président dans le registre fictif — c'est AUSSI un membre. */
-const MOI = "f01";
+/** Les voteurs RÉELS : le titulaire de chaque poste est cherché dans le
+ *  roster réel (aucun nom inventé) — le libellé du poste reste si le poste
+ *  n'a pas encore de titulaire. */
+function voteursPretDuRoster(roster: Member[]): { qui: "vice" | "tresorier" | "censeur"; nom: string; role: string }[] {
+  const nomDeRole = (r: Member["role"]) => roster.find((m) => m.role === r)?.name ?? null;
+  return VOTEURS_POSTES.map((v) => ({
+    qui: v.qui,
+    nom: nomDeRole(v.qui as Member["role"]) ?? v.role,
+    role: v.role,
+  }));
+}
+
+/* ── v34 — IDENTITÉ RÉELLE DU PRÉSIDENT (fin des données fictives) ──
+ * L'identifiant du compte connecté : « app-<uid> » — le MÊME identifiant
+ * que l'espace membre et les registres du bureau écrivent (cotisations,
+ * épargnes, prêts) : les tables sont COORDONNÉES, une seule source de
+ * vérité. Avant montage (SSR), la valeur par défaut sert d'aperçu — la
+ * résolution réelle se fait dans un useEffect (hydratation sûre).
+ * Sans compte connecté : « app-vous » — libellé neutre « Président »,
+ * AUCUN nom inventé. */
+const MOI_DEFAUT = "app-vous";
+
+/* Identité d'aperçu (sans compte connecté) : poste sans nom inventé. */
+const VOUS_APERCU: Member = {
+  id: MOI_DEFAUT,
+  name: "Président",
+  role: "president",
+  phone: "",
+  city: "Yaoundé",
+  since: String(new Date().getFullYear()),
+  tour: 1,
+  fictif: false,
+  isVous: true,
+};
 
 const initPresences = (): Record<string, PresenceEtat> => {
-  const seed: Record<string, PresenceEtat> = {
-    f01: "present", f02: "present", f03: "attente", f04: "present", f05: "excuse",
-    f06: "attente", f07: "attente", f08: "present", f09: "absent", f10: "attente",
-  };
-  MEMBRES_FICTIFS.forEach((m) => { if (!(m.id in seed)) seed[m.id] = "attente"; });
+  const seed: Record<string, PresenceEtat> = {};
   return seed;
 };
 
-const initJournal = (): JournalEntry[] => [
-  { id: nid(), le: "09:12", acteur: "Secrétaire", texte: "Le taux mensuel des épargnes et prêts est fixé à 3 % (décision du bureau, publiée au registre)." },
-  { id: nid(), le: "08:47", acteur: "Bureau", texte: "2 signalements ouverts : épargne d’octobre (montant erroné) et dette de P. Talla (mal insérée)." },
-  { id: nid(), le: "Hier", acteur: "Trésorier", texte: "Caisse de secours : 45 000 FCFA après l’aide décaissée en juin (naissance — famille Fotso)." },
-];
+const initJournal = (): JournalEntry[] => [];
 
-/** COTISATIONS & COLLATIONS DU MOIS, membre par membre — état de démonstration :
- *  7 cotisations et 5 collations déjà encaissées par le trésorier (le président
- *  n’a pas encore cotisé — cohérent avec le bandeau « cotisation à faire »). */
+/** COTISATIONS & COLLATIONS DU MOIS, membre par membre — état RÉEL :
+ *  rien n'est encaissé tant que le trésorier n'a rien encaissé. */
 const initCotisMois = (): Record<string, MouvementCotisMois> => {
   const seed: Record<string, MouvementCotisMois> = {};
-  MEMBRES_FICTIFS.forEach((m) => { seed[m.id] = { cotisation: false, collation: false }; });
-  ["f02", "f03", "f04", "f05", "f06", "f07", "f08"].forEach((id) => { if (seed[id]) seed[id].cotisation = true; });
-  ["f02", "f03", "f04", "f05", "f06"].forEach((id) => { if (seed[id]) seed[id].collation = true; });
   return seed;
 };
 
@@ -308,41 +332,37 @@ export function MaquettePresident() {
    *    base ; les sommes spécifiques passent par les types de cotisations et
    *    les collations créées dans Paramètres. — */
   const [montants, setMontants] = useState<ReglagesTontine>({ ...TONTINE });
-  /* — MEMBRES AJOUTÉS VIA L'APPLICATION : les personnes inscrites ou
-   *    pré-enregistrées depuis l'espace famille (annuaire réel de l'app)
-   *    rejoignent TOUTES les listes du président — habilitations de cotisation,
-   *    collations, présences, encaissements… — à côté des 10 membres de
-   *    démonstration (Task 55 : « où sont les membres que j'ai ajoutés ? »). — */
+  /* — MEMBRES RÉELS (v34) : le compte connecté (le président LUI-MÊME), les
+   *    personnes inscrites/pré-enregistrées dans l'annuaire de l'application
+   *    et les futurs membres (codes en attente). AUCUN membre fictif —
+   *    la console reflète la vie réelle de la famille (Task 78). — */
   const [membresApp, setMembresApp] = useState<Member[]>([]);
+  /* — FUTURS MEMBRES (codes en attente) : lus APRÈS montage (hydratation
+   *    sûre — jamais pendant le premier rendu côté serveur). — */
+  const [futurs, setFuturs] = useState<Member[]>([]);
+  /* — IDENTITÉ RÉELLE du compte connecté (fc_uid → annuaire) : SON nom
+   *    (ex. « Albert Fotsos »), SON poste, SES données. null avant montage. — */
+  const [moi, setMoi] = useState<Member | null>(null);
+  const MOI = moi?.id ?? MOI_DEFAUT;
   const [presences, setPresences] = useState<Record<string, PresenceEtat>>(initPresences);
   const [oj, setOj] = useState<OJPoint[]>([
     { id: "oj1", titre: "Appel des membres & quorum", detail: "Présences, excuses et absences du jour", genre: "appel", statut: "en_attente" },
     { id: "oj2", titre: "Lecture du PV de la dernière réunion", detail: "Lu par la secrétaire — observations des membres", genre: "pv", statut: "en_attente" },
     { id: "oj3", titre: "Collecte des cotisations & collations", detail: "Encaissement par le trésorier — reçus à l’appui", genre: "collecte", statut: "en_attente" },
-    { id: "oj4", titre: "Remise de la somme au bénéficiaire du mois", detail: "Bénéficiaire : Chantal Djuidje (donnée de démonstration)", genre: "remise", statut: "en_attente" },
+    { id: "oj4", titre: "Remise de la somme au bénéficiaire du mois", detail: "Au bénéficiaire du tour — désigné par le calendrier", genre: "remise", statut: "en_attente" },
     { id: "oj5", titre: "Dossiers en attente du bureau", detail: "Prêts, aide de solidarité, adhésions", genre: "dossiers", statut: "en_attente" },
     { id: "oj6", titre: "Divers & observations des membres", detail: "Parole libre — suggestions et réclamations", genre: "divers", statut: "en_attente" },
   ]);
-  const [paroles, setParoles] = useState<Parole[]>([
-    { id: nid(), membreId: "f07", sujet: "Calendrier des échanges de tours de novembre", statut: "demande" },
-  ]);
+  const [paroles, setParoles] = useState<Parole[]>([]);
   const [decisions, setDecisions] = useState<Decision[]>([]);
-  const [retards, setRetards] = useState<Retard[]>([
-    { id: "r1", membreId: "f07", mois: "Septembre + Octobre", montant: detteParPersonne() * 2, jours: 41, niveau: 1, relances: 2, amende: false, recouvre: false },
-    { id: "r2", membreId: "f09", mois: "Octobre", montant: detteParPersonne(), jours: 12, niveau: 0, relances: 1, amende: false, recouvre: false },
-    { id: "r3", membreId: "f10", mois: "Septembre", montant: detteParPersonne(), jours: 34, niveau: 0, relances: 0, amende: false, recouvre: false },
-  ]);
-  const [prets, setPrets] = useState<PretDemande[]>([
-    { id: "p1", membreId: "f08", montant: 150_000, motif: "Rentrée scolaire des enfants", garanties: "Fond de commerce au marché B", avalisteId: null, cosignTresorier: false, statut: "en_attente", motifRefus: "" },
-    { id: "p2", membreId: "f07", montant: 80_000, motif: "Soins médicaux de sa mère", garanties: "Rémunération mensuelle déclarée", avalisteId: null, cosignTresorier: false, statut: "en_attente", motifRefus: "" },
-  ]);
-  const [caisseSecours, setCaisseSecours] = useState(45_000);
-  const [evs, setEvs] = useState<EvVie[]>([
-    { id: "e1", membreId: "f08", type: "deuil", label: "Décès de la grand-mère de Chantal Djuidje (Bafoussam)", statut: "signale", montant: null, votes: { vice: null, secretariat: null, tresorier: null, censeur: null } },
-  ]);
-  const [candidats, setCandidats] = useState<Candidat[]>([
-    { id: "c1", nom: "Samuel Nkoulou", ville: "Douala — quartier Nkolbisson", parrain: "Patrick Talla", etapes: { identite: false, moralite: false, solvabilite: false, accord: false }, statut: "instruction" },
-  ]);
+  /* — v34 : TOUTES les données ci-dessous partent VIDES (réel) — les retards,
+   *    prêts, votes de solidarité, candidats et mouvements apparaissent
+   *    UNIQUEMENT quand la famille en crée. — */
+  const [retards, setRetards] = useState<Retard[]>([]);
+  const [prets, setPrets] = useState<PretDemande[]>([]);
+  const [caisseSecours, setCaisseSecours] = useState(0);
+  const [evs, setEvs] = useState<EvVie[]>([]);
+  const [candidats, setCandidats] = useState<Candidat[]>([]);
   const [journal, setJournal] = useState<JournalEntry[]>(initJournal);
   const [decForm, setDecForm] = useState<{ pointId: string; texte: string; resp: string; echeance: string } | null>(null);
   const [aujourdhuiInfo, setAujourdhuiInfo] = useState<{ jReste: number; mois: string } | null>(null);
@@ -356,16 +376,12 @@ export function MaquettePresident() {
    *    DÉRIVÉ de cet état (source unique, cohérente partout). — */
   const [cotisMois, setCotisMois] = useState<Record<string, MouvementCotisMois>>(initCotisMois);
   const cotisDeclarees = Object.values(cotisMois).filter((x) => x.cotisation).length;
-  const [historiqueCotis, setHistoriqueCotis] = useState<{ mois: string; paye: boolean }[]>([
-    { mois: "Juillet", paye: true }, { mois: "Août", paye: true }, { mois: "Septembre", paye: true }, { mois: "Octobre", paye: true },
-  ]);
+  const [historiqueCotis, setHistoriqueCotis] = useState<{ mois: string; paye: boolean }[]>([]);
   /* v18 : le compte d'épargne personnel n'a plus de dépôt local — l'épargne du
    * président s'inscrit au REGISTRE DU BUREAU (page « Épargnes », comme chaque
-   * membre) et remonte ici ; ne restent que ses opérations (retraits…). */
-  const [epargneOps, setEpargneOps] = useState<EpargneOp[]>([
-    { id: "eo1", type: "depot", montant: 60_000, le: "14 sept.", note: "Épargne mensuelle", moisIdx: 8 },
-    { id: "eo2", type: "depot", montant: 60_000, le: "12 oct.", note: "Épargne mensuelle + intérêts du mois", moisIdx: 9 },
-  ]);
+   * membre) et remonte ici ; ne restent que ses opérations (retraits…).
+   * v34 : AUCUN dépôt fictif — le solde part de zéro, réel. */
+  const [epargneOps, setEpargneOps] = useState<EpargneOp[]>([]);
   /* Mois choisi pour la DEMANDE DE PRÊT en cours (le prêt démarre ce mois). */
   const [pretMoisChoisi, setPretMoisChoisi] = useState<number | null>(null);
   const [moisCourantIdx, setMoisCourantIdx] = useState<number | null>(null);
@@ -390,12 +406,15 @@ export function MaquettePresident() {
   const [postes, setPostes] = useState<PostesMap>({ ...POSTES_DEFAUT });
 
   /* — dérivés —
-   *    Effectif complet : les 10 membres de démonstration + les membres AJOUTÉS
-   *    via l'application (inscrits / pré-enregistrés dans l'espace famille). */
-  /* v27 — les FUTURS MEMBRES (codes non utilisés) rejoignent la liste : le
-   * président peut déjà leur allouer cotisations, épargnes et prêts AVANT
-   * leur inscription — à l'activation du code, tout rejoint leur compte. */
-  const roster = useMemo(() => [...MEMBRES_FICTIFS, ...membresApp, ...futursMembres()], [membresApp]);
+   *    v34 — Effectif RÉEL : le compte connecté (le président LUI-MÊME) + les
+   *    membres AJOUTÉS via l'application (annuaire réel) + les FUTURS membres
+   *    (codes non utilisés, allouables avant leur inscription). Les anciens
+   *    « 10 membres de démonstration » (dont « Joseph Mbeutetsa ») sont
+   *    SUPPRIMÉS — plus aucune donnée fictive. */
+  const roster = useMemo(
+    () => [...(moi ? [moi] : []), ...membresApp, ...futurs],
+    [moi, membresApp, futurs],
+  );
   const parMembre = useMemo(() => new Map(roster.map((m) => [m.id, m])), [roster]);
   /* — v18 : COMPTE D'ÉPARGNE PERSONNEL DU PRÉSIDENT — le bloc « Déposer ou
    *    retirer » de « Mes épargnes » a été SUPPRIMÉ (demande du président : il
@@ -414,7 +433,7 @@ export function MaquettePresident() {
       moisIdx: Math.min(11, Math.max(0, e.moisIdx)),
     })),
     ...epargneOps,
-  ], [epargnesReunion, epargneOps]);
+  ], [epargnesReunion, epargneOps, MOI]);
   const soldeEpargneMoi = useMemo(
     () => opsEpargneMoi.reduce((s, o) => s + (o.type === "depot" ? o.montant : -o.montant), 0),
     [opsEpargneMoi],
@@ -447,9 +466,39 @@ export function MaquettePresident() {
       setMainsLevees(loadMainsLevees()); // types de mains levées (v14)
       setVisitesSolidarite(loadVisitesSolidarite()); // calendrier de visites (v14)
       setPostes(loadPostes()); // titulaires des postes du bureau (v14)
-      setMembresApp(loadMembresApplication()); // membres ajoutés via l'application (annuaire réel)
+      // v34 — IDENTITÉ RÉELLE : le compte connecté (fc_uid → « app-<uid> »)
+      // est le PRÉSIDENT de la console — SON nom, SON poste, SES données.
+      setMoi(chargerCompteConnecte());
+      setMembresApp(chargerRosterReel().filter((m) => !m.isVous)); // annuaire réel hors « vous »
+      setFuturs(futursMembres()); // codes d'invitation en attente
       loadMontants(); // applique les montants persistés (cotisation de base…) à TONTINE
       setMontants({ ...TONTINE });
+      // v34 — FILET : si le stockage local a perdu fc_uid/fc_name, la SESSION
+      // (même source que le tableau de bord) rend le nom et le téléphone —
+      // la console affiche TOUJOURS le vrai compte connecté.
+      void (async () => {
+        try {
+          const s = await api<{ session: { user: { id: string; fullName: string; phone?: string | null } } | null }>("/api/auth/session");
+          if (!s.ok || !s.session) return;
+          const u = s.session.user;
+          setMoi((prev) => {
+            if (prev?.id === `app-${u.id}`) return prev; // déjà résolu depuis le stockage
+            return {
+              id: `app-${u.id}`,
+              name: u.fullName,
+              role: (loadVousRole() ?? "president") as Member["role"],
+              phone: u.phone ?? "",
+              city: "Ma position",
+              since: String(new Date().getFullYear()),
+              tour: 1,
+              fictif: false,
+              isVous: true,
+            };
+          });
+        } catch {
+          /* pas de session — l'aperçu neutre reste affiché */
+        }
+      })();
       const n = new Date();
       let y = n.getFullYear();
       let m = n.getMonth();
@@ -531,7 +580,7 @@ export function MaquettePresident() {
     setReglSale(true);
   };
   const publierReglementAuxMembres = () => {
-    const p = publierReglement(reglement, "Président Joseph Mbeutetsa");
+    const p = publierReglement(reglement, `${moi?.name || "Président"} — Président`);
     setReglement(p);
     setReglSale(false);
     toast.success(`Règlement publié — version ${p.version}`, {
@@ -672,7 +721,7 @@ export function MaquettePresident() {
         const enAttente = prev.filter((x) => x.statut === "demande").length;
         if (enAttente >= 3) return prev;
         const deja = new Set(prev.filter((x) => x.statut !== "traitee").map((x) => x.membreId));
-        const candidatsId = MEMBRES_FICTIFS.filter((m) => m.role === "membre" && !deja.has(m.id));
+        const candidatsId = roster.filter((m) => m.role === "membre" && !deja.has(m.id));
         if (candidatsId.length === 0) return prev;
         const m = candidatsId[Math.floor(Math.random() * candidatsId.length)];
         const sujet = SUJETS_PAROLE[Math.floor(Math.random() * SUJETS_PAROLE.length)];
@@ -743,7 +792,7 @@ export function MaquettePresident() {
     }
   };
   const notifierCollecte = () => {
-    toast.success("Trésorier notifié", { description: "Émile Tchoumi encaisse les cotisations — les reçus s’inscrivent au journal de caisse." });
+    toast.success("Trésorier notifié", { description: "Le trésorier encaisse les cotisations — les reçus s’inscrivent au journal de caisse." });
     journalAdd("Collecte des cotisations confiée au trésorier (notification en direct).", "Président → Trésorier");
   };
   const confirmerRemise = () => {
@@ -976,7 +1025,7 @@ export function MaquettePresident() {
             <div className="min-w-0 flex-1">
               <p className="text-[10.5px] font-bold uppercase tracking-widest text-[#C89F62]">Table de gestion opérationnelle</p>
               <p className="fc-serif text-[19px] font-bold leading-tight">Poste de commandement — Président</p>
-              <p className="mt-0.5 text-[12px] text-white/85">Joseph Mbeutetsa (vous) · Tontine Mbeutetsa · {TONTINE.jourLabel}</p>
+              <p className="mt-0.5 text-[12px] text-white/85">{moi?.name || "Président"} (vous) · Tontine Mbeutetsa · {TONTINE.jourLabel}</p>
             </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-1.5">
@@ -1044,6 +1093,7 @@ export function MaquettePresident() {
             mois={moisCourant}
             roster={roster}
             parMembre={parMembre}
+            moiId={MOI}
             typesCotis={typesCotis}
             collations={collations}
             montants={montants}
@@ -1199,7 +1249,7 @@ export function MaquettePresident() {
          *    génère les codes d'invitation — la personne les colle à son
          *    inscription et SA page s'ouvre avec le rôle attribué. — */}
         {tab === "codes" && (
-          <CodesMembresSection creePar="president" accent="#1E4D2B" creeParNom="Joseph Mbeutetsa — Président" />
+          <CodesMembresSection creePar="president" accent="#1E4D2B" creeParNom={`${moi?.name || "Président"} — Président`} />
         )}
         {JOURNAL_ACTIVE && tab === "journal" && <JournalSection journal={journal} />}
         {tab === "parametres" && (
@@ -1227,6 +1277,7 @@ export function MaquettePresident() {
             historique={historiqueCotis}
             declarees={cotisDeclarees}
             attendues={roster.length}
+            moiId={MOI}
             typesCotis={typesCotis}
             collations={collations}
             penRetard={TONTINE.penaliteRetard}
@@ -1253,6 +1304,7 @@ export function MaquettePresident() {
             mesPrets={mesPrets}
             parMembre={parMembre}
             roster={roster}
+            moiId={MOI}
             regl={reglement}
             form={mesPretsForm}
             setForm={setMesPretsForm}
@@ -1403,7 +1455,7 @@ function ReunionSection(p: {
   seance: "fermee" | "ouverte" | "cloturee";
   oj: OJPoint[];
   presences: Record<string, PresenceEtat>;
-  roster: typeof MEMBRES_FICTIFS;
+  roster: Member[];
   paroles: Parole[];
   decisions: Decision[];
   decForm: { pointId: string; texte: string; resp: string; echeance: string } | null;
@@ -1415,7 +1467,7 @@ function ReunionSection(p: {
   onNotifierCollecte: () => void; onConfirmerRemise: () => void;
   onEnregistrerDecision: () => void;
   onAccorder: (id: string) => void; onTerminer: (id: string) => void; onDifferer: (id: string) => void;
-  parMembre: Map<string, (typeof MEMBRES_FICTIFS)[number]>;
+  parMembre: Map<string, Member>;
 }) {
   const statutChip = (s: OJStatut) =>
     s === "en_attente" ? <P><Hourglass className="h-3 w-3" /> En attente</P>
@@ -1632,8 +1684,8 @@ function ReunionSection(p: {
 
 function PretsSection(p: {
   prets: PretDemande[];
-  parMembre: Map<string, (typeof MEMBRES_FICTIFS)[number]>;
-  roster: typeof MEMBRES_FICTIFS;
+  parMembre: Map<string, Member>;
+  roster: Member[];
   regl: Reglement;
   moisCourantIdx: number | null;
   /** REGISTRE des prêts FAITS À LA RÉUNION par les membres (v12) — le prêt est
@@ -1718,12 +1770,11 @@ function PretsSection(p: {
             {pr.statut !== "refuse" && (
               <div className="mt-3 border-t border-[#E5DCC0] pt-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[13px] font-black text-[#1E4D2B]">Calendrier de remboursement — évolution du prêt</p>
+          <p className="text-[13px] font-black text-[#1E4D2B]">Calendrier de remboursement</p>
                   <P cls={TE_CLS}><CalendarClock className="h-3 w-3" /> Rattaché à {MOIS_FR[Math.min(11, Math.max(0, moisIdx))]}</P>
                 </div>
                 <p className="mt-1 text-[12px] font-semibold leading-relaxed text-[#4A554E]">
-                  {fcfa(pr.montant)} à {taux} %/mois sur {duree} mois — intérêts de {fcfa(Math.round(pr.montant * (taux / 100)))} par mois. S’il déborde sur l’année suivante, c’est marqué.
-                  {periode > 0 && ` Si le prêt n’est pas remboursé à l’échéance, la somme due devient un NOUVEAU CAPITAL (reconduction tous les ${periode} mois) — l’évolution reste visible mois par mois.`}
+                  {fcfa(pr.montant)} à {taux} %/mois sur {duree} mois — intérêts de {fcfa(Math.round(pr.montant * (taux / 100)))} par mois.
                 </p>
                 <div className="mt-2">
                   <TableCalendrierPret
@@ -1743,7 +1794,7 @@ function PretsSection(p: {
                   Votre propre dossier — récusation : le bureau statue sans votre voix. Majorité de 2/3 (vice-présidente, trésorier, censeur).
                 </p>
                 <div className="space-y-1.5">
-                  {VOTEURS_PRET.map((v) => {
+                  {voteursPretDuRoster(p.roster).map((v) => {
                     const val = pr.votesBureau?.[v.qui] ?? null;
                     return (
                       <div key={v.qui} className="flex items-center gap-2 rounded-xl border border-[#E5DCC0] bg-[#FFFDF6] px-3 py-2">
@@ -1854,8 +1905,8 @@ const LIBELLES_REGISTRE = {
     nomPluriel: "prêts",
     action: "Attribuer le prêt",
     icone: <HandCoins className="h-4.5 w-4.5" />,
-    noteRegistre: "Chaque ligne = un membre qui a prêté de l'argent à la réunion : le mois réel auquel le prêt est rattaché, la somme, les intérêts au taux en vigueur, réalisés jusqu'au mois courant et la projection au 31 décembre. Dépliez la ligne (chevron Détail) pour voir l'ÉVOLUTION MOIS PAR MOIS du prêt — capital, intérêts, avances, total dû — avec la reconduction du capital non remboursé à l'échéance. Quand la réunion rend son argent, confirmez le remboursement : le prêt rejoint la section « Prêts remboursés ».",
-    noteAttrib: "Le prêt est manuel — c'est vous qui l'inscrivez dans la machine. Dans le tableau, repérez le membre approprié, tapez la somme qu'il a prêtée à la réunion, choisissez le mois réel (même un mois passé, si l'inscription arrive tard) puis attribuez : le pourcentage configuré dans Paramètres → Prêts s'applique aussitôt.",
+    noteRegistre: "Chaque ligne = un membre qui a prêté à la réunion. Dépliez « Détail » pour l'évolution mois par mois. À la remise, confirmez le remboursement.",
+    noteAttrib: "Choisissez le membre, tapez la somme prêtée, choisissez le mois puis attribuez.",
   },
   epargnes: {
     registre: "Épargnes des membres — registre du bureau",
@@ -1864,8 +1915,8 @@ const LIBELLES_REGISTRE = {
     nomPluriel: "épargnes",
     action: "Attribuer l'épargne",
     icone: <PiggyBank className="h-4.5 w-4.5" />,
-    noteRegistre: "Chaque ligne = UN membre, TOUTES ses épargnes regroupées (plusieurs versements ne créent jamais de doublon) : la somme totale épargnée, les mois réels des versements, les intérêts produits chaque mois au taux en vigueur et la projection au 31 décembre. Dépliez la ligne (chevron Détail) pour voir l'ÉVOLUTION MOIS PAR MOIS de toutes ses épargnes : le capital n'apparaît QUE les mois où l'argent a été versé — les autres mois restent vides — tandis que les intérêts, eux, évoluent chaque mois jusqu'au DERNIER MOIS DE L'ANNÉE (décembre). Une épargne attribuée PAR ERREUR (confusion de membre, mauvais montant, mauvais mois) se retire d'un geste : chaque versement porte sa poubelle (sur la ligne même quand il y en a plusieurs, sur la ligne entière pour un versement unique) — une CONFIRMATION est demandée avant toute suppression.",
-    noteAttrib: "Comme pour les prêts : cherchez le membre dans le tableau (recherche dynamique en haut), tapez la somme de son épargne, choisissez le mois réel du dépôt puis attribuez — le taux configuré dans Paramètres → Épargnes (modifiable ou retirable) s'applique aussitôt, avec la manière de collecter les intérêts décidée par le bureau.",
+    noteRegistre: "Chaque ligne = un membre, toutes ses épargnes regroupées. Dépliez « Détail » pour l'évolution mois par mois. La poubelle retire un versement (avec confirmation).",
+    noteAttrib: "Choisissez le membre, tapez la somme épargnée, choisissez le mois puis attribuez.",
   },
 } as const;
 
@@ -2261,8 +2312,8 @@ function PanneauDetailEpargne(p: {
 function RegistreReunionSection(p: {
   genre: "prets" | "epargnes";
   items: AttributionReunion[];
-  parMembre: Map<string, (typeof MEMBRES_FICTIFS)[number]>;
-  roster: typeof MEMBRES_FICTIFS;
+  parMembre: Map<string, Member>;
+  roster: Member[];
   /** Taux en vigueur (%/mois) — prêts ou épargnes, selon la page. */
   taux: number;
   moisCourantIdx: number | null;
@@ -2787,7 +2838,7 @@ function RegistreReunionSection(p: {
                   value={recherche}
                   onChange={(e) => setRecherche(e.target.value)}
                   type="search"
-                  placeholder="Ex. : Aurélie, Patrick, Marie-Louise…"
+                  placeholder="Tapez un nom…"
                   aria-label={`Rechercher un membre dans la section ${L.attrib}`}
                   className="w-full rounded-xl border-2 border-[#C9B98A] bg-white py-2.5 pl-9 pr-3 text-[14px] font-bold text-[#2B3530] outline-none placeholder:font-semibold placeholder:text-[#8A9288] focus:border-[#1F5B3F]"
                 />
@@ -2898,8 +2949,8 @@ function RegistreReunionSection(p: {
 
 function EpargnesGestionSection(p: {
   epargnes: AttributionReunion[];
-  parMembre: Map<string, (typeof MEMBRES_FICTIFS)[number]>;
-  roster: typeof MEMBRES_FICTIFS;
+  parMembre: Map<string, Member>;
+  roster: Member[];
   regl: Reglement;
   moisCourantIdx: number | null;
   onAttribuer: (membreId: string, montant: number, moisIdx: number) => void;
@@ -2938,14 +2989,14 @@ const TYPE_EV: Record<EvVie["type"], { label: string; cls: string }> = {
  *    accents ; la liste se réduit au fil de la frappe, et chaque ligne porte
  *    l'action prévue par la page (render prop). — */
 function ChampRechercheMembres(p: {
-  roster: (typeof MEMBRES_FICTIFS)[number][];
+  roster: Member[];
   libelle: string;
   note?: string;
   placeholder?: string;
   /** Membres à cacher de la liste (déjà attribués, président…). */
   idsMasques?: Set<string>;
   /** Rend l'action d'une ligne de résultat (bouton d'attribution…). */
-  rendreResultat: (m: (typeof MEMBRES_FICTIFS)[number]) => ReactNode;
+  rendreResultat: (m: Member) => ReactNode;
 }) {
   const [q, setQ] = useState("");
   const sansAccent = (s: string) => s.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
@@ -2996,8 +3047,8 @@ function ChampRechercheMembres(p: {
 
 function SolidariteSection(p: {
   evs: EvVie[];
-  parMembre: Map<string, (typeof MEMBRES_FICTIFS)[number]>;
-  roster: (typeof MEMBRES_FICTIFS)[number][];
+  parMembre: Map<string, Member>;
+  roster: Member[];
   caisseSecours: number;
   regl: Reglement;
   moisCourantIdx: number | null;
@@ -3014,11 +3065,15 @@ function SolidariteSection(p: {
   visites: VisiteSolidarite[];
   majVisites: (next: VisiteSolidarite[], message?: string) => void;
 }) {
+  /* v34 — VOTANTS RÉELS : le titulaire de chaque poste du bureau est cherché
+   *  dans le roster réel (aucun nom inventé) — le libellé du poste reste si
+   *  le poste n'a pas encore de titulaire. */
+  const nomDeRole = (r: Member["role"]) => p.roster.find((m) => m.role === r)?.name ?? null;
   const votants: { qui: keyof VoteBureau; nom: string; role: string }[] = [
-    { qui: "vice", nom: "Marie-Louise Nguetsop", role: "Vice-présidente" },
-    { qui: "secretariat", nom: "Françoise Mbeutetsa", role: "Secrétaire" },
-    { qui: "tresorier", nom: "Émile Tchoumi", role: "Trésorier" },
-    { qui: "censeur", nom: "Roger Ndoumbe", role: "Censeur" },
+    { qui: "vice", nom: nomDeRole("vice_president") ?? "Vice-président(e)", role: "Vice-président(e)" },
+    { qui: "secretariat", nom: nomDeRole("secretariat") ?? "Secrétaire", role: "Secrétaire" },
+    { qui: "tresorier", nom: nomDeRole("tresorier") ?? "Trésorier", role: "Trésorier" },
+    { qui: "censeur", nom: nomDeRole("censeur") ?? "Censeur", role: "Censeur" },
   ];
 
   /* — état du formulaire d'ajout d'un type de solidarité — */
@@ -3049,7 +3104,7 @@ function SolidariteSection(p: {
   const retirerType = (t: TypeSolidarite) => {
     p.majTypesSolidarite(p.typesSolidarite.filter((x) => x.id !== t.id), `Type de solidarité « ${t.nom} » retiré — les visites rattachées restent au calendrier, sans type.`);
   };
-  const attribuerMembreType = (t: TypeSolidarite, m: (typeof MEMBRES_FICTIFS)[number]) => {
+  const attribuerMembreType = (t: TypeSolidarite, m: Member) => {
     if (t.variables.some((v) => v.membreId === m.id)) {
       toast(`${m.name} est déjà attribué à « ${t.nom} »`, { description: "Ajustez sa somme dans les variables du type ci-dessous." });
       return;
@@ -3562,8 +3617,8 @@ function AdhesionsSection(p: {
  *    DÉPLACE le membre : son ancien poste redevient vacant. */
 function PostesSection(p: {
   postes: PostesMap;
-  roster: (typeof MEMBRES_FICTIFS)[number][];
-  parMembre: Map<string, (typeof MEMBRES_FICTIFS)[number]>;
+  roster: Member[];
+  parMembre: Map<string, Member>;
   onAttribuer: (poste: PosteKey, membreId: string) => void;
   onRetirer: (poste: PosteKey) => void;
 }) {
@@ -3820,6 +3875,10 @@ function MesCotisationsSection(p: {
   cotisCeMois: boolean;
   historique: { mois: string; paye: boolean }[];
   declarees: number; attendues: number;
+  /** Identifiant du compte connecté — MA cotisation (type attribué au
+   *  compte, collations désignant le compte) — coordonné avec l'espace
+   *  membre (même identifiant « app-<uid> »). */
+  moiId: string;
   /** Types de cotisations mensuelles fixés par le président — le président
    *  membre est traité EXACTEMENT comme un membre : s'il est sélectionné dans
    *  un type, c'est CETTE somme qu'il doit verser. */
@@ -3830,11 +3889,11 @@ function MesCotisationsSection(p: {
   penRetard: number;
   onCotiser: () => void;
 }) {
-  /* Ma cotisation : celle fixée par le bureau pour MOI (type attribué), sinon
+  /* Ma cotisation : celle fixée par le bureau pour MON compte (type attribué), sinon
    * la cotisation de base — comme pour chaque membre de la Tontine. */
-  const monType = typeDuMembre(MOI, p.typesCotis);
-  const maCotis = cotisationDuMembre(MOI, p.typesCotis, TONTINE.montantCotisation);
-  const mesCollations = collationDuMembre(MOI, p.collations);
+  const monType = typeDuMembre(p.moiId, p.typesCotis);
+  const maCotis = cotisationDuMembre(p.moiId, p.typesCotis, TONTINE.montantCotisation);
+  const mesCollations = collationDuMembre(p.moiId, p.collations);
   const total = maCotis + mesCollations;
   return (
     <>
@@ -3842,10 +3901,9 @@ function MesCotisationsSection(p: {
         <div className="flex items-start gap-3 bg-[#3D6B72] px-4 py-3.5 text-white">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/15"><UserCheck className="h-4.5 w-4.5" /></span>
           <div>
-            <p className="fc-serif text-[15px] font-bold">D’abord membre de la Tontine — ensuite président</p>
+            <p className="fc-serif text-[15px] font-bold">Mes cotisations — comme chaque membre</p>
             <p className="mt-0.5 text-[12px] leading-relaxed text-white/85">
-              Vous cotisez comme tout le monde : mêmes montants, mêmes pénalités, même ordre des tours (votre levée a eu lieu au tour n°1).
-              Votre cotisation rejoint le total que le trésorier encaisse — aucune exception, c’est la règle de la maison.
+              Cotisez le montant fixé pour vous — mêmes règles que tous.
             </p>
           </div>
         </div>
@@ -3867,8 +3925,7 @@ function MesCotisationsSection(p: {
             <div className="mt-2.5 flex items-start gap-2.5 rounded-2xl border-2 border-[#C89F62]/60 bg-[#C89F62]/12 px-3.5 py-3">
               <BellRing className="mt-0.5 h-4.5 w-4.5 shrink-0 text-[#8A6420]" />
               <p className="text-[12px] leading-relaxed text-[#7A5B2E]">
-                <strong>Notification du bureau — votre cotisation a été fixée à {fmtMontant(monType.montant)} par mois</strong> (« {monType.nom} »).
-                Comme chaque membre sélectionné dans ce type, vous devez désormais verser cette somme — la collation reste à part.
+                <strong>Votre cotisation a été fixée à {fmtMontant(monType.montant)} par mois</strong> (« {monType.nom} »).
               </p>
             </div>
           )}
@@ -4290,8 +4347,11 @@ function TableCalendrierPret(p: {
 
 function MesPretsSection(p: {
   mesPrets: PretDemande[];
-  parMembre: Map<string, (typeof MEMBRES_FICTIFS)[number]>;
-  roster: typeof MEMBRES_FICTIFS;
+  parMembre: Map<string, Member>;
+  roster: Member[];
+  /** Identifiant du compte connecté (le président) — il ne peut pas être
+   *  son propre avaliste. */
+  moiId: string;
   regl: Reglement;
   form: { montant: string; motif: string; garanties: string; avalisteId: string };
   setForm: (f: { montant: string; motif: string; garanties: string; avalisteId: string }) => void;
@@ -4322,21 +4382,19 @@ function MesPretsSection(p: {
         <div className="flex items-start gap-2.5">
           <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#1E4D2B]/10 text-[#1E4D2B]"><Landmark className="h-4 w-4" /></span>
           <p className="text-[13px] leading-relaxed text-[#5C6B60]">
-            <strong className="text-[#1E4D2B]">Emprunter à la caisse de la Tontine — les mêmes règles pour vous.</strong>
-            Choisissez un montant, un avaliste et le mois du prêt, taux {taux} %/mois. Et parce que c’est votre caisse,
-            <strong className="text-[#1E4D2B]"> vous êtes récusé</strong> : le bureau statue sans votre voix (vote {MAJORITES_LABELS[p.regl.prets.majorityPresident]}).
+            <strong className="text-[#1E4D2B]">Emprunter à la caisse — taux {taux} %/mois.</strong> Vous êtes récusé : le bureau statue sans votre voix.
           </p>
         </div>
         {mensualite > 0 && (
           <p className="mt-2 rounded-2xl border border-[#C89F62]/50 bg-[#C89F62]/10 px-3 py-2 text-[11.5px] font-semibold text-[#8A6420]">
-            Vos calculs, en direct — {fcfa(demandeMontant)} sur {duree} mois à {taux} %/mois : mensualité ≈ {fcfa(mensualite)}, intérêts totaux ≈ {fcfa(Math.round(demandeMontant * (taux / 100) * duree))}. Le calendrier détaillé est juste en dessous : changez le montant ou le mois, tout se recalcule aussitôt.
+            {fcfa(demandeMontant)} sur {duree} mois : mensualité ≈ {fcfa(mensualite)} — le calendrier détaillé est en dessous.
           </p>
         )}
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
           <input value={p.form.montant} onChange={(e) => p.setForm({ ...p.form, montant: e.target.value.replace(/[^\d]/g, "") })} inputMode="numeric" placeholder="Montant (FCFA)" className="rounded-lg border border-[#C9B98A] bg-[#FFFDF6] px-3 py-2 text-[13px] placeholder:text-[#8A9288] focus:outline-none" />
           <select value={p.form.avalisteId} onChange={(e) => p.setForm({ ...p.form, avalisteId: e.target.value })} className="rounded-lg border border-[#C9B98A] bg-[#FFFDF6] px-2.5 py-2 text-[12.5px] text-[#2B3530] focus:outline-none">
             <option value="">Avaliste (garant)…</option>
-            {p.roster.filter((x) => x.id !== MOI).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+            {p.roster.filter((x) => x.id !== p.moiId).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
           </select>
         </div>
         {/* — mois du prêt : le mois réel, pas forcément le mois en cours — */}
@@ -4433,8 +4491,10 @@ function MesPretsSection(p: {
 
 function CotisationsCollationsSection(p: {
   mois: string | null;
-  roster: typeof MEMBRES_FICTIFS;
-  parMembre: Map<string, (typeof MEMBRES_FICTIFS)[number]>;
+  roster: Member[];
+  parMembre: Map<string, Member>;
+  /** Identifiant du compte connecté — la ligne « (vous) » du tableau. */
+  moiId: string;
   typesCotis: TypeCotisation[];
   /** Collations créées par le président — la part d'un membre = la somme
    *  des collations qui lui sont attribuées (autant de collations que
@@ -4499,7 +4559,7 @@ function CotisationsCollationsSection(p: {
           </div>
         </div>
         <p className="mt-2.5 text-[12px] leading-relaxed text-[#5C6B60]">
-          Toutes les cotisations et toutes les collations du mois, membre par membre : cochez « Reçu » quand le trésorier encaisse — les totaux se mettent à jour aussitôt, et chaque action s’inscrit au journal.
+          Cochez « Reçu » quand le trésorier encaisse — les totaux se mettent à jour aussitôt.
         </p>
         <div className="mt-2.5 flex flex-wrap gap-2">
           <Btn small tone="or" onClick={p.onToutEncaisser}><CheckSquare className="h-3.5 w-3.5" /> Tout marquer encaissé</Btn>
@@ -4523,7 +4583,7 @@ function CotisationsCollationsSection(p: {
               {lignes.map((l) => (
                 <tr key={l.m.id} className="border-b border-[#E5DCC0] bg-[#FFFDF6]">
                   <td className="px-2.5 py-2">
-                    <p className="font-bold text-[#2B3530]">{l.m.name}{l.m.id === MOI ? " (vous)" : ""}</p>
+                    <p className="font-bold text-[#2B3530]">{l.m.name}{l.m.id === p.moiId ? " (vous)" : ""}</p>
                     <p className="text-[10.5px] text-[#8A9288]">
                       {ROLE_META[l.m.role]?.short ?? l.m.role}{estMembreApp(l.m) ? " · via l’app" : ""}{l.typeNom ? ` · ${l.typeNom}` : l.attenduCotis > 0 ? " · montant de base" : " · à fixer par le bureau"}
                     </p>
@@ -4804,7 +4864,7 @@ function ParametresSection(p: {
   /** Fixe la cotisation mensuelle de base (membres sans type particulier) —
    *  appliqué aussitôt, visible partout (accueil, membres, collecte du mois). */
   majMontantBase: (n: number) => void;
-  roster: typeof MEMBRES_FICTIFS;
+  roster: Member[];
   sous: SousParamKey;
   goSous: (s: SousParamKey) => void;
   onPublier: () => void;
@@ -5075,7 +5135,7 @@ function ParametresSection(p: {
           <Block
             title="Types de cotisations mensuelles"
             icon={<Layers className="h-4 w-4" />}
-            note="Tout le monde ne cotise pas la même somme. Ajoutez une somme (ex. 50 000 FCFA), sélectionnez les membres qui doivent cotiser cette somme, validez — ils la verront sur leur page avec une notification. Un membre non choisi reste sur la cotisation de base. RÈGLE DES CALCULS : le type attribué est la somme que le membre verse TOUS LES MOIS DE L'ANNÉE, quel que soit le bénéficiaire — et quand vient SON tour, il cotise aussi : la somme remise est l'addition des taux de tous (ex. Aurélie 50 000 + Patrick 30 000 → chez Aurélie, Patrick verse 30 000 et elle encaisse tout)."
+            note="Ajoutez une somme, sélectionnez les membres concernés, validez — ils la voient sur leur page. Un membre non choisi reste sur la cotisation de base."
           >
             <div className="space-y-3 p-4">
               <Btn tone="or" onClick={basculerFormCotis} aria-expanded={formCotisOpen}><Plus className="h-4 w-4" /> Ajouter une somme de cotisation mensuelle</Btn>

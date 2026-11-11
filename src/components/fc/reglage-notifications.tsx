@@ -112,25 +112,22 @@ export function ReglageNotifications() {
         )}
         {pret && (etat === "granted" || (etat === "default" && pref === "auto")) && (
           <p className="font-medium text-[#2B3530]">
-            ✅ Automatiques — l'application vous alerte dès qu'un événement de la famille arrive (son + vibration,
-            comme WhatsApp). Rien à cliquer.
+            Automatiques — vous êtes alerté à chaque événement de la famille.
           </p>
         )}
         {pret && etat === "denied" && (
           <p className="flex items-start gap-1.5 text-[#B91C1C]">
             <BellOff className="mt-0.5 h-4 w-4 shrink-0" />
-            Bloquées par le navigateur — réautorisez-les dans les réglages du site (icône cadenas dans la barre
-            d'adresse), puis revenez ici.
+            Bloquées par le navigateur — réautorisez-les dans les réglages du site.
           </p>
         )}
         {pret && etat === "unsupported" && (
           <p className="text-[#8A9288]">
-            Ce navigateur ne gère pas les notifications push. Sur iPhone : ajoutez d'abord l'application à l'écran
-            d'accueil (Partager → Sur l'écran d'accueil), puis ouvrez-la depuis son icône.
+            Notifications non gérées — sur iPhone, ajoutez d'abord l'application à l'écran d'accueil.
           </p>
         )}
         {pret && etat !== "unsupported" && pref === "off" && etat !== "denied" && (
-          <p className="text-[#8A9288]">Coupées à votre demande sur cet appareil — le réglage reste enregistré.</p>
+          <p className="text-[#8A9288]">Coupées sur cet appareil — réglage conservé.</p>
         )}
       </div>
 

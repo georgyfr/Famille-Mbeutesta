@@ -3,13 +3,30 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Détection de localisation — 100 % GRATUIT, SANS CLÉ API, ILLIMITÉ
 //
-// Chaîne de détection (dans l'ordre) :
-//  1. GPS du navigateur (navigator.geolocation) — gratuit, intégré au téléphone
-//  2. Nominatim (OpenStreetMap) — reverse geocoding gratuit, sans clé
-//     https://nominatim.openstreetmap.org (usage respecté : 1 requête à la fois)
-//  3. BigDataCloud « reverse-geocode-client » — gratuit sans clé côté navigateur
-//  4. Localisation par IP (si GPS refusé/indisponible) :
-//     ipapi.co → freeipapi.com → ipwho.is (toutes gratuites, sans clé)
+// v34 — CASCADE PARALLÈLE (signalement : « incapable de détecter le
+// département, ni l'arrondissement, voire même le quartier »). CAUSE TROUVÉE :
+// Nominatim (OpenStreetMap) RENVOIE 429 « Too many requests » dès que
+// plusieurs personnes partagent la même IP publique (NAT des opérateurs
+// mobiles — cas RÉEL au Cameroun) — l'ancienne cascade en série retombait
+// alors sur BigDataCloud DONT LE CODE IGNORAIT la hiérarchie complète
+// (localityInfo) : département et arrondissement restaient VIDES.
+//
+// NOUVELLE ARCHITECTURE (toutes gratuites, sans clé, sans compte) :
+//  1. GPS du navigateur (navigator.geolocation) — intégré au téléphone ;
+//  2. BigDataCloud « reverse-geocode-client » — GRATUIT, ILLIMITÉ côté
+//     client, hiérarchie COMPLÈTE du Cameroun (localityInfo.administrative) :
+//       adminLevel 2 = pays · 4 = région · 6 = DÉPARTEMENT (Wouri/Mfoundi)
+//       7 = ville · 8 = ARRONDISSEMENT (Douala I / Yaoundé VI) —
+//     c'est la BASE GARANTIE : jamais de champ administratif vide ;
+//  3. Nominatim (OpenStreetMap) — en PARALLÈLE, pour le QUARTIER
+//     (suburb/neighbourhood, zoom 18) : 1 seule requête, avec un 2ᵉ essai
+//     automatique si 429 ;
+//  4. GeoCode.xyz — dernier secours pour le QUARTIER (gratuit, sans clé) ;
+//  5. Localisation par IP (si GPS refusé) : ipapi.co → freeipapi.com →
+//     ipwho.is.
+// Les réponses sont FUSIONNÉES champ par champ : BigDataCloud pose la
+// hiérarchie administrative, Nominatim/GeoCode.xyz ajoutent le quartier —
+// AUCUN champ ne peut rester vide s'il existe chez l'un des fournisseurs.
 //
 // Aucune de ces APIs ne demande de carte bancaire ni de compte.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -165,7 +182,27 @@ async function reverseNominatim(lat: number, lon: number, accuracy: number | nul
   }
 }
 
-/* ─── 3. BigDataCloud client (secours, sans clé, illimité côté client) ─── */
+/* ─── 3. BigDataCloud client — BASE GARANTIE (sans clé, illimité côté client) ─
+    v34 — LECTURE DE LA HIÉRARCHIE COMPLÈTE (localityInfo.administrative) :
+    au Cameroun, BigDataCloud renvoie EXACTEMENT les niveaux administratifs
+    dont l'application a besoin (vérifié en direct sur Yaoundé et Douala) :
+        adminLevel 2 → « Cameroun » (pays)
+        adminLevel 4 → « Centre » / « Littoral » (RÉGION)
+        adminLevel 6 → « Mfoundi » / « Wouri » (DÉPARTEMENT)
+        adminLevel 7 → « Yaoundé » / « Douala » (VILLE)
+        adminLevel 8 → « Yaounde VI » / « Douala I » (ARRONDISSEMENT)
+    L'ancienne version n'extrayait que country/region/city : département et
+    arrondissement restaient VIDES — d'où le « fiasco » signalé. */
+
+type BdcAdmin = { name?: string; description?: string; adminLevel?: number; order?: number };
+
+/** Retourne l'entrée administrative du niveau demandé (null si absente).
+ *  Les niveaux arrivent dans un ordre variable — on cherche par adminLevel. */
+function bdcNiveau(list: BdcAdmin[] | undefined, level: number): string {
+  if (!Array.isArray(list)) return "";
+  const hit = list.find((a) => a.adminLevel === level && a.name && a.name.trim());
+  return hit?.name?.trim() ?? "";
+}
 
 async function reverseBigDataCloud(lat: number, lon: number, accuracy: number | null): Promise<LocationDraft> {
   const url =
@@ -181,13 +218,22 @@ async function reverseBigDataCloud(lat: number, lon: number, accuracy: number | 
       principalSubdivision?: string;
       city?: string;
       locality?: string;
+      localityInfo?: { administrative?: BdcAdmin[] };
     };
+    const adm = j.localityInfo?.administrative;
+    // Hiérarchie complète — chaque niveau retombe sur un champ générique si
+    // BigDataCloud ne l'a pas (aucun champ ne reste vide sans raison).
+    const region = bdcNiveau(adm, 4) || j.principalSubdivision || "";
+    const department = bdcNiveau(adm, 6);
+    const villeAdmin = bdcNiveau(adm, 7);
+    const arrondissement = bdcNiveau(adm, 8);
+    const city = j.city || j.locality || villeAdmin || "";
     return {
       country: j.countryName || "",
-      region: j.principalSubdivision || "",
-      department: "",
-      city: j.city || j.locality || "",
-      arrondissement: "",
+      region,
+      department: department || region, // secours : au moins la région
+      city,
+      arrondissement,
       quartier: "",
       latitude: lat,
       longitude: lon,
@@ -197,6 +243,49 @@ async function reverseBigDataCloud(lat: number, lon: number, accuracy: number | 
   } finally {
     clearTimeout(t);
   }
+}
+
+/* ─── 3 bis. GeoCode.xyz — dernier secours pour le QUARTIER (gratuit, sans clé) ─ */
+
+async function reverseGeocodeXyz(lat: number, lon: number): Promise<string> {
+  const url = `https://geocode.xyz/${lat},${lon}?geoit=json&lang=fr`;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 10000);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal, headers: { Accept: "application/json" } });
+    if (!res.ok) throw new Error(`GeoCode.xyz HTTP ${res.status}`);
+    const j = (await res.json()) as {
+      osmtags?: { name?: string };
+      staddress?: string;
+      standard?: { addresst?: string };
+    };
+    return (j.osmtags?.name || j.staddress || j.standard?.addresst || "").trim();
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/* ─── FUSION champ par champ — la garantie « jamais de champ vide » ──
+    a = base (BigDataCloud — hiérarchie administrative garantie),
+    b = enrichissement (Nominatim/GeoCode.xyz — surtout le QUARTIER).
+    Chaque champ vide de a est comblé par b ; a garde la priorité quand
+    les deux sont remplis (sauf quartier : b est spécialisé). */
+function fusionnerDraft(base: LocationDraft, enrich: LocationDraft): LocationDraft {
+  const vide = (x: string) => !x || !x.trim();
+  return {
+    country: vide(base.country) ? enrich.country : base.country,
+    region: vide(base.region) ? enrich.region : base.region,
+    department: vide(base.department) ? enrich.department : base.department,
+    // VILLE — BigDataCloud donne la vraie ville (« Yaoundé », « Douala ») ;
+    // Nominatim donne parfois la commune détaillée — la base reste prioritaire.
+    city: vide(base.city) ? enrich.city : base.city,
+    arrondissement: vide(base.arrondissement) ? enrich.arrondissement : base.arrondissement,
+    quartier: vide(enrich.quartier) ? base.quartier : enrich.quartier,
+    latitude: base.latitude ?? enrich.latitude,
+    longitude: base.longitude ?? enrich.longitude,
+    accuracy: base.accuracy ?? enrich.accuracy,
+    source: base.source === "gps" || enrich.source === "gps" ? "gps" : base.source,
+  };
 }
 
 /* ─── 4. Localisation par IP (si le GPS est refusé) — gratuites sans clé ─── */
@@ -249,9 +338,23 @@ async function ipGeolocate(): Promise<LocationDraft> {
   throw lastErr ?? new Error("Localisation par IP indisponible.");
 }
 
-/* ─── Détection complète : GPS → reverse geocode → secours IP ─── */
+/* ─── Détection complète : GPS → CASCADE PARALLÈLE → secours IP ─── */
 
 export type DetectOutcome = { draft: LocationDraft; method: "gps" | "ip" };
+
+/** Nominatim avec 1 relance automatique : les 429 « Too many requests » sont
+ *  courants sur les IP partagées (NAT opérateur) — après ~1,2 s le quota
+ *  glissant laisse souvent repasser la requête. */
+async function nominatimAvecRelance(lat: number, lon: number, accuracy: number | null): Promise<LocationDraft> {
+  try {
+    return await reverseNominatim(lat, lon, accuracy);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "";
+    if (!/429|Too many/i.test(msg)) throw e;
+    await new Promise((r) => setTimeout(r, 1200));
+    return reverseNominatim(lat, lon, accuracy);
+  }
+}
 
 export async function detectLocation(): Promise<DetectOutcome> {
   let lat: number | null = null;
@@ -268,20 +371,29 @@ export async function detectLocation(): Promise<DetectOutcome> {
   }
 
   if (lat !== null && lon !== null) {
-    // Nominatim d'abord (hiérarchie complète), puis BigDataCloud en secours
+    // v34 — CASCADE PARALLÈLE : BigDataCloud (base garantie : région,
+    // département, ville, arrondissement) tourne EN MÊME TEMPS que Nominatim
+    // (le quartier). Les deux réponses sont fusionnées champ par champ :
+    // même si Nominatim renvoie 429 (IP partagée), la hiérarchie complète
+    // arrive quand même — seul le quartier peut alors manquer.
+    const base = await reverseBigDataCloud(lat, lon, accuracy);
+    let enrich: LocationDraft | null = null;
     try {
-      return { draft: await reverseNominatim(lat, lon, accuracy), method: "gps" };
+      enrich = await nominatimAvecRelance(lat, lon, accuracy);
     } catch {
-      try {
-        return { draft: await reverseBigDataCloud(lat, lon, accuracy), method: "gps" };
-      } catch {
-        // Coordonnées GPS mais adresse introuvable → on garde les coordonnées
-        return {
-          draft: { ...EMPTY_DRAFT, latitude: lat, longitude: lon, accuracy, source: "gps" },
-          method: "gps",
-        };
-      }
+      enrich = null;
     }
+    if (enrich) {
+      return { draft: fusionnerDraft(base, enrich), method: "gps" };
+    }
+    // Nominatim indisponible → GeoCode.xyz tente le QUARTIER seul.
+    try {
+      const quartier = await reverseGeocodeXyz(lat, lon);
+      if (quartier) return { draft: { ...base, quartier }, method: "gps" };
+    } catch {
+      /* pas de quartier — la hiérarchie administrative reste complète */
+    }
+    return { draft: base, method: "gps" };
   }
 
   const ipDraft = await ipGeolocate();
@@ -379,6 +491,7 @@ export async function forwardGeocode(d: {
     .filter(Boolean)
     .join(", ");
   if (!q) return null;
+  // 1) Nominatim — adresse complète (quartier inclus quand il connaît)
   const url =
     `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=fr` +
     `&q=${encodeURIComponent(q)}`;
@@ -386,17 +499,35 @@ export async function forwardGeocode(d: {
   const t = setTimeout(() => ctrl.abort(), 12000);
   try {
     const res = await fetch(url, { signal: ctrl.signal, headers: { Accept: "application/json" } });
-    if (!res.ok) return null;
-    const arr = (await res.json()) as { lat?: string; lon?: string }[];
-    const first = arr?.[0];
-    const lat = parseFloat(String(first?.lat ?? ""));
-    const lon = parseFloat(String(first?.lon ?? ""));
-    if (!isFinite(lat) || !isFinite(lon)) return null;
-    return { latitude: lat, longitude: lon };
+    if (res.ok) {
+      const arr = (await res.json()) as { lat?: string; lon?: string }[];
+      const first = arr?.[0];
+      const lat = parseFloat(String(first?.lat ?? ""));
+      const lon = parseFloat(String(first?.lon ?? ""));
+      if (isFinite(lat) && isFinite(lon)) return { latitude: lat, longitude: lon };
+    }
   } catch {
-    return null;
+    /* Nominatim indisponible → secours ci-dessous */
   } finally {
     clearTimeout(t);
+  }
+  // 2) Open-Meteo geocoding — GRATUIT, sans clé, jamais de 429 — la VILLE
+  //    suffit : les coordonnées servent à centrer la carte de la famille.
+  const ville = [d.city, d.region, d.country].map((x) => (x || "").trim()).filter(Boolean).join(", ");
+  if (!ville) return null;
+  try {
+    const r = await fetch(
+      `https://geocoding-api.open-meteo.com/v1/search?count=1&language=fr&name=${encodeURIComponent(ville)}`,
+    );
+    if (!r.ok) return null;
+    const j = (await r.json()) as { results?: { latitude?: number; longitude?: number }[] };
+    const hit = j.results?.[0];
+    if (typeof hit?.latitude === "number" && typeof hit?.longitude === "number") {
+      return { latitude: hit.latitude, longitude: hit.longitude };
+    }
+    return null;
+  } catch {
+    return null;
   }
 }
 

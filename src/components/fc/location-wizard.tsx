@@ -28,7 +28,7 @@ import { maVille, setMaVille } from "./tontine-ville";
 import { FcButton, FcCard, FcSpinner } from "./ui";
 import {
   AlertTriangle, Building2, Check, Compass, Globe2, Landmark, LocateFixed,
-  MapPin, MapPinned, Navigation, PencilLine, RefreshCw, Save, ShieldCheck,
+  MapPin, MapPinned, PencilLine, RefreshCw, Save, ShieldCheck,
 } from "lucide-react";
 
 type StepName = "intro" | "detecting" | "edit" | "confirm" | "saving";
@@ -161,19 +161,13 @@ export function LocationWizard({
         </h1>
         <p className="mx-auto mt-1.5 max-w-sm text-[13.5px] leading-relaxed text-[#5C6B60]">
           {firstRun
-            ? "L'application détecte automatiquement votre pays, votre région, votre ville et votre quartier. Vous pourrez corriger chaque champ — c'est utile pour les rencontres de famille : les membres pourront se guider par GPS jusqu'à vous."
-            : "Ces coordonnées permettent aux membres de la famille de vous trouver pour les rencontres physiques."}
+            ? "L'application détecte votre position — vérifiez et corrigez chaque champ si besoin."
+            : "Ces coordonnées permettent à la famille de vous trouver."}
         </p>
       </div>
 
       {step === "intro" && (
         <FcCard className="p-6">
-          <ul className="mb-5 space-y-3">
-            <ExplainRow icon={<LocateFixed className="h-5 w-5" />} text="Détection automatique par le GPS de votre téléphone (avec votre accord)" />
-            <ExplainRow icon={<Globe2 className="h-5 w-5" />} text="Pays, région, département, ville, arrondissement et quartier remplis pour vous" />
-            <ExplainRow icon={<PencilLine className="h-5 w-5" />} text="Vous vérifiez et corrigez tout ce que vous voulez avant d'enregistrer" />
-            <ExplainRow icon={<Navigation className="h-5 w-5" />} text="Guidage GPS gratuit entre membres pour les rencontres familiales" />
-          </ul>
           <FcButton onClick={runDetect} className="h-[54px] text-[17px]">
             <LocateFixed className="h-5 w-5" /> Détecter ma position
           </FcButton>
@@ -275,7 +269,7 @@ export function LocationWizard({
 
               <p className="mt-3 flex items-start gap-1.5 text-[11.5px] leading-relaxed text-[#8A9288]">
                 <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                Visible uniquement par les membres de la famille, uniquement pour les rencontres.
+                Visible uniquement par les membres de la famille.
               </p>
 
               <FcButton onClick={proceedToConfirm} disabled={!canContinue || adjusting} className="mt-4 h-[52px]">
@@ -306,15 +300,6 @@ export function LocationWizard({
   );
 }
 
-function ExplainRow({ icon, text }: { icon: React.ReactNode; text: string }) {
-  return (
-    <li className="flex items-start gap-3">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#2A4A3A]/8 text-[#2A4A3A]">{icon}</span>
-      <span className="pt-1.5 text-[13.5px] leading-snug text-[#2B3530]">{text}</span>
-    </li>
-  );
-}
-
 /* v27 — Encart « ville de tontine » : confronte la ville détectée aux villes
    connues de la Tontine (une ville = une tontine sur la page Finances).
    · ville reconnue & conforme (ou compte sans ville : elle deviendra sa tontine)
@@ -333,10 +318,10 @@ function EncartVilleTontine({ city }: { city: string }) {
       <div className="mt-3 flex items-start gap-2 rounded-xl border border-[#2F6B45]/35 bg-[#2F6B45]/10 p-3 text-[12.5px] leading-relaxed text-[#2F6B45]">
         <Building2 className="mt-0.5 h-4 w-4 shrink-0" />
         <p>
-          <strong>Tontine de {propre} ✓</strong> — ville reconnue de la Tontine.
+          <strong>Tontine de {propre} ✓</strong>
           {sansVille
-            ? " À l'enregistrement, elle devient votre ville de tontine : vos cotisations, épargnes et prêts s'additionnent entre membres de votre ville."
-            : " C'est votre ville de tontine — vos cotisations, épargnes et prêts s'additionnent entre membres de votre ville."}
+            ? " — elle devient votre ville de tontine à l'enregistrement."
+            : " — c'est votre ville de tontine."}
         </p>
       </div>
     );
@@ -346,8 +331,7 @@ function EncartVilleTontine({ city }: { city: string }) {
       <div className="mt-3 flex items-start gap-2 rounded-xl border border-[#C89F62]/45 bg-[#FFF8EC] p-3 text-[12.5px] leading-relaxed text-[#8A6420]">
         <Building2 className="mt-0.5 h-4 w-4 shrink-0" />
         <p>
-          Vous habitez <strong>{propre}</strong> — votre tontine reste celle de <strong>{mv}</strong> :
-          c&apos;est le bureau qui attribue la ville de tontine (via votre code d&apos;invitation).
+          Votre tontine reste celle de <strong>{mv}</strong> (attribuée par le bureau).
         </p>
       </div>
     );
@@ -356,7 +340,7 @@ function EncartVilleTontine({ city }: { city: string }) {
     <div className="mt-3 flex items-start gap-2 rounded-xl border border-[#E5DCC0] bg-[#FBF7EA] p-3 text-[12px] leading-relaxed text-[#8A9288]">
       <Building2 className="mt-0.5 h-4 w-4 shrink-0" />
       <p>
-        {propre} n&apos;est pas (encore) une ville de la Tontine — {mv ? <>votre tontine reste celle de <strong>{mv}</strong>.</> : "le bureau peut l'ajouter depuis la création d'un membre (choix de la région, puis de la ville)."}
+        {propre} n&apos;est pas une ville de la Tontine — le bureau peut l&apos;ajouter à la création d&apos;un membre.
       </p>
     </div>
   );

@@ -125,7 +125,7 @@ export function MaquetteCommissaire() {
   const attester = (id: string) => {
     setAttestations((prev) => ({ ...prev, [id]: `${dateCourte()} ${heure()}` }));
     const c = CAISSES_DEMO.find((x) => x.id === id);
-    toast.success("Compte attesté", { description: `${c?.label} — les pièces justificatives ont été contrôlées et l'attestation est signée par le commissaire aux comptes.` });
+    toast.success("Compte attesté", { description: `${c?.label} — attestation signée.` });
   };
 
   /* — journal de caisse : audit ligne par ligne — */
@@ -161,7 +161,7 @@ export function MaquetteCommissaire() {
     const incoherences = [...epargnes, ...prets].filter((x) => !(x.montant > 0) || x.moisIdx < 0 || x.moisIdx > 11 || !parMembre.get(x.membreId)).length;
     setRapprochement(`${dateCourte()} ${heure()}`);
     if (incoherences > 0) {
-      toast.error("Anomalies détectées", { description: `${incoherences} inscription(s) incohérente(s) au registre — une observation est à transmettre au bureau (onglet Rapports).` });
+      toast.error("Anomalies détectées", { description: `${incoherences} inscription(s) incohérente(s) — transmettez une observation.` });
     } else {
       toast.success("Rapprochement exact", { description: `${epargnes.length} épargne(s) pour ${fcfa(totalE)} · ${prets.filter((x) => !x.rembourse).length} prêt(s) en cours pour ${fcfa(totalP)} — registre conforme, aucune anomalie.` });
     }
@@ -173,13 +173,13 @@ export function MaquetteCommissaire() {
   const [obsForm, setObsForm] = useState<{ sujet: string; detail: string; destinataire: string } | null>(null);
   const signerRapport = () => {
     setRapports((prev) => prev.map((x) => (x.signe ? x : { ...x, signe: true, le: dateCourte() })));
-    toast.success("Rapport signé", { description: "Le rapport du trimestre est signé par le commissaire aux comptes et transmis au président — il sera LU à la prochaine réunion." });
+    toast.success("Rapport signé", { description: "Transmis au président — lu en réunion." });
   };
   const transmettreObservation = () => {
     if (!obsForm?.sujet.trim() || !obsForm?.detail.trim()) { toast.error("Le sujet et le détail sont obligatoires"); return; }
     setObservations((prev) => [{ id: nid(), sujet: obsForm.sujet.trim(), detail: obsForm.detail.trim(), destinataire: obsForm.destinataire, le: `${dateCourte()} ${heure()}`, statut: "transmise" }, ...prev]);
     setObsForm(null);
-    toast.success("Observation transmise", { description: `Envoyée au ${obsForm.destinataire.toLowerCase()} — copie archivée au registre du commissariat.` });
+    toast.success("Observation transmise", { description: `Envoyée au ${obsForm.destinataire.toLowerCase()}.` });
   };
 
   const badges: Partial<Record<TabKey, number>> = {
@@ -270,13 +270,12 @@ function CaisseSection(p: { mois: string; attestations: Record<string, string>; 
         title={`Attestation des caisses — ${p.mois}`}
         icon={<Wallet className="h-4 w-4" />}
         accent="#3D6B72"
-        note="Le commissaire aux comptes ATTESTE chaque caisse : les montants annoncés par le trésorier correspondent aux pièces (reçus, accusés, tickets). Attester = signer « j'ai vu les pièces ». Le trésorier garde la caisse — le commissaire ne touche JAMAIS à l'argent."
+        note="Attestez chaque caisse après avoir vu les pièces."
       >
         <div className="space-y-2 p-4 text-[12.5px] leading-relaxed text-[#4A554E]">
-          <p className="font-bold text-[#2B3530]">Rappel des règles du commissariat :</p>
-          <p>• Contrôle des caisses et du journal de caisse CHAQUE TRIMESTRE — rapport signé et lu en réunion.</p>
-          <p>• Toute anomalie est transmise au président (ou au censeur si le président est concerné) PAR ÉCRIT, jamais réglée en privé.</p>
-          <p>• Aucun pouvoir de décision : le commissaire constate, le bureau statue.</p>
+          <p className="font-bold text-[#2B3530]">Rappel :</p>
+          <p>• Contrôlez chaque trimestre et signez le rapport.</p>
+          <p>• Transmettez les anomalies par écrit.</p>
         </div>
       </Block>
     </>
@@ -294,7 +293,7 @@ function JournalSection(p: {
       title="Journal de caisse — audit ligne par ligne"
       icon={<FileSpreadsheet className="h-4 w-4" />}
       accent="#3D6B72"
-      note="Le trésorier inscrit CHAQUE mouvement de caisse. Le commissaire coche « vérifié » après avoir vu la pièce justificative — une ligne non vérifiée reste visible en rouge jusqu'au contrôle."
+      note="Cochez « vérifié » après avoir vu la pièce justificative."
     >
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E5DCC0] bg-[#FBF7EA] px-4 py-2.5">
         <P cls={p.aVerifier > 0 ? RJ_CLS : OK_CLS}>
@@ -386,14 +385,14 @@ function RegistresSection(p: {
         title="Registres du bureau — contrôle de cohérence"
         icon={<PiggyBank className="h-4 w-4" />}
         accent="#3D6B72"
-        note="CE SONT LES REGISTRES RÉELS du bureau — la même source que les pages « Épargnes » et « Prêts » du président. Le rapprochement vérifie que chaque inscription est complète (membre connu, mois valide, montant positif)."
+        note="Lancez le rapprochement pour vérifier le registre."
       >
         <div className="p-4">
           <BtnConfirme tone="teal" onConfirmer={p.onRapprocher} labelConfirmer="Lancer ?">
             <Scale className="h-4 w-4" /> Lancer le rapprochement des registres
           </BtnConfirme>
           {p.rapprochement && (
-            <p className="mt-2 text-[11px] font-semibold text-[#2F6B45]">Dernier rapprochement : {p.rapprochement} — le résultat détaillé est dans la notification.</p>
+            <p className="mt-2 text-[11px] font-semibold text-[#2F6B45]">Dernier rapprochement : {p.rapprochement}.</p>
           )}
         </div>
         {p.epargnes.length > 0 && (
@@ -484,7 +483,7 @@ function RapportsSection(p: {
         title="Rapports trimestriels de contrôle"
         icon={<ScrollText className="h-4 w-4" />}
         accent="#3D6B72"
-        note="Chaque TRIMESTRE, le commissaire signe un rapport : caisses contrôlées, journal de caisse audité, registres rapprochés. Le rapport signé est transmis au président et LU à la réunion — la transparence n'est pas une option."
+        note="Signez le rapport chaque trimestre."
       >
         <div className="divide-y divide-[#E5DCC0]">
           {p.rapports.map((r) => (
@@ -512,7 +511,7 @@ function RapportsSection(p: {
         title="Observations & alertes au bureau"
         icon={<AlertTriangle className="h-4 w-4" />}
         accent="#3D6B72"
-        note="Une anomalie repérée ? Le commissaire la transmet PAR ÉCRIT au destinataire choisi — traçable, datée, archivée. C'est la voie normale : pas de conflit devant la famille, pas d'arrangement en privé."
+        note="Décrivez l'anomalie puis choisissez le destinataire."
       >
         {p.obsForm && (
           <div className="space-y-2 border-b border-[#E5DCC0] bg-[#EDF4F3] p-4">
@@ -528,7 +527,7 @@ function RapportsSection(p: {
               value={p.obsForm.detail}
               onChange={(e) => p.setObsForm({ ...p.obsForm!, detail: e.target.value })}
               rows={3}
-              placeholder="Détail : ce que vous avez constaté, la pièce qui manque, la règle concernée…"
+              placeholder="Détail de l'anomalie constatée"
               aria-label="Détail de l'observation"
               className="w-full rounded-lg border border-[#8FB5BA] bg-white px-3 py-2 text-[13px] placeholder:text-[#8A9288] focus:outline-none"
             />

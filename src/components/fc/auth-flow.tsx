@@ -115,7 +115,7 @@ function appliquerCodeInvitation(codeAtt: string | null, fullName: string, uid: 
   retirerCodeInvite();
   const libelle = ROLE_META[c.bureauRole ?? "membre"]?.label ?? "Membre";
   toast.success("Code d'invitation appliqué 🎟️", {
-    description: `Votre page « ${libelle} » s'ouvre directement${c.cotisationTypeId ? ` — cotisation « ${c.cotisationNom} » (${c.cotisationMontant.toLocaleString("fr-FR")} FCFA/mois)` : " — cotisation de base de la Tontine"}. Votre compte reste actif sans limite de temps.`,
+    description: `Votre page « ${libelle} » s'ouvre directement${c.cotisationTypeId ? ` — cotisation « ${c.cotisationNom} » (${c.cotisationMontant.toLocaleString("fr-FR")} FCFA/mois)` : " — cotisation de base de la Tontine"}.`,
   });
 }
 
@@ -233,14 +233,14 @@ function CodeScreen({ goto }: { goto: (s: Step) => void }) {
     if (c.utiliseLe) {
       setUtilise(c);
       toast.error("Ce code a déjà servi à créer un compte.", {
-        description: "Si c'est votre compte, reconnectez-vous avec votre numéro — le bouton ci-dessous préremplit tout.",
+        description: "Reconnectez-vous avec votre numéro.",
       });
       return;
     }
     setUtilise(null);
     poserCodeInvite(c.code); // mémorisé jusqu'à la création du compte (consommé ensuite)
     toast.success("Code accepté 🎟️", {
-      description: `Bienvenue${c.nomOptionnel ? ` ${c.nomOptionnel}` : ""} ! Complétez vos renseignements — votre page s'ouvrira avec le rôle attribué par le bureau.`,
+      description: `Bienvenue${c.nomOptionnel ? ` ${c.nomOptionnel}` : ""} ! Complétez vos renseignements.`,
     });
     goto({ k: "renseignement", code: c });
   };
@@ -250,7 +250,7 @@ function CodeScreen({ goto }: { goto: (s: Step) => void }) {
       <FcCard className="p-6 sm:p-8">
         <h2 className="fc-serif mb-1 text-center text-2xl font-bold text-[#1E4D2B]">Ouvrez votre page</h2>
         <p className="mb-6 text-center text-[14px] leading-relaxed text-[#5C6B60]">
-          Collez le code que le bureau de la Tontine vous a remis.
+          Collez le code reçu du bureau.
         </p>
 
         <label htmlFor="fc-code-invitation" className="sr-only">
@@ -281,8 +281,7 @@ function CodeScreen({ goto }: { goto: (s: Step) => void }) {
         {utilise && (
           <div className="mt-4 rounded-xl border border-[#C89F62]/50 bg-[#FBF7EA] p-3.5">
             <p className="text-[12.5px] font-semibold leading-snug text-[#7A5B2E]">
-              Le code <strong className="font-mono">{utilise.code}</strong> a déjà servi — s&apos;il était pour vous,
-              reconnectez-vous avec votre numéro :
+              Le code <strong className="font-mono">{utilise.code}</strong> a déjà servi — reconnectez-vous avec votre numéro :
             </p>
             <FcButton
               variant="outline"
@@ -295,13 +294,12 @@ function CodeScreen({ goto }: { goto: (s: Step) => void }) {
         )}
 
         <p className="mt-5 text-center text-[12px] leading-relaxed text-[#8A9288]">
-          Le code vous a été remis par le secrétaire ou le président (format FCM-XXXXXX).
-          Il ne périme jamais.
+          Format FCM-XXXXXX — il ne périme jamais.
         </p>
       </FcCard>
 
       <p className="px-2 text-center text-[12.5px] leading-relaxed text-[#5C6B60]">
-        Pas encore reçu de code ? Demandez-le au secrétaire ou au président de votre tontine.
+        Pas de code ? Demandez-le au bureau.
       </p>
     </div>
   );
@@ -493,17 +491,16 @@ function RenseignementScreen({
         {c.telephone ? (
           telModifie ? (
             <p className="rounded-xl border border-[#C89F62]/60 bg-[#FBF7EA] px-3.5 py-3 text-[12px] font-semibold leading-relaxed text-[#7A5B2E]">
-              ⚠️ Vous avez modifié le numéro enregistré par le bureau ({groupPhone(telDuCodeRef.current)}).
-              Votre compte sera lié à CE nouveau numéro — vérifiez-le soigneusement : c&apos;est lui qui recevra les notifications de la Tontine.
+              ⚠️ Numéro modifié — votre compte sera lié à ce nouveau numéro.
             </p>
           ) : (
             <p className="flex items-center gap-1.5 px-1 text-[12px] font-bold text-[#2F6B45]">
-              <ShieldCheck className="h-3.5 w-3.5" /> Numéro enregistré par le bureau — vérifiez-le et corrigez-le en cas d&apos;erreur.
+              <ShieldCheck className="h-3.5 w-3.5" /> Numéro du bureau — corrigez-le si besoin.
             </p>
           )
         ) : (
           <p className="px-1 text-[12px] font-semibold text-[#5C6B60]">
-            Le bureau n&apos;a pas enregistré de numéro sur votre code — saisissez le VÔTRE : c&apos;est lui qui recevra les notifications.
+            Saisissez votre numéro — il recevra les notifications.
           </p>
         )}
       </div>
@@ -516,7 +513,7 @@ function RenseignementScreen({
       <p className="mt-3 text-center text-[12px] leading-relaxed text-[#8A9288]">
         {pseudo.trim().length >= 2 && !nomComplet
           ? `Vous serez affiché sous le pseudo « ${pseudo.trim()} ».`
-          : "Étape suivante : la vérification du numéro — la notification part toute seule."}
+          : "Étape suivante : vérification du numéro."}
       </p>
     </FcCard>
   );
@@ -618,7 +615,7 @@ function PhoneScreen({
       <StepBadge current={1} total={2} label="Connexion" />
       <h2 className="fc-serif mb-1 text-center text-2xl font-bold text-[#1E4D2B]">Se reconnecter</h2>
       <p className="mb-6 text-center text-[14px] leading-relaxed text-[#5C6B60]">
-        Entrez le numéro avec lequel votre compte a été créé — la notification part automatiquement, sans mot de passe.
+        Entrez le numéro de votre compte.
       </p>
 
       <div className="mb-4 flex items-stretch gap-2">
@@ -653,7 +650,7 @@ function PhoneScreen({
           </FcButton>
         ) : (
           <p className="rounded-xl bg-[#3D6B52]/8 px-4 py-3.5 text-[12.5px] leading-relaxed text-[#2A4A3A]">
-            🔔 La notification part <b>toute seule</b> dès que votre numéro est complet — rien à cliquer.
+            🔔 La notification part <b>toute seule</b> dès que votre numéro est complet.
           </p>
         )}
       </div>
@@ -990,8 +987,7 @@ export function AuthFlow({ onReady }: { onReady: (name: string) => void }) {
             role="status"
             className="rounded-xl border border-[#C89F62]/50 bg-[#FBF7EA] px-4 py-3 text-[12.5px] font-semibold leading-snug text-[#7A5B2E]"
           >
-            Le code de ce lien a déjà été utilisé — si c&apos;est votre compte, reconnectez-vous avec votre numéro.
-            Sinon, demandez un nouveau code au bureau de la Tontine.
+            Le code de ce lien a déjà été utilisé — reconnectez-vous avec votre numéro.
           </div>
         )}
         {lien.statut === "inconnu" && (
@@ -999,7 +995,7 @@ export function AuthFlow({ onReady }: { onReady: (name: string) => void }) {
             role="status"
             className="rounded-xl border border-[#C89F62]/50 bg-[#FBF7EA] px-4 py-3 text-[12.5px] font-semibold leading-snug text-[#7A5B2E]"
           >
-            Le code contenu dans ce lien est inconnu — vérifiez auprès du bureau de la Tontine.
+            Le code de ce lien est inconnu — vérifiez auprès du bureau.
           </div>
         )}
         {step.k === "code" && <CodeScreen goto={setStep} />}

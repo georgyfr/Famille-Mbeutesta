@@ -271,7 +271,7 @@ function BlocTontineVille({ vousName, montVersion }: { vousName?: string | null;
     setVilleEtat(v);
     setVersion((x) => x + 1);
     toast.success(`Vous rejoignez la tontine de ${v} 🏙️`, {
-      description: "Vos cotisations, épargnes et prêts s'additionnent entre membres de votre ville.",
+      description: "Cotisations, épargnes et prêts s'additionnent entre vous.",
     });
   };
 
@@ -295,9 +295,7 @@ function BlocTontineVille({ vousName, montVersion }: { vousName?: string | null;
           <p className="text-[13px] font-bold text-[#A5473D]">Vous n&apos;appartenez à aucune tontine</p>
         </div>
         <p className="text-[12px] leading-relaxed text-[#7A3B34]">
-          Chaque ville forme UNE SEULE tontine : ses membres cotisent, épargnent et empruntent ensemble.
-          Sans ville, vous ne pouvez pas interagir avec les tontines de ville — choisissez la vôtre ci-dessous
-          (ou demandez au bureau de l&apos;attribuer à votre code d&apos;invitation).
+          Choisissez votre ville ci-dessous — sans ville, aucune tontine.
         </p>
         <div className="mt-2.5 flex flex-wrap gap-1.5">
           {villes.map((v) => (
@@ -338,8 +336,7 @@ function BlocTontineVille({ vousName, montVersion }: { vousName?: string | null;
         </button>
       </div>
       <p className="mb-3 text-[11.5px] leading-relaxed text-[#5C6B60]">
-        Tous les membres de {resume.ville} forment <strong>une seule tontine</strong> : leurs cotisations
-        s&apos;additionnent entre eux ; épargnes et prêts de la ville sont pris en compte.
+        Cotisations, épargnes et prêts s&apos;additionnent entre membres de la ville.
       </p>
       <div className="grid grid-cols-3 gap-2">
         <MiniKpi label="Cotisations du mois" value={fmtFcfa(resume.cotisationsMois)} sub="total de la ville" tone="bg-[#2F6B45]/12 text-[#2F6B45]" />
@@ -362,7 +359,7 @@ function BlocTontineVille({ vousName, montVersion }: { vousName?: string | null;
       )}
       {memeVille(ville, "Yaoundé") && (
         <p className="mt-2 text-[10.5px] font-semibold text-[#8A9288]">
-          Ville par défaut de la Tontine — les nouveaux codes d&apos;invitation y sont rattachés.
+          Ville par défaut — les nouveaux codes y sont rattachés.
         </p>
       )}
     </div>
@@ -412,8 +409,8 @@ export function TontinePage({ onBack, vousName, vousPhone }: { onBack: () => voi
         for (const s of dus) {
           toast.warning(`Rappel de signalement — ${s.cibleLabel}`, {
             description: bureautif
-              ? `Signalé par ${s.auteur} le ${dateCourte(s.creeLe)} — « ${libelleMotif(s.motif)} ». À traiter dans la page de votre bureau.`
-              : `Le bureau a été notifié à nouveau (rappel tous les ${RAPPEL_SIGNALEMENT_JOURS} jours).`,
+              ? `Signalé par ${s.auteur} — « ${libelleMotif(s.motif)} ».`
+              : `Rappel envoyé au bureau tous les ${RAPPEL_SIGNALEMENT_JOURS} jours.`,
             duration: 8000,
           });
         }
@@ -488,11 +485,10 @@ export function TontinePage({ onBack, vousName, vousPhone }: { onBack: () => voi
         <div className="flex items-start gap-2 rounded-2xl border border-[#B85C33]/40 bg-[#B85C33]/10 p-3 text-[12px] leading-relaxed text-[#B85C33]">
           <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
-            <strong>{ouverts.length} signalement{ouverts.length > 1 ? "s" : ""} en attente</strong> — tous les membres du bureau sont notifiés, et la
-            notification réapparaît tous les {RAPPEL_SIGNALEMENT_JOURS} jours jusqu’au traitement.
+            <strong>{ouverts.length} signalement{ouverts.length > 1 ? "s" : ""} en attente</strong> — le bureau est notifié.
             {estBureau(roleActif)
-              ? " Traitez-les depuis la page de votre rôle ci-dessous."
-              : " Le bureau vous tiendra informé(e) de la suite donnée."}
+              ? " Traitez-les depuis la page de votre rôle."
+              : " Le bureau vous tiendra informé(e)."}
           </p>
         </div>
       )}
@@ -822,7 +818,7 @@ function ReglementTontine() {
           {reg.publieLe ? `Version ${reg.version} — en vigueur` : "Version 1 — en vigueur"}
         </Chip>
       }
-      note="Le président paramètre la Tontine dans son poste de commandement (onglet « Paramètres ») : impayés, recouvrements, prêts garantis, solidarité, épargne, quorum. Ce règlement est publié à tous — lecture seule : toute modification se décide en réunion puis est republiée ici."
+      note="Règlement publié par le bureau — lecture seule."
     >
       <TableWrap label="Règlement de la Tontine">
         <tbody>
@@ -834,7 +830,7 @@ function ReglementTontine() {
       <p className="mt-2 text-[10.5px] leading-relaxed text-[#8A9288]">
         {publieLeFmt
           ? `Dernière publication le ${publieLeFmt} par ${reg.publiePar}.`
-          : "Valeurs en vigueur fixées par le bureau — prochaine publication après la réunion."}
+          : "Valeurs en vigueur fixées par le bureau."}
       </p>
     </Block>
   );
@@ -874,11 +870,11 @@ function ReunionPage({ annee, roster, vousPhone, typesCotis, vousRole }: { annee
   const pot = potMensuelDynamique(roster, { types: typesCotis, base: TONTINE.montantCotisation });
 
   const regles: [string, string][] = [
-    ["Cotisation de base", `${fmtN(TONTINE.montantCotisation)} FCFA pour les membres sans type particulier — le bureau peut fixer une somme propre à certains membres (types de cotisation)`],
+    ["Cotisation de base", `${fmtN(TONTINE.montantCotisation)} FCFA — pour les membres sans type particulier`],
     ["Collation", `${fmtN(TONTINE.montantCollation)} FCFA par personne et par réunion`],
     ["Jour de réunion", cap(TONTINE.jourLabel)],
     ["Lieu", "Chez le bénéficiaire du mois"],
-    ["Somme du mois", `${fmtN(pot)} FCFA — l'addition des cotisations de TOUS les membres : chacun verse SON taux (type attribué ou base), bénéficiaire inclus, toute l'année`],
+    ["Somme du mois", `${fmtN(pot)} FCFA — addition des cotisations de tous, bénéficiaire inclus`],
     ["Frais d'adhésion", `${fmtN(TONTINE.fraisAdhesion)} FCFA une seule fois — caisse sociale`],
     ["Tours de l'année", "11 tours (janvier → novembre) + assemblée générale en décembre"],
     ["Pénalités", `Retard ${fmtN(TONTINE.penaliteRetard)} · Absence non excusée ${fmtN(TONTINE.penaliteAbsence)} — versées à la caisse sociale`],
@@ -943,7 +939,7 @@ function ReunionPage({ annee, roster, vousPhone, typesCotis, vousRole }: { annee
                   : `Voir ses informations — contact de ${prenom(courant.beneficiary)}`}
               </FcButton>
               <p className="mt-1.5 text-center text-[10.5px] leading-relaxed text-[#8A9288]">
-                Téléphone, quartier et géolocalisation — pour appeler, s&apos;orienter et arriver directement chez {courant.beneficiary.isVous ? "vous" : prenom(courant.beneficiary)}.
+                Pour appeler et vous guider jusqu&apos;à {courant.beneficiary.isVous ? "vous" : prenom(courant.beneficiary)}.
               </p>
             </div>
           )}
@@ -954,7 +950,7 @@ function ReunionPage({ annee, roster, vousPhone, typesCotis, vousRole }: { annee
       <Block
         title={`Calendrier de l'année ${annee[0].annee}`}
         icon={<CalendarDays className="h-4.5 w-4.5" />}
-        note="La réunion a lieu le 2ᵉ dimanche de chaque mois. Touchez un calendrier ou son bouton « Voir » : le pop-up s'ouvre — qui reçoit la réunion, son numéro, son lieu, et ce que chacun verse."
+        note="Touchez un calendrier pour ouvrir la fiche de la réunion."
       >
         <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
           {annee.map((t) => <MiniMois key={t.month0} t={t} onOpen={() => setFiche(t)} />)}
@@ -970,7 +966,7 @@ function ReunionPage({ annee, roster, vousPhone, typesCotis, vousRole }: { annee
       <Block
         title="Qui reçoit la réunion, mois par mois"
         icon={<Gift className="h-4.5 w-4.5" />}
-        note="Une personne par mois : elle reçoit l'ADDITION des cotisations de tous les membres (chacun verse SON taux — type attribué ou base — bénéficiaire inclus) et accueille la réunion chez elle. Touchez une ligne pour ouvrir sa fiche — téléphone, lieu et cotisation de chacun."
+        note="Touchez une ligne pour ouvrir la fiche du bénéficiaire."
       >
         <TableWrap label="Bénéficiaires de l'année">
           <thead>
@@ -1193,12 +1189,12 @@ function FicheReunion({ t, vousId, maCotisPerso, onFermer }: { t: TourMois; vous
     : [
         ["Cotisation", fmtFcfa(maCotisation), estBeneficiaire
           ? maCotisPerso
-            ? `Vous recevez la réunion — vous cotisez aussi votre somme (« ${maCotisPerso.nom} »), comme tous`
-            : "Vous recevez la réunion — vous cotisez aussi, comme tous les membres"
+            ? `Vous cotisez aussi (« ${maCotisPerso.nom} »).`
+            : "Vous cotisez aussi, comme tous."
           : maCotisPerso
-            ? `Somme fixée pour vous par le bureau (« ${maCotisPerso.nom} ») — toute l'année, quel que soit le bénéficiaire`
+            ? `Somme fixée par le bureau (« ${maCotisPerso.nom} »).`
             : "Remise au trésorier pour la réunion"],
-        ["Collation", fmtFcfa(TONTINE.montantCollation), "Payée par tout le monde, y compris le bénéficiaire"],
+        ["Collation", fmtFcfa(TONTINE.montantCollation), "Payée par tous, bénéficiaire inclus"],
         ["Total par personne", fmtFcfa(partTotale), "À remettre au trésorier à la réunion"],
       ];
 
@@ -1248,8 +1244,7 @@ function FicheReunion({ t, vousId, maCotisPerso, onFermer }: { t: TourMois; vous
             <div className="flex items-start gap-2.5 rounded-2xl border border-[#3D6B72]/30 bg-[#3D6B72]/8 p-3">
               <Users className="mt-0.5 h-5 w-5 shrink-0 text-[#3D6B72]" />
               <p className="text-[12.5px] leading-relaxed text-[#3D6B72]">
-                Décembre clôture l&apos;année : bilan général, rapport du commissaire aux comptes,
-                calendrier de l&apos;année suivante et fête de fin d&apos;année. Aucune somme n&apos;est remise.
+                Bilan de l&apos;année, rapport des comptes et fête — aucune somme remise.
               </p>
             </div>
             <TableWrap label="Détails de l'assemblée générale">
@@ -1275,8 +1270,7 @@ function FicheReunion({ t, vousId, maCotisPerso, onFermer }: { t: TourMois; vous
               <div className="flex items-start gap-2.5 rounded-2xl border-2 border-[#C89F62]/60 bg-[#C89F62]/12 p-3">
                 <BellRing className="mt-0.5 h-4.5 w-4.5 shrink-0 text-[#8A6420]" />
                 <p className="text-[12px] leading-relaxed text-[#7A5B2E]">
-                  <strong>Notification du bureau — votre cotisation mensuelle a été fixée à {fmtFcfa(maCotisPerso.montant)}</strong> (« {maCotisPerso.nom} »).
-                  Comme chaque membre sélectionné dans ce type, c&apos;est cette somme que vous remettez au trésorier.
+                  <strong>Votre cotisation mensuelle a été fixée à {fmtFcfa(maCotisPerso.montant)}</strong> (« {maCotisPerso.nom} »).
                 </p>
               </div>
             )}
@@ -1676,7 +1670,7 @@ function FicheBeneficiaire({ t, vousPhone, onFermer }: { t: TourMois; vousPhone?
                   </div>
                 )}
                 <p className="mt-2 text-[10.5px] leading-relaxed text-[#8A9288]">
-                  Ce numéro s&apos;affiche pour les membres de la famille quand c&apos;est votre tour de recevoir la réunion.
+                  Visible par la famille lors de votre tour.
                 </p>
               </div>
             ) : (
@@ -1699,7 +1693,7 @@ function FicheBeneficiaire({ t, vousPhone, onFermer }: { t: TourMois; vousPhone?
                     </a>
                   </>
                 ) : (
-                  <p className="text-[12px] italic text-[#8A9288]">Numéro non renseigné — passez voir le secrétaire de la Tontine.</p>
+                  <p className="text-[12px] italic text-[#8A9288]">Numéro non renseigné — demandez-le au secrétaire.</p>
                 )}
               </div>
             )}
@@ -1742,8 +1736,7 @@ function FicheBeneficiaire({ t, vousPhone, onFermer }: { t: TourMois; vousPhone?
                         <Navigation className="h-4 w-4" /> S&apos;y rendre — guidé par l&apos;IA
                       </FcButton>
                       <p className="mt-1.5 text-[10.5px] leading-relaxed text-[#8A9288]">
-                        Itinéraire pas à pas, suivi automatique de votre position et assistant IA
-                        (GLM gratuit) — sans jamais quitter l&apos;application.
+                        Itinéraire guidé, sans quitter l&apos;application.
                       </p>
                     </div>
                   )}
@@ -1752,7 +1745,7 @@ function FicheBeneficiaire({ t, vousPhone, onFermer }: { t: TourMois; vousPhone?
                 <>
                   <p className="flex items-start gap-1.5 text-[12.5px] leading-relaxed text-[#5C6B60]">
                     <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#8A9288]" />
-                    <span>{adresse || "Aucune adresse enregistrée"} — partagez votre position pour que la famille puisse se guider jusqu&apos;à votre porte, directement dans l&apos;application.</span>
+                    <span>{adresse || "Aucune adresse enregistrée"} — partagez votre position.</span>
                   </p>
                 </>
               ) : (
@@ -1760,7 +1753,7 @@ function FicheBeneficiaire({ t, vousPhone, onFermer }: { t: TourMois; vousPhone?
                   <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#8A9288]" />
                   <span>
                     {b.city ? `Quartier de référence : ${b.city}. ` : ""}
-                    {prenom(b)} n&apos;a pas encore enregistré sa géolocalisation GPS — appelez-le pour le guidage.
+                    {prenom(b)} n&apos;a pas de géolocalisation — appelez-le.
                   </span>
                 </p>
               )}
@@ -1775,9 +1768,7 @@ function FicheBeneficiaire({ t, vousPhone, onFermer }: { t: TourMois; vousPhone?
                         <Check className="h-4 w-4" /> Position partagée avec la famille
                       </p>
                       <p className="mt-1 text-[11px] leading-relaxed text-[#5C6B60]">
-                        Les membres vous voient sur la carte famille (onglet Famille) et peuvent se
-                        guider jusqu&apos;à vous quand vous recevez la réunion — tout se passe dans
-                        l&apos;application.
+                        La famille peut vous suivre sur la carte famille.
                       </p>
                     </div>
                   ) : (
@@ -1793,7 +1784,7 @@ function FicheBeneficiaire({ t, vousPhone, onFermer }: { t: TourMois; vousPhone?
               {estVous && (
                 <p className="mt-2 flex items-start gap-1.5 text-[10.5px] leading-relaxed text-[#8A9288]">
                   <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  Visible uniquement par les membres de la tontine, uniquement pour les rencontres.
+                  Visible uniquement par la tontine.
                 </p>
               )}
             </div>
@@ -1852,7 +1843,7 @@ function MembresPage({ annee, roster, payes, typesCotis, selected, onSelect, onG
         title="Membres de la tontine"
         icon={<Users className="h-4.5 w-4.5" />}
         chip={<Chip cls="bg-[#1E4D2B]/8 text-[#1E4D2B] border-[#1E4D2B]/25">{roster.length} membres</Chip>}
-        note="Touchez un membre : son rôle, son tour et sa cotisation apparaissent immédiatement."
+        note="Touchez un membre pour voir ses détails."
       >
         <p className="mb-1.5 mt-3 flex items-center justify-between gap-2">
           <span className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-wide text-[#1E4D2B]">
@@ -2044,14 +2035,13 @@ function RolePage({ role, annee, roster, payes, vousRole, vousName, sigVersion, 
         {!maPage && (
           <p className="flex items-start gap-2 border-t border-[#E5DCC0] bg-[#FBF7EA] px-4 py-2.5 text-[11.5px] leading-relaxed text-[#5C6B60]">
             <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#8A9288]" />
-            Page de {holder.name} — les actions ci-dessous sont réservées au titulaire du rôle
-            {vousRole !== "membre" ? ` (vous êtes ${ROLE_META[vousRole].label})` : " (vous êtes membre simple)"}. Vous pouvez tout consulter et signaler un problème si besoin.
+            Page de {holder.name} — actions réservées au titulaire (vous êtes {vousRole !== "membre" ? ROLE_META[vousRole].label : "membre simple"}).
           </p>
         )}
         {maPage && (
           <p className="flex items-start gap-2 border-t border-[#E5DCC0] bg-[#2F6B45]/8 px-4 py-2.5 text-[11.5px] font-semibold leading-relaxed text-[#2F6B45]">
             <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            C&apos;est votre page — vos outils de gestion de la Tontine sont actifs ci-dessous (URL dédiée : {hashFor(role as TPage)}).
+            C&apos;est votre page — vos outils sont actifs ci-dessous.
           </p>
         )}
       </FcCard>
@@ -2090,7 +2080,7 @@ function RolePage({ role, annee, roster, payes, vousRole, vousName, sigVersion, 
         <Block
           title="Taux mensuel — réglage réservé au bureau"
           icon={<Percent className="h-4.5 w-4.5" />}
-          note={`Le pourcentage ne peut JAMAIS être modifié par un simple membre : seul le président ou la secrétaire le règle${peutGererTaux(vousRole) ? "" : " — vous êtes en consultation"}. Il s'applique aux épargnes et aux prêts dès la réunion suivante.`}
+          note={`Seuls le président et la secrétaire règlent le taux${peutGererTaux(vousRole) ? "" : " — consultation"}.`}
         >
           <TauxParametrable
             editable={peutGererTaux(vousRole)}
@@ -2110,7 +2100,7 @@ function RolePage({ role, annee, roster, payes, vousRole, vousName, sigVersion, 
         <Block
           title="Montants de la tontine — réglage réservé au bureau"
           icon={<Coins className="h-4.5 w-4.5" />}
-          note={`Cotisation, collation, frais d'adhésion et pénalités : seul le président ou la secrétaire les règle${peutGererTaux(vousRole) ? "" : " — vous êtes en consultation"}. Toutes les sommes affichées dans l'application (calendrier, fiche de réunion, finances, statistiques) se mettent à jour aussitôt.`}
+          note={`Seuls le président et la secrétaire règlent les montants${peutGererTaux(vousRole) ? "" : " — consultation"}.`}
         >
           <MontantsParametrable
             editable={peutGererTaux(vousRole)}
@@ -2156,7 +2146,7 @@ function TablePresidence({ annee, roster }: { annee: TourMois[]; roster: Member[
     <Block
       title="Les réunions de l'année"
       icon={<CalendarDays className="h-4.5 w-4.5" />}
-      note="Le président conduit chaque réunion ; les mois de suppléance sont conduits par le vice-président."
+      note="Les mois de suppléance sont conduits par le vice-président."
     >
       <TableWrap label="Réunions présidées">
         <thead>
@@ -2281,7 +2271,7 @@ function TableControles({ annee, roster }: { annee: TourMois[]; roster: Member[]
     <Block
       title="Contrôles des caisses"
       icon={<FileSearch className="h-4.5 w-4.5" />}
-      note="Chaque trimestre, le commissaire vérifie la caisse sociale et le journal de caisse du trésorier, reçus à l'appui."
+      note="Contrôle trimestriel de la caisse et du journal."
     >
       <TableWrap label="Contrôles trimestriels">
         <thead>
@@ -2342,7 +2332,7 @@ function TableTresorerie({ annee, roster }: { annee: TourMois[]; roster: Member[
       <Block
         title="Journal de caisse"
         icon={<Wallet className="h-4.5 w-4.5" />}
-        note="Chaque réunion : encaissement des parts et collations, remise de la somme au bénéficiaire, consommation de la collation."
+        note="Encaissements, remises au bénéficiaire et collations."
       >
         <TableWrap label="Journal de caisse de l'année">
           <thead>
@@ -2422,7 +2412,7 @@ function TableObservations({ annee, roster }: { annee: TourMois[]; roster: Membe
     <Block
       title="Observations & alertes"
       icon={<Eye className="h-4.5 w-4.5" />}
-      note="Les alertes confidentielles adressées au censeur n'apparaissent jamais dans les tableaux du groupe — seule la suite donnée est publiée."
+      note="Seule la suite donnée est publiée."
     >
       {rows.length === 0 ? (
         <p className="mt-3 rounded-xl bg-[#2F6B45]/8 px-3.5 py-3 text-[12.5px] font-semibold text-[#2F6B45]">
@@ -2542,8 +2532,7 @@ function TauxParametrable({ taux, onAppliquer, editable = false, vousRole, onSig
           </div>
         </div>
         <p className="mt-2 rounded-xl bg-[#2A4A3A]/5 px-3.5 py-2.5 text-[11.5px] leading-relaxed text-[#5C6B60]">
-          Le pourcentage est une <strong className="text-[#1E4D2B]">décision du bureau</strong> : un membre ne peut pas le modifier. Chaque changement
-          rejoint le journal des décisions et vous est soumis pour validation — sans action de votre part, il est reconnu comme validé après 7 jours.
+          Décision du bureau — validez-la ou signalez-la.
         </p>
       </div>
     );
@@ -2579,8 +2568,7 @@ function TauxParametrable({ taux, onAppliquer, editable = false, vousRole, onSig
         )}
       </div>
       <p className="mt-2 text-[11px] leading-relaxed text-[#8A9288]">
-        Tapez la valeur puis <strong className="text-[#1E4D2B]">quittez le champ (ou appuyez sur Entrée)</strong> — le taux s&apos;applique aussitôt, sans bouton.
-        Chaque réglage est signé de votre rôle et notifié au membre — qui dispose de 7 jours pour le valider, sinon il est reconnu validé par défaut.
+        Tapez la valeur puis <strong className="text-[#1E4D2B]">quittez le champ (ou Entrée)</strong> — elle s&apos;applique aussitôt.
       </p>
     </div>
   );
@@ -2700,8 +2688,7 @@ function MontantsParametrable({ editable = false, vousRole, onAppliquer, onSigna
       ))}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[11px] leading-relaxed text-[#8A9288]">
-          Tapez le montant puis <strong className="text-[#1E4D2B]">quittez le champ (ou Entrée)</strong> — il s&apos;applique aussitôt, sans bouton,
-          et toutes les sommes de l&apos;application se recalculent.
+          Tapez le montant puis <strong className="text-[#1E4D2B]">quittez le champ (ou Entrée)</strong>.
         </p>
         {onSignaler && <SignalerButton onClick={signalerMontants} />}
       </div>
@@ -2799,7 +2786,7 @@ function EpargnesPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler
     const next = [...epargnes, e].sort((a, b) => a.month0 - b.month0 || a.id.localeCompare(b.id));
     setEpargnes(next);
     saveEpargnes(next);
-    toast.success(`Épargne de ${fmtFcfa(capital)} inscrite au registre pour ${cap(annee[m0].mois)} — le membre dispose de 7 jours pour la valider.`);
+    toast.success(`Épargne de ${fmtFcfa(capital)} inscrite au registre pour ${cap(annee[m0].mois)}.`);
     setMontant("");
   };
 
@@ -2808,7 +2795,7 @@ function EpargnesPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler
     if (!e) return;
     // Un membre ne peut pas supprimer une épargne actée par le bureau — il la signale.
     if (!bureauEpargne && !membrePeutSupprimer(e)) {
-      toast.error("Épargne validée par le bureau — non modifiable par un membre. Utilisez « Signaler un problème ».");
+      toast.error("Épargne validée par le bureau — utilisez « Signaler ».");
       return;
     }
     const next = epargnes.filter((x) => x.id !== id);
@@ -2860,7 +2847,7 @@ function EpargnesPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler
       <Block
         title="Mes épargnes — vue d'ensemble"
         icon={<PiggyBank className="h-4.5 w-4.5" />}
-        note="L'argent mis de côté à la tontine — indépendant de la cotisation mensuelle. Chaque dépôt porte intérêt à partir du mois suivant, jusqu'en décembre de l'année du dépôt."
+        note="Chaque dépôt porte intérêt jusqu'en décembre."
       >
         <div className="mt-2 grid grid-cols-3 gap-2">
           <MiniKpi label="Total épargné" value={fmtFcfa(totalCapital)} sub={`${rows.length} dépôt(s)`} tone="text-[#1E4D2B]" />
@@ -2875,7 +2862,7 @@ function EpargnesPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler
         <Block
           title="Décisions du bureau — à valider"
           icon={<Stamp className="h-4.5 w-4.5" />}
-          note={`Le bureau a réglé le taux mensuel. Vous ne pouvez que VALIDER cette décision ; sans action de votre part, elle est reconnue validée après ${DELAI_VALIDATION_JOURS} jours.`}
+          note={`Validez la décision du bureau — validée par défaut après ${DELAI_VALIDATION_JOURS} jours.`}
         >
           <div className="mt-2 space-y-2">
             {decisions.filter((d) => enAttenteMembre(d)).map((d) => (
@@ -2897,7 +2884,7 @@ function EpargnesPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler
         </Block>
       )}
 
-      <Block title="Taux mensuel — décision du bureau" icon={<Percent className="h-4.5 w-4.5" />} note={`Le pourcentage est réglé par le bureau (actuellement ${fmtTaux(taux)} par mois) et partagé par les épargnes et les prêts. Un membre ne peut pas le modifier — il le valide ou le signale.`}>
+      <Block title="Taux mensuel — décision du bureau" icon={<Percent className="h-4.5 w-4.5" />} note={`Réglé par le bureau — actuellement ${fmtTaux(taux)} par mois.`}>
         <TauxParametrable
           editable={peutGererTaux(vousRole)}
           taux={taux}
@@ -2915,7 +2902,7 @@ function EpargnesPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler
         <Block
           title="Nouvelle épargne — registre du bureau"
           icon={<Plus className="h-4.5 w-4.5" />}
-          note="En tant que président / secrétaire, l'épargne est inscrite d'office au registre, validée — le membre la valide ensuite (7 jours, sinon validée par défaut)."
+          note="Inscrite d'office au registre — le membre la valide ensuite."
         >
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <select
@@ -2954,8 +2941,7 @@ function EpargnesPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler
             <Lock className="h-4 w-4" />
           </span>
           <p className="text-[12px] leading-relaxed text-[#5C6B60]">
-            <strong className="text-[#1E4D2B]">Les épargnes sont inscrites par le bureau</strong> — seul le président ou la secrétaire ajoute un dépôt au registre.
-            Vous consultez vos mois d&apos;épargne ci-dessous, vous validez les décisions du bureau, et vous utilisez «&nbsp;Signaler&nbsp;» en cas d&apos;erreur.
+            <strong className="text-[#1E4D2B]">Les épargnes sont inscrites par le bureau</strong> — consultez vos mois ci-dessous.
           </p>
         </div>
       )}
@@ -2963,9 +2949,8 @@ function EpargnesPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler
       {rows.length === 0 ? (
         <Block title="Aucune épargne pour le moment" icon={<Info className="h-4.5 w-4.5" />}>
           <p className="mt-2 rounded-xl bg-[#FFFDF6] px-3.5 py-3 text-[12.5px] leading-relaxed text-[#5C6B60]">
-            Exemple : une épargne de <strong className="text-[#1E4D2B]">10 000 FCFA en mars</strong> à {fmtTaux(taux)} devient{" "}
-            <strong className="text-[#2F6B45]">10 300 en avril</strong>, <strong className="text-[#2F6B45]">10 600 en mai</strong>,{" "}
-            <strong className="text-[#2F6B45]">10 900 en juin</strong>… et est récupérée en décembre avec tous ses intérêts.
+            Exemple : une épargne de <strong className="text-[#1E4D2B]">10 000 FCFA en mars</strong> à {fmtTaux(taux)} donne
+            <strong className="text-[#2F6B45]"> +300 chaque mois</strong>, récupérés en décembre.
           </p>
         </Block>
       ) : (
@@ -2976,7 +2961,7 @@ function EpargnesPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler
           <Block
             title="Mes mois d'épargne"
             icon={<CalendarDays className="h-4.5 w-4.5" />}
-            note={`Chaque épargne enregistrée apparaît ici avec sa période, la somme déposée, ce qu'elle a produit et la prévision de fin d'année — à ${fmtTaux(taux)} par mois.`}
+            note={`Période, somme, intérêts et prévision — à ${fmtTaux(taux)} par mois.`}
           >
             <div className="mt-2 space-y-2.5">
               {rows.map((r) => (
@@ -3003,7 +2988,7 @@ function EpargnesPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler
           <Block
             title="Calendrier de mes épargnes — mois par mois"
             icon={<Coins className="h-4.5 w-4.5" />}
-            note={`Toutes mes épargnes réunies : chaque mois écoulé ajoute ${fmtTaux(taux)} du capital déposé — la somme perçue grandit d'un mois à l'autre jusqu'en décembre.`}
+            note={`Chaque mois ajoute ${fmtTaux(taux)} du capital déposé.`}
           >
             <CalendrierEpargnesGlobal epargnes={epargnes} annee={annee} taux={taux} todayIso={todayIso} />
           </Block>
@@ -3069,13 +3054,13 @@ function LigneMoisEpargne({
       {e.statut === "proposée" ? (
         <p className="flex items-start gap-1.5 bg-[#C89F62]/14 px-3.5 py-2 text-[11px] font-semibold leading-relaxed text-[#8A6420]">
           <Hourglass className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          Proposition en attente — le bureau (président ou secrétaire) doit valider cette épargne. Vous pouvez encore la supprimer ou la signaler.
+          Proposition en attente du bureau — supprimable ou signalable.
         </p>
       ) : attenteMembre ? (
         <p className="flex items-start gap-1.5 bg-[#2F6B45]/10 px-3.5 py-2 text-[11px] font-semibold leading-relaxed text-[#2F6B45]">
           <Stamp className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          Validée par le bureau{e.validePar ? ` (${ROLE_META[e.validePar].label.toLowerCase()})` : ""} le {e.valideLe ? dateCourte(e.valideLe) : "—"} — vous ne pouvez que la VALIDER
-          {joursRestants !== null ? ` · ${joursRestants} jour${joursRestants > 1 ? "s" : ""} restant${joursRestants > 1 ? "s" : ""} avant validation par défaut` : ""}.
+          Validée par le bureau — vous ne pouvez que la VALIDER
+          {joursRestants !== null ? ` · ${joursRestants} jour${joursRestants > 1 ? "s" : ""} restant${joursRestants > 1 ? "s" : ""}` : ""}.
         </p>
       ) : e.autoValideLe ? (
         <p className="flex items-start gap-1.5 bg-[#2A4A3A]/8 px-3.5 py-2 text-[11px] font-semibold leading-relaxed text-[#5C6B60]">
@@ -3185,7 +3170,7 @@ function LigneMoisEpargne({
             </tbody>
           </TableWrap>
           <p className="mt-2 px-1 text-[11px] leading-relaxed text-[#5C6B60]">
-            Intérêts simples — chaque mois écoulé ajoute {fmtTaux(taux)} du capital de départ ({fmtN(im)} FCFA), jamais recalculés sur les intérêts.
+            Intérêts simples : {fmtTaux(taux)} du capital de départ ({fmtN(im)} FCFA) chaque mois.
           </p>
         </div>
       )}
@@ -3256,8 +3241,7 @@ function CalendrierEpargnesGlobal({
         </tbody>
       </TableWrap>
       <div className="mt-2.5 rounded-xl bg-[#C89F62]/12 px-3.5 py-3 text-[12.5px] leading-relaxed text-[#5C6B60]">
-        En décembre, je récupère <strong className="text-[#8A6420]">{fmtFcfa(decembre)}</strong> — {fmtN(totalCapital)} FCFA d&apos;épargnes +{" "}
-        {fmtN(Math.max(decembre - totalCapital, 0))} FCFA d&apos;intérêts ({fmtTaux(taux)} du capital par mois écoulé, jamais recalculés sur les intérêts).
+        En décembre : {fmtFcfa(decembre)} — {fmtN(totalCapital)} FCFA d&apos;épargnes + {fmtN(Math.max(decembre - totalCapital, 0))} FCFA d&apos;intérêts.
       </div>
     </div>
   );
@@ -3304,7 +3288,7 @@ function PretsPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler }:
     const next = [...prets, pret].sort((a, b) => a.month0 - b.month0 || a.id.localeCompare(b.id));
     setPrets(next);
     savePrets(next);
-    toast.success(`Dette de ${fmtFcfa(capital)} allouée pour ${cap(annee[m0].mois)} — le membre dispose de 7 jours pour la valider.`);
+    toast.success(`Dette de ${fmtFcfa(capital)} allouée pour ${cap(annee[m0].mois)}.`);
     setMontant("");
   };
 
@@ -3314,7 +3298,7 @@ function PretsPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler }:
     // RÈGLE DU BUREAU : un membre ne peut NI supprimer NI modifier une dette
     // allouée par un acteur du bureau — il peut la rembourser ou la signaler.
     if (!bureauDettes && !membrePeutSupprimer(p)) {
-      toast.error("Dette allouée par le bureau — non modifiable ni supprimable par un membre. Utilisez « Signaler un problème ».");
+      toast.error("Dette allouée par le bureau — utilisez « Signaler ».");
       return;
     }
     const next = prets.filter((x) => x.id !== id);
@@ -3366,7 +3350,7 @@ function PretsPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler }:
       <Block
         title="Mes prêts"
         icon={<HandCoins className="h-4.5 w-4.5" />}
-        note="L'argent emprunté à la réunion. La dette gagne le taux chaque mois dès le mois du prêt — montant constant pendant chaque bloc de 3 mois ; à chaque échéance des 3 mois sans remboursement, la dette totale devient la nouvelle base pour 3 nouveaux mois. Les dettes sont allouées par le bureau : un membre ne peut ni les modifier ni les supprimer — il les rembourse ou les signale."
+        note="Dette allouée par le bureau — remboursez-la ou signalez-la."
       >
         <div className="mt-2 grid grid-cols-3 gap-2">
           <MiniKpi label="Somme empruntée" value={fmtFcfa(totalEmprunte)} sub={`${rows.length} prêt(s) sur l'année`} tone="text-[#1E4D2B]" />
@@ -3375,7 +3359,7 @@ function PretsPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler }:
         </div>
       </Block>
 
-      <Block title="Taux mensuel — décision du bureau" icon={<Percent className="h-4.5 w-4.5" />} note={`Le pourcentage est réglé par le bureau (actuellement ${fmtTaux(taux)} par mois). Un membre ne peut pas le modifier — il le valide ou le signale.`}>
+      <Block title="Taux mensuel — décision du bureau" icon={<Percent className="h-4.5 w-4.5" />} note={`Réglé par le bureau — actuellement ${fmtTaux(taux)} par mois.`}>
         <TauxParametrable
           editable={peutGererTaux(vousRole)}
           taux={taux}
@@ -3392,7 +3376,7 @@ function PretsPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler }:
         <Block
           title="Nouvelle dette — registre du bureau"
           icon={<Plus className="h-4.5 w-4.5" />}
-          note="En tant que président / secrétaire, la dette est allouée d'office au membre — il ne pourra ni la modifier ni la supprimer, seulement la rembourser ou la signaler."
+          note="Allouée d'office — le membre rembourse ou signale."
         >
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <select
@@ -3431,8 +3415,7 @@ function PretsPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler }:
             <Lock className="h-4 w-4" />
           </span>
           <p className="text-[12px] leading-relaxed text-[#5C6B60]">
-            <strong className="text-[#1E4D2B]">Les dettes sont allouées par le bureau</strong> — seul le président ou la secrétaire inscrit un prêt au registre.
-            Vous consultez vos dettes ci-dessous, vous les remboursez à l&apos;échéance, et vous utilisez «&nbsp;Signaler&nbsp;» en cas d&apos;erreur.
+            <strong className="text-[#1E4D2B]">Les dettes sont allouées par le bureau</strong> — consultez-les ci-dessous.
           </p>
         </div>
       )}
@@ -3440,11 +3423,8 @@ function PretsPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler }:
       {rows.length === 0 ? (
         <Block title="Aucun prêt pour le moment" icon={<Info className="h-4.5 w-4.5" />}>
           <p className="mt-2 rounded-xl bg-[#FFFDF6] px-3.5 py-3 text-[12.5px] leading-relaxed text-[#5C6B60]">
-            Exemple : un prêt de <strong className="text-[#1E4D2B]">10 000 FCFA en janvier</strong> à {fmtTaux(taux)} donne{" "}
-            <strong className="text-[#A5473D]">10 300 en février</strong> puis <strong className="text-[#A5473D]">10 600 en mars</strong> — échéance de mars :{" "}
-            <strong className="text-[#A5473D]">10 900 FCFA</strong> à rembourser (10 000 + 3 × 300). Sans remboursement, 10 900 devient la nouvelle base :{" "}
-            <strong className="text-[#A5473D]">+327 FCFA par mois</strong> d&apos;avril à juin — échéance de juin : 11 881. Et ainsi de suite, recalcul tous les 3 mois
-            jusqu&apos;au remboursement.
+            Exemple : un prêt de <strong className="text-[#1E4D2B]">10 000 FCFA en janvier</strong> à {fmtTaux(taux)} vaut
+            <strong className="text-[#A5473D]"> 10 900 à l&apos;échéance de mars</strong> (10 000 + 3 × 300).
           </p>
         </Block>
       ) : (
@@ -3465,7 +3445,7 @@ function PretsPage({ annee, onSub, vousRole, vousName, sigVersion, onSignaler }:
           <Block
             title="Total de mes dettes"
             icon={<Coins className="h-4.5 w-4.5" />}
-            note="Les dettes de chaque prêt sont sommées : voici ce que vous devez à la réunion à ce jour. Chaque ligne porte son bouton de signalement."
+            note="Ce que vous devez à ce jour."
           >
             <TableWrap label="Total de mes dettes">
               <thead>
@@ -3605,18 +3585,18 @@ function CartePret({ p, annee, taux, bureauMode, onValider, onSupprimer, onRembo
       {p.statut === "proposée" ? (
         <p className="mb-2.5 flex items-start gap-1.5 rounded-xl bg-[#C89F62]/14 px-3 py-2 text-[11px] font-semibold leading-relaxed text-[#8A6420]">
           <Hourglass className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          Demande en attente — le bureau (président, secrétaire ou trésorier) doit allouer cette dette. Tant qu'elle n'est pas actée, vous pouvez la supprimer.
+          Demande en attente du bureau — supprimable.
         </p>
       ) : attenteMembre ? (
         <p className="mb-2.5 flex items-start gap-1.5 rounded-xl bg-[#A5473D]/10 px-3 py-2 text-[11px] font-semibold leading-relaxed text-[#A5473D]">
           <Stamp className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          Dette allouée par le bureau{p.validePar ? ` (${ROLE_META[p.validePar].label.toLowerCase()})` : ""} le {p.valideLe ? dateCourte(p.valideLe) : "—"} — vous ne pouvez que la VALIDER ou la signaler
-          {joursRestants !== null ? ` · ${joursRestants} jour${joursRestants > 1 ? "s" : ""} restant${joursRestants > 1 ? "s" : ""} avant validation par défaut` : ""}.
+          Dette allouée par le bureau — validez-la ou signalez-la
+          {joursRestants !== null ? ` · ${joursRestants} jour${joursRestants > 1 ? "s" : ""} restant${joursRestants > 1 ? "s" : ""}` : ""}.
         </p>
       ) : p.origine === "bureau" ? (
         <p className="mb-2.5 flex items-start gap-1.5 rounded-xl bg-[#2A4A3A]/8 px-3 py-2 text-[11px] font-semibold leading-relaxed text-[#5C6B60]">
           <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          Dette allouée par le bureau — non modifiable ni supprimable par un membre. Remboursez-la ou signalez tout problème.
+          Dette allouée par le bureau — remboursez-la ou signalez-la.
         </p>
       ) : null}
 
@@ -3635,7 +3615,7 @@ function CartePret({ p, annee, taux, bureauMode, onValider, onSupprimer, onRembo
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h3 className="fc-serif text-[15.5px] font-bold capitalize text-[#1E4D2B]">{p.origine === "bureau" && p.statut !== "proposée" ? "Dette de" : "Prêt de"} {t.mois}</h3>
-          <p className="text-[11px] text-[#8A9288]">{p.origine === "bureau" && p.statut !== "proposée" ? "Allouée par le bureau à la réunion du" : "Demandé à la réunion du"} {fmtDateCourte(t.iso)} — {fmtTaux(taux)} par mois pendant 3 mois, puis nouvelle base tous les 3 mois</p>
+          <p className="text-[11px] text-[#8A9288]">{p.origine === "bureau" && p.statut !== "proposée" ? "Allouée par le bureau à la réunion du" : "Demandé à la réunion du"} {fmtDateCourte(t.iso)} — {fmtTaux(taux)} par mois.</p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <Chip cls={rembourse ? CHIP_OK : enRetard ? CHIP_ROUGE : CHIP_GOLD}>{rembourse ? "Remboursé ✓" : `Dette : ${fmtN(detteJour)}`}</Chip>
@@ -3667,8 +3647,7 @@ function CartePret({ p, annee, taux, bureauMode, onValider, onSupprimer, onRembo
       {enRetard && (
         <p className="mt-2.5 flex items-start gap-1.5 rounded-xl bg-[#A5473D]/10 p-2.5 text-[11.5px] leading-relaxed text-[#A5473D]">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          Non remboursé à l&apos;échéance de {annee[moisEcheance].mois} — la dette de {fmtN(detteEcheance)} FCFA devient la nouvelle base : +{fmtN(interetBase)} FCFA ({fmtTaux(taux)}) par mois
-          pendant 3 mois{prochaineEcheance ? `, jusqu'à l'échéance de ${prochaineEcheance}` : ""}.
+          Échéance dépassée — nouvelle base : {fmtN(detteEcheance)} FCFA, +{fmtN(interetBase)} par mois pendant 3 mois.
         </p>
       )}
 
@@ -3704,7 +3683,7 @@ function CartePret({ p, annee, taux, bureauMode, onValider, onSupprimer, onRembo
               </tr>
               <tr className="bg-[#FFFDF6]">
                 <td className={`${TD} font-bold text-[#2B3530]`}>Taux d&apos;intérêt</td>
-                <td className={`${TD} text-[#5C6B60]`}>{fmtTaux(taux)} par mois — montant constant pendant chaque bloc de 3 mois ; à chaque échéance non remboursée, la dette devient la nouvelle base (recalcul tous les 3 mois)</td>
+                <td className={`${TD} text-[#5C6B60]`}>{fmtTaux(taux)} par mois — recalcul tous les 3 mois</td>
               </tr>
             </tbody>
           </TableWrap>
@@ -3773,7 +3752,7 @@ function CartePret({ p, annee, taux, bureauMode, onValider, onSupprimer, onRembo
                 </FcButton>
               </div>
               <p className="mt-1.5 text-[10.5px] leading-snug text-[#8A9288]">
-                Le remboursement se fait à une réunion : la somme due ce mois-là est calculée automatiquement.
+                La somme due est calculée automatiquement.
               </p>
             </div>
           ) : (
@@ -3833,7 +3812,7 @@ function StatsPage({ annee, roster, payes, typesCotis }: { annee: TourMois[]; ro
       <Block
         title="Où va chaque franc de l'année"
         icon={<Coins className="h-4.5 w-4.5" />}
-        note="Projection sur les 11 tours et l'assemblée générale — dérivé des règles de la tontine."
+        note="Projection sur l'année complète."
       >
         <div className="mt-2 flex flex-col items-center gap-4 sm:flex-row">
           <Donut parts={partsDonut} />
@@ -3854,7 +3833,7 @@ function StatsPage({ annee, roster, payes, typesCotis }: { annee: TourMois[]; ro
       <Block
         title="Encaissements mois par mois"
         icon={<BarChart3 className="h-4.5 w-4.5" />}
-        note="Colonnes pleines = déjà encaissé · colonne or = mois en cours · hachuré = projection à venir."
+        note="Plein = encaissé · or = mois en cours · hachuré = à venir."
       >
         <BarresEncaissements annee={annee} />
       </Block>
@@ -3863,7 +3842,7 @@ function StatsPage({ annee, roster, payes, typesCotis }: { annee: TourMois[]; ro
       <Block
         title="Classement des cotisants"
         icon={<Users className="h-4.5 w-4.5" />}
-        note="« Vous » suit vos déclarations personnelles ; les autres membres suivent le registre du trésorier."
+        note="Vous suivez vos déclarations ; les autres suivent le registre."
       >
         <TableWrap label="Classement des cotisants">
           <thead>
@@ -3910,7 +3889,7 @@ function StatsPage({ annee, roster, payes, typesCotis }: { annee: TourMois[]; ro
       <Block
         title="Projection de fin d'année"
         icon={<TrendingUp className="h-4.5 w-4.5" />}
-        note="Ce que l'année complète donnera si toutes les réunions sont tenues."
+        note="Année complète si toutes les réunions sont tenues."
       >
         <TableWrap label="Projection de fin d'année">
           <tbody>
@@ -3919,7 +3898,7 @@ function StatsPage({ annee, roster, payes, typesCotis }: { annee: TourMois[]; ro
               ["Sommes remises aux bénéficiaires", proj.totalPots, `${proj.nbTours} bénéficiaires × ${fmtN(potM)}`],
               ["Collations consommées", proj.totalCollations, `${proj.nbTours} réunions × ${fmtN(collaM)}`],
               ["Caisse sociale à la clôture", proj.caisseSociale, `adhésions ${fmtN(adhesions)} + pénalités ${fmtN(proj.penalites)}`],
-              ["Solde final en caisse", 0, "tout l'argent collecté est remis ou consommé — la tontine ne garde rien"],
+              ["Solde final en caisse", 0, "remis ou consommé — rien ne reste en caisse"],
             ] as [string, number, string][]).map(([k, v, detail], i) => (
               <tr key={k} className={i % 2 === 0 ? "bg-[#FFFDF6]" : "bg-[#FBF7EA]"}>
                 <td className={`${TD} font-bold text-[#2B3530]`}>{k}</td>
@@ -4093,7 +4072,7 @@ function SignalementModal({ cible, cibleId, cibleLabel, auteur, auteurRole, onCl
     }
     deposerSignalement({ cible, cibleId, cibleLabel, motif, message, vocal, auteur, auteurRole });
     toast.success("Signalement enregistré — tous les membres du bureau sont notifiés 🔔", {
-      description: `Sans action du bureau, un rappel réapparaîtra tous les ${RAPPEL_SIGNALEMENT_JOURS} jours jusqu'au traitement.`,
+      description: `Rappel automatique tous les ${RAPPEL_SIGNALEMENT_JOURS} jours.`,
       duration: 7000,
     });
     onDepose();
@@ -4192,21 +4171,20 @@ function SignalementModal({ cible, cibleId, cibleLabel, auteur, auteurRole, onCl
                 {micErreur && <p className="w-full text-[11px] font-semibold text-[#A5473D]">{micErreur}</p>}
                 {!vocal && !enCours && !micErreur && (
                   <p className="w-full text-[10.5px] leading-relaxed text-[#8A9288]">
-                    Jusqu&apos;à {VOCAL_MAX_SECONDES} secondes — le vocal est enregistré avec le signalement et écouté par le bureau.
+                    Jusqu&apos;à {VOCAL_MAX_SECONDES} secondes.
                   </p>
                 )}
               </div>
             ) : (
               <p className="text-[11.5px] leading-relaxed text-[#5C6B60]">
-                Votre navigateur ne permet pas l&apos;enregistrement vocal — décrivez le problème par écrit ci-dessus.
+                Enregistrement vocal indisponible — décrivez par écrit.
               </p>
             )}
           </div>
           <div className="flex items-start gap-2 rounded-xl border border-[#C89F62]/40 bg-[#C89F62]/10 p-3 text-[11.5px] leading-relaxed text-[#7A5B2E]">
             <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
             <p>
-              Tous les membres du bureau (président, vice-président, secrétaire, trésorier, commissaire, censeur) sont notifiés —
-              message écrit et vocal compris. <strong> Rappel automatique tous les {RAPPEL_SIGNALEMENT_JOURS} jours</strong> tant que le problème n&apos;est pas traité.
+              Tout le bureau est notifié — rappel automatique tous les {RAPPEL_SIGNALEMENT_JOURS} jours.
             </p>
           </div>
           <div className="flex gap-2">
@@ -4250,7 +4228,7 @@ function BureauSignalements({ vousRole, sigVersion, onSignaler }: {
       title="Signalements — les problèmes déclarés par les membres"
       icon={<ShieldAlert className="h-4.5 w-4.5" />}
       chip={ouverts.length > 0 ? <Chip cls={CHIP_ROUGE}>{ouverts.length} en attente</Chip> : <Chip cls={CHIP_OK}>Aucun ouvert</Chip>}
-      note={`Chaque élément porte un bouton « Signaler un problème ». Tous les acteurs du bureau sont notifiés, et la notification RÉAPPARAÎT TOUS LES ${RAPPEL_SIGNALEMENT_JOURS} JOURS tant qu'aucune suite n'est donnée.${peuxTraiter ? "" : " (consultation — le traitement se fait depuis la page d'un acteur du bureau)"}`}
+      note={`Rappel automatique tous les ${RAPPEL_SIGNALEMENT_JOURS} jours sans suite.${peuxTraiter ? "" : " (consultation)"}`}
     >
       {list.length === 0 ? (
         <p className="mt-3 rounded-xl bg-[#2F6B45]/8 px-3.5 py-3 text-[12.5px] font-semibold text-[#2F6B45]">
@@ -4355,7 +4333,7 @@ function BureauValidations({ annee, vousRole, champ, actif, onSignaler }: {
       savePrets(pr.map((x) => (x.id === id ? bureauValide(x, vousRole) : x)));
     }
     agir();
-    toast.success(`Validé — le membre dispose de ${DELAI_VALIDATION_JOURS} jours pour confirmer (sinon validé par défaut).`);
+    toast.success(`Validé — le membre confirme sous ${DELAI_VALIDATION_JOURS} jours.`);
   };
 
   const rejeter = (id: string) => {
@@ -4375,8 +4353,8 @@ function BureauValidations({ annee, vousRole, champ, actif, onSignaler }: {
       chip={enAttente.length > 0 ? <Chip cls={CHIP_GOLD}>{enAttente.length} en attente</Chip> : <Chip cls={CHIP_OK}>Rien en attente</Chip>}
       note={
         estEpargnes
-          ? "Seuls le PRÉSIDENT et la SECRÉTAIRE valident les nouvelles épargnes des membres — jamais un membre lui-même. Une fois validée, l'épargne est confirmée par le membre (7 jours, sinon validée par défaut)."
-          : "Les acteurs du bureau (président, secrétaire, trésorier) actent les demandes de prêt : la dette allouée devient non modifiable par le membre (remboursement ou signalement uniquement)."
+          ? "Seuls le président et la secrétaire valident — le membre confirme ensuite."
+          : "Le bureau acte les demandes — le membre rembourse ou signale."
       }
     >
       {enAttente.length === 0 ? (
@@ -4424,7 +4402,7 @@ function BureauValidations({ annee, vousRole, champ, actif, onSignaler }: {
       )}
       {aValiderMembre.length > 0 && (
         <p className="mt-2 rounded-xl bg-[#C89F62]/12 px-3.5 py-2.5 text-[11.5px] leading-relaxed text-[#8A6420]">
-          {aValiderMembre.length} décision{aValiderMembre.length > 1 ? "s" : ""} récente{aValiderMembre.length > 1 ? "s" : ""} attend encore la validation du membre — sans action de sa part sous {DELAI_VALIDATION_JOURS} jours, elle sera reconnue validée par défaut.
+          {aValiderMembre.length} décision{aValiderMembre.length > 1 ? "s" : ""} attend{aValiderMembre.length > 1 ? "ent" : ""} la validation du membre (validée par défaut après {DELAI_VALIDATION_JOURS} jours).
         </p>
       )}
       {onSignaler && enAttente.length > 0 && (
@@ -4474,7 +4452,7 @@ function GestionDettes({ annee, roster, vousRole, actif, onSignaler }: {
     const next = [...prets, pret].sort((a, b) => a.month0 - b.month0 || a.id.localeCompare(b.id));
     setPrets(next);
     savePrets(next);
-    toast.success(`Dette de ${fmtFcfa(capital)} allouée à ${m?.name ?? "membre"} pour ${cap(annee[m0].mois)} — le membre la validera (7 jours, sinon validée par défaut).`);
+    toast.success(`Dette de ${fmtFcfa(capital)} allouée à ${m?.name ?? "membre"} pour ${cap(annee[m0].mois)}.`);
     setMontant("");
   };
 
@@ -4510,7 +4488,7 @@ function GestionDettes({ annee, roster, vousRole, actif, onSignaler }: {
       title="Dettes des membres — registre du bureau"
       icon={<HandCoins className="h-4.5 w-4.5" />}
       chip={<Chip cls={CHIP_ROUGE}>{prets.filter((p) => p.rembourseMois === null).length} dette(s) en cours</Chip>}
-      note="Allouez ici les dettes aux membres. Une dette allouée par le bureau ne peut être ni modifiée ni supprimée par le membre — s'il y a une erreur, il la signale et vous la corrigez ici."
+      note="Allouez la dette : membre, mois puis montant."
     >
       {actif ? (
         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -4555,7 +4533,7 @@ function GestionDettes({ annee, roster, vousRole, actif, onSignaler }: {
         </div>
       ) : (
         <p className="mt-2 flex items-center gap-1.5 rounded-xl bg-[#2A4A3A]/5 px-3.5 py-2.5 text-[12px] font-semibold text-[#5C6B60]">
-          <Lock className="h-3.5 w-3.5" /> Consultation — l'allocation des dettes appartient au président, à la secrétaire et au trésorier.
+          <Lock className="h-3.5 w-3.5" /> Consultation — allocation réservée au bureau.
         </p>
       )}
 
@@ -4673,7 +4651,7 @@ function MesSignalements({ cible, sigVersion, onSignaler }: {
 
   if (list.length === 0) {
     return (
-      <Block title="Mes signalements" icon={<Flag className="h-4.5 w-4.5" />} note="Un problème sur une épargne, une dette ou le taux ? Utilisez le bouton « Signaler un problème » — le bureau est notifié et rappelé tous les 3 jours.">
+      <Block title="Mes signalements" icon={<Flag className="h-4.5 w-4.5" />} note="Utilisez « Signaler un problème » si besoin.">
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
           <p className="rounded-xl bg-[#2F6B45]/8 px-3.5 py-2.5 text-[12.5px] font-semibold text-[#2F6B45]">
             Aucun signalement de votre part — tout est en ordre.
@@ -4695,7 +4673,7 @@ function MesSignalements({ cible, sigVersion, onSignaler }: {
           ? <Chip cls={CHIP_GOLD}>{list.filter((s) => s.statut === "ouvert").length} en traitement</Chip>
           : <Chip cls={CHIP_OK}>Tous traités</Chip>
       }
-      note={`Vos signalements et la suite donnée par le bureau. Sans action, un rappel est renvoyé au bureau tous les ${RAPPEL_SIGNALEMENT_JOURS} jours.`}
+      note={`Suite donnée par le bureau — rappel tous les ${RAPPEL_SIGNALEMENT_JOURS} jours.`}
     >
       <div className="mt-3 space-y-2">
         {list.map((s) => (
@@ -4735,7 +4713,7 @@ function TableSecretariat({ annee, roster }: { annee: TourMois[]; roster: Member
       <Block
         title="Procès-verbaux des réunions"
         icon={<FileText className="h-4.5 w-4.5" />}
-        note={`La secrétaire${secretaire ? ` (${secretaire.name})` : ""} rédige le compte rendu de chaque réunion et le lit au mois suivant — les PV sont archivés dans le registre de la Tontine.`}
+        note={`La secrétaire${secretaire ? ` (${secretaire.name})` : ""} rédige et lit le PV au mois suivant.`}
       >
         <TableWrap label="Procès-verbaux de l'année">
           <thead>
@@ -4769,7 +4747,7 @@ function TableSecretariat({ annee, roster }: { annee: TourMois[]; roster: Member
       <Block
         title="Journal des décisions du bureau"
         icon={<ScrollText className="h-4.5 w-4.5" />}
-        note="Chaque réglage du taux mensuel est signé du rôle qui l'a pris et soumis au membre pour validation — 7 jours sans action, il est reconnu validé par défaut."
+        note="Décisions signées — validées par défaut après 7 jours."
       >
         {decisions.length === 0 ? (
           <p className="mt-3 rounded-xl bg-[#C89F62]/12 px-3.5 py-3 text-[12.5px] font-semibold text-[#8A6420]">
