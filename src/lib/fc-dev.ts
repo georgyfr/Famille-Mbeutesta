@@ -30,10 +30,19 @@ export function localNtfSince(since: number): { notifications: LocalNtf[]; now: 
   return { notifications: recent.filter((x) => x.at > since), now: Date.now() };
 }
 
-/* ── Envoi Web Push à tous les appareils enregistrés (dev local) ── */
+/* ── Envoi Web Push à tous les appareils enregistrés (dev local) ──
+ * v34 — excludePhone : numéro international (« +237… ») à EXCLURE de la
+ * diffusion (le nouveau membre ne reçoit pas son propre « X a rejoint le
+ * groupe »). La comparaison porte sur les CHIFFRES seuls (« +237 677 92 53
+ * 22 » ≡ « 237677925322 ») pour tolérer tous les formats enregistrés. */
+
+function chiffresTel(tel: string | null | undefined): string {
+  return (tel ?? "").replace(/\D/g, "");
+}
 
 export async function pushToAllDevices(
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  excludePhone?: string,
 ): Promise<{ sent: number; failed: number; pruned: number }> {
   const webpush = (await import("web-push")).default;
   const { db } = await import("@/lib/db");
@@ -46,9 +55,10 @@ export async function pushToAllDevices(
     VAPID_PRIVATE
   );
 
+  const exclure = chiffresTel(excludePhone);
   const devices = await db.device.findMany({
     where: { pushSubscription: { not: null }, revokedAt: null },
-    select: { id: true, name: true, pushSubscription: true },
+    select: { id: true, name: true, pushSubscription: true, user: { select: { phone: true } } },
   });
 
   let sent = 0;
@@ -56,6 +66,8 @@ export async function pushToAllDevices(
   let pruned = 0;
   const body = JSON.stringify(payload);
   for (const d of devices) {
+    // Appareil du membre exclu (comparaison chiffres seuls) → sauté.
+    if (exclure && chiffresTel(d.user?.phone) === exclure) continue;
     try {
       await webpush.sendNotification(JSON.parse(d.pushSubscription as string), body, {
         urgency: "high",

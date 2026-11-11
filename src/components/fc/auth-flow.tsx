@@ -144,7 +144,16 @@ type Step =
 
 /* Crée le compte DIRECTEMENT après la vérification du numéro (v32) — le nom
  * vient de la PAGE 2. Remplace l'ancien ProfileScreen (écran « être appelé »
- * supprimé : plus aucune redemande du nom). */
+ * supprimé : plus aucune redemande du nom).
+ * v34 — NOTIFICATIONS DIFFÉRENCIÉES (demande explicite) : AUCUNE notification
+ * à la génération du code ; elles partent UNIQUEMENT ici, quand la personne a
+ * rempli son nom/pseudo ET confirmé son numéro :
+ *   · aux AUTRES membres : « <Nom> a rejoint le groupe » (l'appareil du
+ *     nouveau membre est EXCLU — il ne reçoit pas sa propre annonce) ;
+ *   · à LUI : « Bienvenue <Nom> » — en cliquant, l'application ouvre la suite
+ *     : la détection automatique de sa géolocalisation, puis SA page du
+ *     poste (président → page Président, secrétaire → page Secrétaire,
+ *     simple membre → Espace Membre). */
 async function creerCompteVerifie(registerToken: string, nom: NomChoisi): Promise<{ id: string; fullName: string }> {
   const res = await api<{ user: { id: string; fullName: string } }>("/api/auth/phone", {
     body: {
@@ -171,13 +180,32 @@ async function creerCompteVerifie(registerToken: string, nom: NomChoisi): Promis
   // (page directe, assistant sauté).
   clearVousRole();
   appliquerCodeInvitation(codeInviteEnAttente(), res.user.fullName, res.user.id);
+
+  // Numéro CONFIRMÉ de la personne (posé à l'étape précédente) : sert à
+  // exclure SON appareil de l'annonce destinée aux autres membres.
+  const monNumero = (() => {
+    try {
+      return localStorage.getItem("fc_phone") || "";
+    } catch {
+      return "";
+    }
+  })();
+
   toast.success(`Bienvenue dans la famille, ${res.user.fullName.split(" ")[0]} ! 🌳`);
-  void afterAuthPush(true);
+
+  // 1) AUX AUTRES MEMBRES : « <Nom> a rejoint le groupe » — la diffusion
+  //    EXCLUT le téléphone du nouveau membre (il ne se salue pas lui-même).
   void familyNotify({
-    title: "Nouveau membre inscrit 🌳",
-    body: `${res.user.fullName} vient de rejoindre Famille.Mbeutetsa.`,
+    title: `${res.user.fullName} a rejoint le groupe`,
+    body: `${res.user.fullName.split(" ")[0]} vient de rejoindre la Tontine — dites-lui bienvenue dans la famille.`,
     tag: "fc-register",
+    excludePhone: monNumero,
   });
+
+  // 2) À LUI : « Bienvenue <Nom> » — en cliquant, l'application enchaîne la
+  //    suite : détection automatique de la géolocalisation puis SA page du
+  //    poste. (afterAuthPush active les notifications puis envoie ce push.)
+  void afterAuthPush(true, res.user.fullName);
   return res.user;
 }
 

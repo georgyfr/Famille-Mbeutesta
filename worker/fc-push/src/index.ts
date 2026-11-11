@@ -223,14 +223,20 @@ export default {
       }
 
       // Diffusion à tous (admin, protégé par token) — futur : annonces du conseil
+      // v34 — excludePhone : numéro international dont l'appareil ne reçoit
+      // PAS la diffusion (le nouveau membre ne reçoit pas son propre
+      // « X a rejoint le groupe »). Comparaison sur les CHIFFRES seuls :
+      // « +237 677 92 53 22 » ≡ « 237677925322 » (formats enregistrés divers).
       if (path === "/send" && req.method === "POST") {
-        const b = (await req.json().catch(() => ({}))) as { token?: string; title?: string; body?: string; url?: string };
+        const b = (await req.json().catch(() => ({}))) as { token?: string; title?: string; body?: string; url?: string; excludePhone?: string };
         const expected = await env.PUSH_SUBS.get("admin:token");
         if (!expected || b.token !== expected) {
           return json({ ok: false, error: "Non autorisé." }, 401, corsH);
         }
+        const exclure = (b.excludePhone || "").replace(/\D/g, "");
         let sent = 0;
         let failed = 0;
+        let skipped = 0;
         let cursor = "";
         do {
           const list = await env.PUSH_SUBS.list({ cursor, prefix: "" });
@@ -241,15 +247,20 @@ export default {
             const raw = await env.PUSH_SUBS.get(k.name);
             if (!raw) continue;
             try {
-              const st = await sendOne(env, JSON.parse(raw) as StoredSub, {
+              const st = JSON.parse(raw) as StoredSub;
+              if (exclure && (st.phone || "").replace(/\D/g, "") === exclure) {
+                skipped++; // appareil du membre exclu — il reçoit SON push à lui
+                continue;
+              }
+              const status = await sendOne(env, st, {
                 title: String(b.title || "Famille.Mbeutetsa"),
                 body: String(b.body || ""),
                 url: String(b.url || "/"),
               });
-              if (st === 201 || st === 200) sent++;
+              if (status === 201 || status === 200) sent++;
               else {
                 failed++;
-                if (st === 404 || st === 410) await env.PUSH_SUBS.delete(k.name);
+                if (status === 404 || status === 410) await env.PUSH_SUBS.delete(k.name);
               }
             } catch {
               failed++;
@@ -257,7 +268,7 @@ export default {
           }
           cursor = list.list_complete ? "" : (list.cursor as string);
         } while (cursor);
-        return json({ ok: true, sent, failed }, 200, corsH);
+        return json({ ok: true, sent, failed, skipped }, 200, corsH);
       }
 
       return json({ ok: false, error: "Route inconnue." }, 404, corsH);

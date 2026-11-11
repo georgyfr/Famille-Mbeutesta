@@ -11,22 +11,24 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/notify — événement familial : stocker + diffuser à tous les appareils
+// v34 — excludePhone : numéro international dont l'appareil ne reçoit PAS la
+// notification (le nouveau membre ne reçoit pas son propre « X a rejoint le
+// groupe » — il reçoit SON « Bienvenue <Nom> » à lui, via /api/push welcome).
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const title = String(body.title || "").trim().slice(0, 120);
   const msgBody = String(body.body || "").trim().slice(0, 240);
   const tag = String(body.tag || "famille").slice(0, 60);
+  const excludePhone = typeof body.excludePhone === "string" ? body.excludePhone.slice(0, 24) : "";
   if (!title) return apiError("Titre requis.", 400);
 
   localNtfAppend({ id: `n-${Date.now().toString(36)}`, title, body: msgBody, tag, at: Date.now() });
 
   try {
-    const r = await pushToAllDevices({
-      title,
-      body: msgBody,
-      tag,
-      url: "/",
-    });
+    const r = await pushToAllDevices(
+      { title, body: msgBody, tag, url: "/" },
+      excludePhone || undefined,
+    );
     return apiOk({ sent: r.sent, failed: r.failed, pruned: r.pruned });
   } catch (e) {
     return apiOk({ sent: 0, failed: 0, note: String(e).slice(0, 140) });

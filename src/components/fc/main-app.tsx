@@ -45,11 +45,35 @@ function Splash() {
   );
 }
 
+/** v34 — Le push « Bienvenue <Nom> » renvoie l'application avec
+ *  « ?suite=localisation » : le nouveau membre (ou celui qui avait passé
+ *  l'étape) clique sa notification → le marqueur « localisation plus tard »
+ *  est LEVÉ et le paramètre est retiré de l'URL (une seule fois) — le
+ *  wizard de géolocalisation s'ouvre, puis la page du poste suit. */
+function suiteLocalisationDemandee(): boolean {
+  try {
+    const u = new URL(window.location.href);
+    const suite = u.searchParams.get("suite");
+    if (suite !== "localisation") return false;
+    u.searchParams.delete("suite");
+    window.history.replaceState(null, "", u.pathname + (u.search || "") + (u.hash || ""));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Marqueur « localisation passée » — lié au COMPTE (valeur = uid), pas à
  *  l'appareil : un autre membre qui s'inscrit sur le même téléphone doit avoir
  *  son propre parcours d'accueil (localisation puis rôle). */
 function locSkippedActuel(): boolean {
   try {
+    // v34 — clic sur la notification « Bienvenue » → la localisation est
+    // redemandée même si elle avait été passée (« pour la suite »).
+    if (suiteLocalisationDemandee()) {
+      localStorage.removeItem("fc_loc_skipped");
+      return false;
+    }
     const uid = localStorage.getItem("fc_uid") ?? "";
     if (!uid) return false;
     return localStorage.getItem("fc_loc_skipped") === uid;

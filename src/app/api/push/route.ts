@@ -33,10 +33,15 @@ export async function POST(req: NextRequest) {
   const payload =
     body.action === "welcome"
       ? {
-          title: "🌳 Bienvenue dans la famille !",
-          body: `Félicitations ${result.user.fullName} — les alertes de la famille vous parviendront ici, même l'application fermée.`,
+          // v34 — le message s'adresse au nouveau membre PAR SON NOM et le
+          // lien ouvre la suite (géolocalisation → page du poste).
+          title: String(body.title || "🌳 Bienvenue dans la famille !").slice(0, 120),
+          body: String(
+            body.body ||
+              `Félicitations ${result.user.fullName} — les alertes de la famille vous parviendront ici, même l'application fermée.`,
+          ).slice(0, 240),
           tag: "fc-welcome",
-          url: "/",
+          url: String(body.url || "/").slice(0, 200),
         }
       : {
           title: "🔔 Famille.Mbeutetsa — test réussi",

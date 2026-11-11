@@ -220,8 +220,11 @@ export async function desabonnerPush(): Promise<boolean> {
 }
 
 /** Après l'authentification : nouvel inscrit → invite automatique ; connu → abonnement silencieux si déjà accordé.
- *  v29 : si l'utilisateur a COUPÉ les notifications dans les paramètres, plus AUCUNE invite. */
-export async function afterAuthPush(isNewUser: boolean): Promise<void> {
+ *  v29 : si l'utilisateur a COUPÉ les notifications dans les paramètres, plus AUCUNE invite.
+ *  v34 — welcomeNom : le push de bienvenue s'adresse à LUI par SON nom
+ *  (« Bienvenue Albert Fotsos ») et son lien ouvre la SUITE du parcours
+ *  (géolocalisation puis page du poste). */
+export async function afterAuthPush(isNewUser: boolean, welcomeNom?: string): Promise<void> {
   if (!isPushSupported()) return;
   if (lirePrefPush() === "off") return;
   try {
@@ -229,7 +232,16 @@ export async function afterAuthPush(isNewUser: boolean): Promise<void> {
       const ok = await enablePush({ silent: true });
       if (ok) {
         toast.success("Notifications activées 🔔 — vous serez alerté comme sur WhatsApp.");
-        void welcomePush();
+        const nom = (welcomeNom ?? "").trim();
+        void welcomePush(
+          nom
+            ? {
+                title: `Bienvenue ${nom} !`,
+                body: "Votre compte est vérifié ✓ — cliquez pour la suite : enregistrer votre position (détection automatique), puis votre page s'ouvrira.",
+                url: "/?suite=localisation",
+              }
+            : undefined,
+        );
       } else if (Notification.permission === "default") {
         toast.info("Activez les notifications dans « Ma sécurité » pour recevoir les alertes de la famille.");
       }
@@ -242,11 +254,21 @@ export async function afterAuthPush(isNewUser: boolean): Promise<void> {
   }
 }
 
-/** Push de bienvenue réel — juste après l'inscription. */
-export async function welcomePush(): Promise<void> {
+/** Push de bienvenue réel — juste après l'inscription.
+ *  v34 — le message s'adresse au nouveau membre PAR SON NOM et le lien
+ *  ouvre la suite du parcours (géolocalisation → page du poste). */
+export async function welcomePush(opts?: { title?: string; body?: string; url?: string }): Promise<void> {
   try {
     const subscription = await currentSubscription();
-    await api("/api/push", { body: { action: "welcome", subscription: subscription ? subscription.toJSON() : undefined } });
+    await api("/api/push", {
+      body: {
+        action: "welcome",
+        subscription: subscription ? subscription.toJSON() : undefined,
+        title: opts?.title,
+        body: opts?.body,
+        url: opts?.url,
+      },
+    });
   } catch {
     /* silencieux */
   }
@@ -267,8 +289,16 @@ export async function testPush(): Promise<{ ok: boolean; error?: string }> {
  * Diffuse un événement familial : la notification système part sur TOUS les
  * téléphones abonnés (son + vibration, même écran verrouillé) et reste
  * consultable dans le centre d'alertes. Jamais bloquant.
+ * v34 — excludePhone : numéro (international, « +237… ») dont l'appareil ne
+ * doit PAS recevoir cette annonce (ex. le nouveau membre ne reçoit pas son
+ * propre « X a rejoint le groupe » — il reçoit SON « Bienvenue » à lui).
  */
-export async function familyNotify(opts: { title: string; body: string; tag?: string }): Promise<void> {
+export async function familyNotify(opts: {
+  title: string;
+  body: string;
+  tag?: string;
+  excludePhone?: string;
+}): Promise<void> {
   try {
     await fetch("/api/notify", {
       method: "POST",

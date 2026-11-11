@@ -105,23 +105,29 @@ export const CODE_SEED_PREMIER: CodeMembre = {
   utiliseNom: null,
 };
 
-/* ═══ CODE SEMÉ — LE PRÉSIDENT DU BUREAU (v33) ═══
+/* ═══ CODE SEMÉ — LE PRÉSIDENT DU BUREAU (v34) ═══
  * Même mécanique que le code du premier secrétaire : ce code est EMBARQUÉ
- * dans l'application, il fonctionne sur N'IMPORTE QUEL appareil. La personne
- * colle le code, donne son nom ET son numéro (le code ne porte PAS de
- * téléphone — le président tape le sien à la page « Vos renseignements »),
- * la vérification part toute seule, et SA page s'ouvre en PRÉSIDENT du bureau.
+ * dans l'application, il fonctionne sur N'IMPORTE QUEL appareil.
+ * v34 — REMPLACEMENT de l'ancien code du président (FCM-PL82US, sans
+ * téléphone) : le bureau a désigné ALBERT FOTSOS — le code porte désormais
+ * SON identité complète :
+ *   · nom : « Albert Fotsos » (prérempli à la page « Vos renseignements ») ;
+ *   · téléphone : +237 677 92 53 22 (prérempli, vérifié et modifiable) ;
  *   · poste : Président ;  · ville : Yaoundé (tontine de Yaoundé) ;
  *   · cotisation : 50 000 FCFA/mois (le même type familial que le secrétaire —
  *     créé automatiquement à l'activation s'il n'existe pas encore).
+ * AUCUNE notification ne part à la génération du code — elles ne partent
+ * qu'à l'inscription (nom + confirmation du numéro) : aux AUTRES membres
+ * « Albert Fotsos a rejoint le groupe », à LUI « Bienvenue Albert Fotsos »
+ * avec le lien vers la suite (géolocalisation puis sa page de Président).
  * Un seul compte peut le consommer — ensuite il est marqué « utilisé » et la
  * personne se reconnecte par son numéro (jamais de double compte).
- * Lien cliquable : https://famille-mbeutetsa.pages.dev/?code=FCM-PL82US */
+ * Lien cliquable : https://famille-mbeutetsa.pages.dev/?code=FCM-A3V29V */
 export const CODE_SEED_PRESIDENT: CodeMembre = {
   id: "cm-seed-president",
-  code: "FCM-PL82US",
-  telephone: "",
-  nomOptionnel: "",
+  code: "FCM-A3V29V",
+  telephone: "+237677925322",
+  nomOptionnel: "Albert Fotsos",
   cotisationTypeId: "tc-seed-50000",
   cotisationNom: "Cotisation mensuelle — 50 000 FCFA",
   cotisationMontant: 50000,
@@ -145,10 +151,16 @@ function completeVille(c: CodeMembre): CodeMembre {
 }
 
 /** Lit tous les codes : ceux générés par le bureau (stockage local) PLUS les
- *  codes semés dans l'application (v27 — le tout premier utilisateur). Le plus
- *  récent d'abord ; les semés n'y figurent qu'une fois (jamais en double). */
+ *  codes semés dans l'application (v27 — le tout premier utilisateur ; v34 —
+ *  le président Albert Fotsos). Le plus récent d'abord ; les semés n'y
+ *  figurent qu'une fois (jamais en double).
+ *  v34 — RETRAIT SILENCIEUX des ANCIENTS codes semés : un appareil qui aurait
+ *  stocké une version remplacée d'un seed (ex. FCM-PL82US, l'ancien code du
+ *  président) ne doit plus jamais la proposer — elle est écartée à la lecture,
+ *  SANS purge de données (aucun compte réel n'est touché). */
 export function chargerCodes(): CodeMembre[] {
   if (typeof window === "undefined") return [];
+  const idsSemésActuels = new Set(CODES_SEED.map((s) => s.id));
   try {
     const brut = window.localStorage.getItem(CLE);
     const stockes: CodeMembre[] = brut
@@ -157,8 +169,11 @@ export function chargerCodes(): CodeMembre[] {
           return Array.isArray(l) ? l.filter((c) => typeof c?.code === "string" && typeof c?.id === "string") : [];
         })()
       : [];
-    const manquants = CODES_SEED.filter((s) => !stockes.some((c) => c.code === s.code));
-    const tout = [...stockes.map(completeVille), ...manquants];
+    const vivants = stockes.filter(
+      (c) => !(c.id.startsWith("cm-seed-") && !idsSemésActuels.has(c.id)),
+    );
+    const manquants = CODES_SEED.filter((s) => !vivants.some((c) => c.code === s.code));
+    const tout = [...vivants.map(completeVille), ...manquants];
     return tout.sort((a, b) => (b.creeLe ?? "").localeCompare(a.creeLe ?? ""));
   } catch {
     return CODES_SEED.map(completeVille);

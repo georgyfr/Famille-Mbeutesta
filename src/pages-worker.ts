@@ -312,12 +312,15 @@ export default {
         }
         const payload = {
           subscription: s,
-          title: action === "welcome" ? "🌳 Bienvenue dans la famille !" : "🔔 Famille.Mbeutetsa — test réussi",
+          // v34 — welcome personnalisé : le message s'adresse au nouveau
+          // membre PAR SON NOM et le lien ouvre la suite (géolocalisation →
+          // page du poste). Défauts inchangés si le client ne fournit rien.
+          title: action === "welcome" ? String(b.title || "🌳 Bienvenue dans la famille !").slice(0, 120) : "🔔 Famille.Mbeutetsa — test réussi",
           body:
             action === "welcome"
-              ? String(b.body || "Félicitations — les alertes de la famille vous parviendront ici, même l'application fermée.")
-              : String(b.body || "Les notifications push fonctionnent sur ce téléphone. Vous ne manquerez plus aucun événement familial."),
-          url: "/",
+              ? String(b.body || "Félicitations — les alertes de la famille vous parviendront ici, même l'application fermée.").slice(0, 240)
+              : String(b.body || "Les notifications push fonctionnent sur ce téléphone. Vous ne manquerez plus aucun événement familial.").slice(0, 240),
+          url: String(b.url || "/").slice(0, 200),
           tag: action === "welcome" ? "fc-welcome" : "fc-push-test",
         };
         const r = await engineCall(env, "/send-one", payload);
@@ -331,7 +334,11 @@ export default {
         return json({ ok: false, error: `Envoi impossible (service push HTTP ${r.status}).` }, 502);
       }
 
-      /* ── Événement familial : stocker + diffuser à toute la famille ── */
+      /* ── Événement familial : stocker + diffuser à toute la famille ──
+       * v34 — excludePhone : numéro international dont l'appareil ne reçoit
+       * PAS cette annonce (le nouveau membre ne se salue pas lui-même — il
+       * reçoit SON « Bienvenue <Nom> » via /api/push welcome). Le moteur
+       * /send filtre les abonnements enregistrés avec CE numéro. */
       if (path === "/api/notify" && method === "POST") {
         const b = await readBody(request);
         const title = String(b.title || "").trim().slice(0, 120);
@@ -339,6 +346,7 @@ export default {
         if (!title) return json({ ok: false, error: "Titre requis." }, 400);
         const tag = String(b.tag || "famille").slice(0, 60);
         const urlPath = String(b.url || "/").slice(0, 200);
+        const excludePhone = typeof b.excludePhone === "string" ? b.excludePhone.slice(0, 24) : "";
 
         // Anti-doublon : 1 événement identique max toutes les 30 s (hash du contenu)
         const dedupeKey = `ntf:dedupe:${await sha256hex(`${title}|${body}`)}`;
@@ -355,7 +363,13 @@ export default {
         if (isDevTokenSet(env)) {
           const adminToken = await env.PUSH_SUBS.get("admin:token");
           if (adminToken) {
-            const r = await engineCall(env, "/send", { token: adminToken, title, body, url: urlPath });
+            const r = await engineCall(env, "/send", {
+              token: adminToken,
+              title,
+              body,
+              url: urlPath,
+              ...(excludePhone ? { excludePhone } : {}),
+            });
             if (typeof r.data.sent === "number") sent = r.data.sent;
             if (typeof r.data.failed === "number") failed = r.data.failed;
           }
