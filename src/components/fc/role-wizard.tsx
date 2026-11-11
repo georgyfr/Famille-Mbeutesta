@@ -1,50 +1,38 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Assistant « Mon rôle dans la Tontine » — Famille.Mbeutetsa
+// Assistant « Votre rôle dans la Tontine » — Famille.Mbeutetsa (v34)
 //
-// Demande JUSTE APRÈS la sélection de la géolocalisation (parcours :
-// inscription → localisation → RÔLE → tableau de bord).
+// Demande de l'administrateur : « aucun membre ne devrait voir la page du
+// statut d'un autre membre dans l'entreprise. Tu ne vois que ton statut. »
 //
-// Chaque personne indique le rôle qu'elle joue dans la Tontine : simple membre
-// ou l'un des six acteurs du bureau (président, vice-président, secrétaire,
-// trésorier, commissaire aux comptes, censeur). Le rôle ouvre la page du
-// bureau correspondante et détermine les droits : taux mensuel, validations
-// d'épargnes, dettes, signalements. Modifiable à tout moment depuis la carte
-// « Mon rôle dans la Tontine » de l'onglet Sécurité.
+// AVANT (jusqu'à v33) : cet assistant laissait CHACUN se déclarer président,
+// secrétaire, trésorier… — une porte ouverte aux faux statuts (l'administrateur
+// a constaté des « données fictives »).
+//
+// MAINTENANT : le poste du bureau vient UNIQUEMENT du CODE d'invitation remis
+// par le bureau (posé à l'inscription par appliquerCodeInvitation — et l'assistant
+// est alors SAUTÉ). Pour un compte sans code, le rôle est « Membre simple » :
+// cet écran le CONFIRME en une carte unique (plus aucun choix de poste).
+// Les postes réels du bureau s'attribuent dans #secretaire/codes ou
+// #president (génération d'un code d'invitation « membre du bureau »).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState } from "react";
 import { toast } from "sonner";
 import { saveVousRole } from "./tontine-bureau";
-import { ROLE_META, ROLES_BUREAU, type RoleKey } from "./tontine-data";
+import { ROLE_META, type RoleKey } from "./tontine-data";
 import { FcButton, FcCard } from "./ui";
-import {
-  Check, Crown, Eye, Scale, ScrollText, ShieldCheck, UserRound, Users, Wallet,
-} from "lucide-react";
-
-const ORDRE: RoleKey[] = ["membre", ...ROLES_BUREAU];
-
-const ICÔNE_RÔLE: Record<RoleKey, React.ReactNode> = {
-  membre: <Users className="h-5 w-5" />,
-  president: <Crown className="h-5 w-5" />,
-  vice_president: <UserRound className="h-5 w-5" />,
-  secretariat: <ScrollText className="h-5 w-5" />,
-  tresorier: <Wallet className="h-5 w-5" />,
-  commissaire: <Scale className="h-5 w-5" />,
-  censeur: <Eye className="h-5 w-5" />,
-};
+import { Check, ShieldCheck, Users } from "lucide-react";
 
 export function RoleWizard({ onDone }: { onDone: () => void }) {
-  const [role, setRole] = useState<RoleKey>("membre");
+  const role: RoleKey = "membre"; // sans code du bureau, le statut est « membre »
+  const meta = ROLE_META[role];
 
   const valider = () => {
     saveVousRole(role);
-    toast.success(`Rôle enregistré : ${ROLE_META[role].label} 🎉`, {
+    toast.success("Votre espace est prêt 🌳", {
       description:
-        role === "membre"
-          ? "Vous validez les décisions du bureau et vous pouvez signaler tout problème."
-          : "Votre page du bureau vous donne vos outils : taux mensuel, validations, dettes, signalements.",
+        "En tant que membre, vous validez les décisions du bureau et vous pouvez signaler tout problème. Le bureau vous remettra un code d'invitation si un poste vous est confié.",
     });
     onDone();
   };
@@ -60,68 +48,45 @@ export function RoleWizard({ onDone }: { onDone: () => void }) {
           Votre rôle dans la Tontine
         </h1>
         <p className="mx-auto mt-1.5 max-w-sm text-[13.5px] leading-relaxed text-[#5C6B60]">
-          Dernière étape : quel rôle jouez-vous dans la Tontine de la famille ? Il ouvre votre page
-          du bureau (président, secrétaire, trésorier…) et détermine vos droits.
+          Votre statut est attribué par le bureau via votre code d&apos;invitation.
         </p>
       </div>
 
       <FcCard className="p-5 sm:p-6">
-        <div role="radiogroup" aria-label="Rôle joué dans la Tontine" className="space-y-2">
-          {ORDRE.map((r) => {
-            const meta = ROLE_META[r];
-            const choisi = role === r;
-            return (
-              <button
-                key={r}
-                type="button"
-                role="radio"
-                aria-checked={choisi}
-                onClick={() => setRole(r)}
-                className={`flex w-full items-start gap-3 rounded-2xl border p-3.5 text-left transition-colors ${
-                  choisi
-                    ? "border-[#C89F62] bg-[#C89F62]/10 ring-1 ring-[#C89F62]/40"
-                    : "border-[#E5DCC0] bg-[#FFFDF6] hover:border-[#C89F62]/50 hover:bg-[#C89F62]/5"
-                }`}
-              >
-                <span
-                  className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
-                  style={{ backgroundColor: `${meta.accent}1A`, color: meta.accent }}
-                >
-                  {ICÔNE_RÔLE[r]}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="flex flex-wrap items-center gap-2">
-                    <span className="text-[14.5px] font-bold text-[#1E4D2B]">{meta.label}</span>
-                    {r === "membre" && (
-                      <span className="rounded-full bg-[#2A4A3A]/8 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#2A4A3A]">
-                        Le plus courant
-                      </span>
-                    )}
-                  </span>
-                  <span className="mt-0.5 block text-[12.5px] leading-snug text-[#5C6B60]">
-                    {meta.summary}
-                  </span>
-                </span>
-                <span
-                  className={`mt-2.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
-                    choisi ? "border-[#C89F62] bg-[#C89F62] text-white" : "border-[#C9B98A] bg-white"
-                  }`}
-                  aria-hidden="true"
-                >
-                  {choisi && <Check className="h-3.5 w-3.5" />}
-                </span>
-              </button>
-            );
-          })}
+        {/* Carte unique — Membre simple (plus AUCUN choix de poste : un poste
+            du bureau ne se déclare pas, il se REMET par code d'invitation). */}
+        <div className="flex items-start gap-3 rounded-2xl border border-[#C89F62] bg-[#C89F62]/10 p-3.5 ring-1 ring-[#C89F62]/40">
+          <span
+            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+            style={{ backgroundColor: `${meta.accent}1A`, color: meta.accent }}
+          >
+            <Users className="h-5 w-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="text-[14.5px] font-bold text-[#1E4D2B]">{meta.label}</span>
+              <span className="rounded-full bg-[#2A4A3A]/8 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#2A4A3A]">
+                Votre statut
+              </span>
+            </span>
+            <span className="mt-0.5 block text-[12.5px] leading-snug text-[#5C6B60]">
+              {meta.summary}
+            </span>
+          </span>
+          <span className="mt-2.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#C89F62] bg-[#C89F62] text-white" aria-hidden="true">
+            <Check className="h-3.5 w-3.5" />
+          </span>
         </div>
 
         <p className="mt-4 flex items-start gap-1.5 text-[11.5px] leading-relaxed text-[#8A9288]">
           <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          Vous pourrez changer de rôle à tout moment depuis la fiche « Mon rôle dans la Tontine ».
+          Président, secrétaire, trésorier… : un poste du bureau vous est REMIS
+          par le bureau lui-même, avec votre code d&apos;invitation — il ouvre
+          votre page automatiquement.
         </p>
 
         <FcButton onClick={valider} className="mt-3 h-[54px] text-[16.5px]">
-          <Check className="h-5 w-5" /> Valider mon rôle
+          <Check className="h-5 w-5" /> Entrer dans la Tontine
         </FcButton>
       </FcCard>
     </div>

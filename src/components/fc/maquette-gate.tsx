@@ -1,7 +1,26 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BASCULE MAQUETTE ⇄ APPLICATION — Famille.Mbeutetsa (v32)
+// BASCULE MAQUETTE ⇄ APPLICATION — Famille.Mbeutetsa (v34)
+//
+// v34 — DEMANDES DE L'ADMINISTRATEUR (isolation des statuts) :
+//   « Au niveau de la version mobile, je ne souhaite plus que le bouton bureau
+//   apparaisse. […] Désormais lorsqu'une personne finit son inscription et sa
+//   géolocalisation, la page qui suit est la page propre au statut qu'il
+//   occupe. Et aucun membre ne devrait voir la page du statut d'un autre
+//   membre dans l'entreprise. Tu ne vois que ton statut. »
+//   · le bouton « Bureau › » du bandeau de l'application est SUPPRIMÉ — plus
+//     aucune porte des consoles de validation depuis l'app réelle ;
+//   · après la géolocalisation (et le rôle), l'app ouvre DIRECTEMENT la
+//     console du propre poste (main-app.tsx, poste-console.ts) ;
+//   · ISOLATION STRICTE : le gate lit le poste du compte connecté
+//     (fc_uid + fc_tontine_role_v1) — la console d'un AUTRE poste est
+//     refusée (redirection Espace Membre + message), et les pastilles du
+//     bandeau ne montrent que LA console du poste (plus de sélecteur de
+//     toutes les consoles pour les comptes réels ; sans compte connecté —
+//     validation de développement — les 4 consoles restent accessibles) ;
+//   · l'auto-attribution de postes est fermée : le rôle vient UNIQUEMENT du
+//     code d'invitation (role-wizard.tsx, dashboard.tsx alignés).
 //
 // v32 — DEMANDE DE L'ADMINISTRATEUR : « tout le monde se connecte avec le
 // code qu'on lui a généré — je veux une première page UNIQUEMENT avec le code
@@ -57,12 +76,15 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { MainApp } from "./main-app";
 import { MaquettePresident } from "./maquette-president";
 import { MaquetteSecretaire } from "./maquette-secretaire";
 import { MaquetteCommissaire } from "./maquette-commissaire";
 import { EspaceMembre } from "./espace-membre";
 import { corrigerFauxNegatifLegacy, forceLegacyDemande, gateMode } from "./gate-fix";
+import { CONSOLE_DU_ROLE, LIBELLE_CONSOLE, roleDuCompteConnecte } from "./poste-console";
+import type { RoleKey } from "./tontine-data";
 import { Sparkles, Crown, PenLine, Landmark, Users } from "lucide-react";
 
 type ConsoleKey = "president" | "secretaire" | "commissaire" | "membre";
@@ -120,6 +142,18 @@ export function MaquetteGate() {
     (typeof window !== "undefined" && hashConsoleExplicite()) ? "maquette" : "app",
   );
   const [console_, setConsole_] = useState<ConsoleKey>(() => consoleFromHash());
+  // v34 — poste du compte connecté sur CET appareil : sert à l'ISOLATION DES
+  // STATUTS (seule la console du propre poste est ouverte). "pas-de-compte"
+  // = validation de développement sans session : tout reste accessible.
+  const [roleCompte, setRoleCompte] = useState<RoleKey | "pas-de-compte">(
+    () => (typeof window !== "undefined" ? roleDuCompteConnecte() : "pas-de-compte"),
+  );
+
+  /** v34 — la console demandée est-elle ouverte à CE compte ? L'Espace Membre
+   *  est de tous ; chaque console du bureau n'appartient qu'à SON poste —
+   *  « aucun membre ne devrait voir la page du statut d'un autre membre ». */
+  const consoleAutorisee = (c: ConsoleKey, role: RoleKey | "pas-de-compte"): boolean =>
+    role === "pas-de-compte" || c === "membre" || CONSOLE_DU_ROLE[role] === c;
 
   // v21 — pastille de console : ouvre IMMÉDIATEMENT la console visée (état
   // posé à la main) et pose le hash via history.pushState — le pattern du
@@ -128,7 +162,14 @@ export function MaquetteGate() {
   // posé ici ; le listener reste utile pour les changements EXTERNES du hash
   // (switcher « Mon poste au bureau », URL éditée, bouton retour). Piège
   // hash identique (#president/… sous-page) : rien à faire, l'état est déjà bon.
+  // v34 — une console d'un AUTRE poste est refusée (message clair).
   const allerConsole = (c: ConsoleKey): void => {
+    if (!consoleAutorisee(c, roleCompte)) {
+      toast.error(
+        `La page « ${LIBELLE_CONSOLE[c]} » est réservée à ce poste du bureau — vous ne voyez que VOTRE statut.`,
+      );
+      return;
+    }
     setConsole_(c);
     setMode("maquette");
     try {
@@ -151,7 +192,23 @@ export function MaquetteGate() {
       // v31 — réévaluation du mode Lite : la correction ci-dessus a re-posé
       // fc-modern → la maquette React reprend la main.
       setLegacy(/fc-legacy/.test(document.documentElement.className));
-      setConsole_(consoleFromHash());
+      // v34 — poste du compte (relu à chaque sync : il peut être posé entre-temps
+      // par le code d'invitation) puis ISOLATION : si le hash vise la console
+      // d'un AUTRE poste → Espace Membre (chacun ne voit que son statut).
+      const role = roleDuCompteConnecte();
+      setRoleCompte(role);
+      let cible = consoleFromHash();
+      if (hashConsoleExplicite() && !consoleAutorisee(cible, role)) {
+        const refusee = cible; // capturée AVANT la redirection (message clair)
+        cible = "membre";
+        try {
+          window.history.replaceState(null, "", "#membre");
+        } catch { /* rien */ }
+        toast.error(
+          `La page « ${LIBELLE_CONSOLE[refusee]} » n'est pas la vôtre — chaque membre ne voit que SON statut. Votre Espace Membre est ouvert.`,
+        );
+      }
+      setConsole_(cible);
       // v20 — switcher « Mon poste au bureau » : quand le hash vise une
       // console, la vue bascule d'elle-même de l'application vers la maquette
       // (le membre qui bascule vers son poste tombe directement dessus).
@@ -169,23 +226,16 @@ export function MaquetteGate() {
   if (legacy) return <MainApp />;
 
   // v27 — MODE APP : l'application TELLE QUELLE, avec une fine barre discrète
-  // (marque + accès « Bureau » réservé à l'administrateur). Aucune maquette
-  // visible, aucun sélecteur de consoles : le membre est DANS l'application.
+  // (marque seule). v34 — le bouton « Bureau › » (vue de validation) est
+  // SUPPRIMÉ : plus aucune porte des consoles depuis l'application réelle —
+  // chacun est renvoyé à SON poste par la page qui suit la géolocalisation
+  // et, depuis l'accueil, par la carte « Mon poste au bureau ».
   if (mode === "app") {
     return (
       <div className="flex flex-1 flex-col">
         <div className="sticky top-0 z-30 flex items-center gap-2 bg-[#2A4A3A] px-3 py-1.5 text-white">
           <Sparkles className="h-3 w-3 shrink-0 text-[#C89F62]" />
           <p className="min-w-0 truncate text-[11px] font-semibold">Famille.Mbeutetsa</p>
-          <button
-            type="button"
-            onClick={() => setMode("maquette")}
-            title="Consoles du bureau — vue de validation (administrateur)"
-            className="ml-auto shrink-0 rounded-full border border-white/25 bg-white/5 px-2.5 py-0.5 text-[10px] font-bold text-white/75 transition-all hover:border-white/50 hover:text-white active:scale-95"
-          >
-            Bureau ›
-            <span className="sr-only">Ouvrir les consoles du bureau (vue de validation)</span>
-          </button>
         </div>
         <MainApp />
       </div>
@@ -198,13 +248,18 @@ export function MaquetteGate() {
         <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#C89F62]" />
         <p className="hidden min-w-0 truncate text-[11px] font-semibold sm:block">
           {console_ === "membre"
-            ? `Espace Membre v32 — ${CONSOLES[console_]}`
-            : `Maquette v32 — ${CONSOLES[console_]}`}
+            ? `Espace Membre v34 — ${CONSOLES[console_]}`
+            : `Maquette v34 — ${CONSOLES[console_]}`}
         </p>
-        {/* v21 — sélecteur de consoles : VISIBLE EN PERMANENCE (maquette comme
-            application). Un clic pose le hash et ouvre la console visée. */}
+        {/* v34 — sélecteur de consoles RÉDUIT AU PROPRE POSTE du compte
+            connecté (isolation des statuts) : un président ne voit que la
+            pastille Président, un membre simple que la pastille Membre.
+            Sans compte connecté (validation de développement), les 4
+            consoles restent accessibles. */}
         <nav aria-label="Consoles du bureau" className="fc-scroll flex min-w-0 items-center gap-1 overflow-x-auto">
-          {PILLES.map(({ key, label, Icon }) => {
+          {PILLES.filter(({ key }) =>
+            roleCompte === "pas-de-compte" || key === CONSOLE_DU_ROLE[roleCompte],
+          ).map(({ key, label, Icon }) => {
             const actif = mode === "maquette" && console_ === key;
             return (
               <button

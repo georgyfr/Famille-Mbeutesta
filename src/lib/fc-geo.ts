@@ -77,8 +77,21 @@ export function getPosition(): Promise<GeolocationPosition> {
 }
 
 /* ─── 2. Nominatim (OpenStreetMap) : hiérarchie complète ───
-   Pour le Cameroun : state = Région, state_district/county = Département,
-   city = Ville, suburb/city_district = Arrondissement, neighbourhood = Quartier. */
+   v34 — PRÉCISION AU CAMEROUN (signalement de l'administrateur : la
+   détection « était un fiasco » — département, arrondissement, quartier
+   vides ou mélangés). Ce qu'OpenStreetMap renvoie RÉELLEMENT au Cameroun :
+     · à Douala : state=Littoral · county=Wouri · city=« Douala V »
+       (l'ARRONDISSEMENT !) · municipality=« Communauté urbaine de Douala »
+       (la VILLE) · suburb=« Cité Des Palmiers » (le QUARTIER) ;
+     · à Yaoundé : state=Centre · county=Mfoundi · city_district=« Yaoundé II »
+       (l'ARRONDISSEMENT) · city=« Communauté urbaine de Yaoundé » (la VILLE)
+       · suburb=« Briqueterie » (le QUARTIER).
+   L'ancien mapping prenait city comme ville et suburb comme arrondissement —
+   d'où « Douala V » en ville, « Cité Des Palmiers » en arrondissement et un
+   quartier vide. Le nouveau mapping décode cette hiérarchie : ville =
+   municipality/city NETTOYÉE du préfixe « Communauté urbaine de » ;
+   arrondissement = city_district/borough, ou city quand elle diffère de la
+   ville ; quartier = neighbourhood/quarter/suburb ; département = county. */
 
 type NominatimAddress = Record<string, string | undefined>;
 
@@ -90,15 +103,43 @@ function pick(a: NominatimAddress, keys: string[]): string {
   return "";
 }
 
+/** « Communauté urbaine de Douala » → « Douala » ; « Commune de Bafoussam » →
+ *  « Bafoussam » — OSM préfixe parfois la ville/communauté, on rend le nom
+ *  propre tel qu'il est parlé dans la famille. */
+function nettoyerVille(s: string): string {
+  return (s ?? "")
+    .replace(/^communaut[ée]\s+urbaine\s+d[’']e?\s+/i, "")
+    .replace(/^communaut[ée]\s+urbaine\s+de\s+/i, "")
+    .replace(/^commune\s+d[’']e?\s+/i, "")
+    .replace(/^commune\s+de\s+/i, "")
+    .replace(/^commune\s+du\s+/i, "")
+    .replace(/^commune\s+urbanis[ée]e\s+de\s+/i, "")
+    .trim();
+}
+
 function fromNominatim(json: { address?: NominatimAddress; lat?: string; lon?: string }, lat: number, lon: number, accuracy: number | null): LocationDraft {
   const a = json.address ?? {};
+  // VILLE — la « grande entité » : municipality (communauté urbaine) sinon
+  // city/town/village, toujours nettoyée du préfixe administratif.
+  const villeBrute = pick(a, ["municipality", "city", "town", "village", "commune"]);
+  const ville = nettoyerVille(villeBrute);
+  // ARRONDISSEMENT — « Douala V », « Yaoundé II » : city_district/district/
+  // borough, OU le champ city quand il diffère de la ville retenue
+  // (Douala : municipality porte la ville, city porte l'arrondissement).
+  let arrondissement = pick(a, ["city_district", "district", "borough"]);
+  if (!arrondissement) {
+    const cityBrute = nettoyerVille(pick(a, ["city", "town"]));
+    if (cityBrute && cityBrute.localeCompare(ville, "fr", { sensitivity: "base" }) !== 0) {
+      arrondissement = cityBrute;
+    }
+  }
   return {
     country: pick(a, ["country"]),
-    region: pick(a, ["state", "region", "state_district"]),
-    department: pick(a, ["state_district", "county", "district"]),
-    city: pick(a, ["city", "town", "municipality", "village", "commune"]),
-    arrondissement: pick(a, ["borough", "suburb", "city_district", "district"]),
-    quartier: pick(a, ["neighbourhood", "quarter", "residential"]),
+    region: pick(a, ["state", "region"]),
+    department: pick(a, ["county", "state_district"]),
+    city: ville,
+    arrondissement,
+    quartier: pick(a, ["neighbourhood", "quarter", "suburb", "city_block", "residential", "hamlet"]),
     latitude: lat,
     longitude: lon,
     accuracy,
@@ -107,8 +148,10 @@ function fromNominatim(json: { address?: NominatimAddress; lat?: string; lon?: s
 }
 
 async function reverseNominatim(lat: number, lon: number, accuracy: number | null): Promise<LocationDraft> {
+  // v34 — zoom 18 (niveau bâtiment/rue) au lieu de 16 : c'est CE qui permet
+  // à Nominatim de renvoyer le QUARTIER précis (suburb/neighbourhood).
   const url =
-    `https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=16` +
+    `https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18` +
     `&accept-language=fr&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`;
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 12000);

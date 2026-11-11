@@ -50,23 +50,39 @@ export function telLisible(telephone: string): string {
 }
 
 /** Les futurs membres : chaque code non utilisé devient un membre de liste
- *  (bureau : allocations possibles AVANT l'inscription de la personne). */
+ *  (bureau : allocations possibles AVANT l'inscription de la personne).
+ *  v33 — le libellé porte le POSTE porté par le code (ex. « Futur Président »)
+ *  — utile pour les codes semés sans téléphone (le président tape son numéro
+ *  à l'inscription). */
 export function futursMembres(): Member[] {
   try {
     const annee = String(new Date().getFullYear());
     return chargerCodes()
       .filter((c) => !c.utiliseLe)
-      .map((c): Member => ({
-        id: idTel(c.telephone),
-        name: `Futur membre · ${telLisible(c.telephone)}`,
-        role: c.bureauRole ?? "membre",
-        phone: c.telephone,
-        city: c.ville,
-        since: annee,
-        tour: 12, // hors calendrier : le tour sera fixé par le bureau après l'arrivée
-        fictif: true,
-        isVous: false,
-      }));
+      .map((c): Member => {
+        const poste =
+          c.typeMembre === "bureau" && c.bureauRole
+            ? (LIBELLES_BUREAU[c.bureauRole] ?? "Membre simple")
+            : "Membre simple";
+        // Codes du bureau (président, secrétaire…) → « Futur Président » ;
+        // membres simples → « Futur membre ». Le téléphone suit s'il existe
+        // (les codes semés sans téléphone l'affichent seul — la personne
+        // donnera son numéro à l'inscription).
+        const qui =
+          poste === "Membre simple" && c.telephone ? "membre" : poste;
+        const tel = c.telephone ? telLisible(c.telephone) : "";
+        return {
+          id: idTel(c.telephone),
+          name: `Futur ${qui}${tel ? ` · ${tel}` : ""}`,
+          role: c.bureauRole ?? "membre",
+          phone: c.telephone,
+          city: c.ville,
+          since: annee,
+          tour: 12, // hors calendrier : le tour sera fixé par le bureau après l'arrivée
+          fictif: true,
+          isVous: false,
+        };
+      });
   } catch {
     return [];
   }

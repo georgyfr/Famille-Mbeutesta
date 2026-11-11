@@ -105,8 +105,38 @@ export const CODE_SEED_PREMIER: CodeMembre = {
   utiliseNom: null,
 };
 
+/* ═══ CODE SEMÉ — LE PRÉSIDENT DU BUREAU (v33) ═══
+ * Même mécanique que le code du premier secrétaire : ce code est EMBARQUÉ
+ * dans l'application, il fonctionne sur N'IMPORTE QUEL appareil. La personne
+ * colle le code, donne son nom ET son numéro (le code ne porte PAS de
+ * téléphone — le président tape le sien à la page « Vos renseignements »),
+ * la vérification part toute seule, et SA page s'ouvre en PRÉSIDENT du bureau.
+ *   · poste : Président ;  · ville : Yaoundé (tontine de Yaoundé) ;
+ *   · cotisation : 50 000 FCFA/mois (le même type familial que le secrétaire —
+ *     créé automatiquement à l'activation s'il n'existe pas encore).
+ * Un seul compte peut le consommer — ensuite il est marqué « utilisé » et la
+ * personne se reconnecte par son numéro (jamais de double compte).
+ * Lien cliquable : https://famille-mbeutetsa.pages.dev/?code=FCM-PL82US */
+export const CODE_SEED_PRESIDENT: CodeMembre = {
+  id: "cm-seed-president",
+  code: "FCM-PL82US",
+  telephone: "",
+  nomOptionnel: "",
+  cotisationTypeId: "tc-seed-50000",
+  cotisationNom: "Cotisation mensuelle — 50 000 FCFA",
+  cotisationMontant: 50000,
+  typeMembre: "bureau",
+  bureauRole: "president",
+  ville: VILLE_DEFAUT,
+  creePar: "president",
+  creeParNom: "Bureau de la Tontine",
+  creeLe: "2026-11-01T00:00:00.000Z",
+  utiliseLe: null,
+  utiliseNom: null,
+};
+
 /** Codes SEMÉS dans l'application (fonctionnent sur tout appareil). */
-const CODES_SEED: CodeMembre[] = [CODE_SEED_PREMIER];
+const CODES_SEED: CodeMembre[] = [CODE_SEED_PREMIER, CODE_SEED_PRESIDENT];
 
 /** Complète un code lu du stockage : les codes créés avant la v27 n'ont pas
  *  de ville — Yaoundé (la ville par défaut) leur est attribuée. */

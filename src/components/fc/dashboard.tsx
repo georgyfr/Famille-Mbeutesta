@@ -16,7 +16,8 @@ import { FamilyTab } from "./family-tab";
 import { ReglageNotifications } from "./reglage-notifications";
 import { LocationWizard } from "./location-wizard";
 import { TontinePage } from "./tontine-page";
-import { loadVousRole, saveVousRole } from "./tontine-bureau";
+import { loadVousRole } from "./tontine-bureau";
+import { naviguerHash } from "./poste-console";
 import { ROLE_META, ROLES_BUREAU, type RoleKey } from "./tontine-data";
 import { formatPlace, type LocationDraft } from "@/lib/fc-geo";
 import {
@@ -557,20 +558,8 @@ const ICONES_POSTE: Record<RoleKey, React.ReactNode> = {
   membre: <User className="h-4 w-4" />,
 };
 
-/** Change le hash en notifiant même à valeur identique : au retour d'une
- *  console le hash peut déjà être #president — le hashchange natif ne se
- *  déclenche pas alors, il faut prévenir la porte maquette à la main. */
-function naviguerHash(cible: string): void {
-  try {
-    if ((window.location.hash || "").toLowerCase() === `#${cible}`) {
-      window.dispatchEvent(new HashChangeEvent("hashchange"));
-    } else {
-      window.location.hash = cible;
-    }
-  } catch {
-    window.location.hash = cible;
-  }
-}
+/** Change le hash en notifiant même à valeur identique — v34 : la fonction
+ *  est partagée dans poste-console.ts (gate, main-app et dashboard l'utilisent). */
 
 function PosteBureauSwitcher() {
   const [role, setRole] = useState<RoleKey | null>(null);
@@ -621,10 +610,11 @@ function PosteBureauSwitcher() {
   );
 }
 
-/** Carte « Mon rôle dans la Tontine » — le rôle renseigné à l'inscription est
- *  rappelé ici et peut être corrigé : il ouvre la page du bureau correspondante
- *  (président, secrétaire, trésorier…) et détermine les droits dans la tontine
- *  (taux mensuel, validations d'épargnes, dettes, signalements). */
+/** Carte « Mon rôle dans la Tontine » — v34 : LECTURE SEULE. Le poste vient
+ *  UNIQUEMENT du code d'invitation remis par le bureau (plus AUCUN sélecteur
+ *  de poste ici : se déclarer président, trésorier… ouvrait la page d'un
+ *  autre statut — exactement ce que l'administrateur refuse). Un poste réel
+ *  s'obtient auprès du bureau (code d'invitation « membre du bureau »). */
 function RoleTontineCard() {
   const [role, setRole] = useState<RoleKey | null>(null);
 
@@ -633,13 +623,8 @@ function RoleTontineCard() {
     return () => clearTimeout(t);
   }, []);
 
-  const changer = (r: RoleKey) => {
-    setRole(r);
-    saveVousRole(r);
-    toast.success(`Rôle enregistré : ${ROLE_META[r].label} — votre page de la Tontine est mise à jour.`);
-  };
-
   const meta = role ? ROLE_META[role] : null;
+  const auBureau = !!role && role !== "membre";
 
   return (
     <FcCard className="p-5">
@@ -648,27 +633,20 @@ function RoleTontineCard() {
         <h3 className="fc-serif text-lg font-bold text-[#1E4D2B]">Mon rôle dans la Tontine</h3>
       </div>
       <p className="mb-3 text-[13px] leading-relaxed text-[#5C6B60]">
-        {meta?.summary ?? "Le rôle joué dans la Tontine est renseigné à l'inscription."}{" "}
-        {role && role !== "membre"
+        {meta?.summary ?? "Le rôle joué dans la Tontine est attribué par le bureau."}{" "}
+        {auBureau
           ? "Votre page du bureau vous donne vos outils : taux mensuel, validations, dettes, signalements."
-          : "En tant que membre, vous validez les décisions du bureau et vous pouvez signaler tout problème."}
+          : "Vous n'êtes pas membre du bureau — vous validez les décisions du bureau et vous pouvez signaler tout problème."}
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        <select
-          value={role ?? "membre"}
-          onChange={(e) => changer(e.target.value as RoleKey)}
-          aria-label="Mon rôle dans la Tontine"
-          className="min-h-[48px] flex-1 rounded-xl border border-[#E5DCC0] bg-[#FFFDF6] px-3 text-[14px] font-semibold text-[#2B3530] outline-none focus-visible:outline-2 focus-visible:outline-[#C89F62]"
-        >
-          {(["membre", ...ROLES_BUREAU] as RoleKey[]).map((r) => (
-            <option key={r} value={r}>{ROLE_META[r].label}</option>
-          ))}
-        </select>
         {meta && (
           <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10.5px] font-bold ${meta.badge}`}>
             {meta.label}
           </span>
         )}
+        <span className="text-[11px] italic text-[#8A9288]">
+          Attribué par le bureau via votre code d&apos;invitation — il ne se modifie pas ici.
+        </span>
       </div>
     </FcCard>
   );

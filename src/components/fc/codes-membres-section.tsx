@@ -182,7 +182,7 @@ export function CodesMembresSection(p: {
       </p>
       <p className="mt-1 select-all font-mono text-[26px] font-black tracking-[0.14em] text-[#2B3530]">{c.code}</p>
       <p className="mt-0.5 text-[11.5px] font-semibold text-[#5C6B60]">
-        {c.telephone} · {c.ville} · {c.typeMembre === "bureau" ? LIBELLES_BUREAU[c.bureauRole ?? "membre"] : "Membre simple"}
+        {c.telephone ? c.telephone : "Numéro à saisir à l'inscription"} · {c.ville} · {c.typeMembre === "bureau" ? LIBELLES_BUREAU[c.bureauRole ?? "membre"] : "Membre simple"}
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
         <Btn small tone="or" onClick={() => void copier(c.code)}>
@@ -434,7 +434,7 @@ export function CodesMembresSection(p: {
                   {codes.map((c) => (
                     <tr key={c.id} className="border-t border-[#F0E9D6] align-top">
                       <td className="px-2.5 py-2.5">
-                        <p className="text-[12px] font-bold text-[#2B3530]">{c.telephone}</p>
+                        <p className="text-[12px] font-bold text-[#2B3530]">{c.telephone || "À saisir à l'inscription"}</p>
                         <p className="text-[10px] leading-snug text-[#8A9288]">
                           {c.typeMembre === "bureau" ? `Bureau — ${c.bureauRole ? LIBELLES_BUREAU[c.bureauRole] : "poste à préciser"}` : "Membre simple"}
                           {" "}· {c.cotisationNom} ({fcfa(c.cotisationMontant)}/mois)
@@ -467,7 +467,7 @@ export function CodesMembresSection(p: {
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex min-h-[30px] items-center justify-center gap-1 rounded-lg bg-[#25D366] px-2 text-[10.5px] font-bold text-white transition hover:bg-[#1fb857]"
-                            aria-label={`Partager le code ${c.code} de ${c.telephone} via WhatsApp`}
+                            aria-label={`Partager le code ${c.code} via WhatsApp`}
                           >
                             <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
                           </a>

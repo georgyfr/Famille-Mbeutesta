@@ -154,22 +154,25 @@ function scrubTypesCotisations(): void {
   }
 }
 
-/** Réinitialise le CODE SEED du premier utilisateur (FCM-K7M2PV) : si une
- *  machine l'avait marqué « utilisé » lors d'un essai, la purge v28 efface la
- *  trace locale — le code redevient VIERGE et utilisable sur tous les
- *  appareils (chargerCodes() retombe sur la version semée dans l'app). */
+/** Réinitialise les CODES SEMÉS de l'application (FCM-K7M2PV — le premier
+ *  secrétaire ; FCM-PL82US — le président, v33) : si une machine avait marqué
+ *  l'un d'eux « utilisé » lors d'un essai, la purge efface la trace locale —
+ *  les codes redeviennent VIERGES et utilisables sur tous les appareils
+ *  (chargerCodes() retombe sur la version semée dans l'app). */
 function scrubCodeSeed(): void {
   try {
     const brut = window.localStorage.getItem("fc_codes_membres_v1");
     if (!brut) return;
     const codes = JSON.parse(brut) as { id?: string }[];
     if (!Array.isArray(codes)) return;
-    const filtre = codes.filter((c) => c?.id !== "cm-seed-premier");
+    const filtre = codes.filter(
+      (c) => c?.id !== "cm-seed-premier" && c?.id !== "cm-seed-president",
+    );
     if (filtre.length !== codes.length) {
       window.localStorage.setItem("fc_codes_membres_v1", JSON.stringify(filtre));
     }
   } catch {
-    /* illisible — le code semé reste disponible de toute façon */
+    /* illisible — les codes semés restent disponibles de toute façon */
   }
 }
 

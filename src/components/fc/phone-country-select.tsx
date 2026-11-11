@@ -71,7 +71,14 @@ export function usePhoneCountry() {
     saveCountryChoice(c.iso, true); // choix manuel → prioritaire pour toujours
   };
 
-  return { country, setCountry: setManual, ready };
+  /* Prépositionnement AUTOMATIQUE (ex. indicatif déduit d'un code d'invitation
+     sans téléphone — v33) : change le pays affiché SANS l'épingler comme
+     choix manuel — la détection future n'en est pas bloquée. */
+  const setAuto = (c: Country) => {
+    setCountryState(c);
+  };
+
+  return { country, setCountry: setManual, setAuto, ready };
 }
 
 /* ─── Sélecteur : bouton drapeau + indicatif, panneau avec recherche ─── */

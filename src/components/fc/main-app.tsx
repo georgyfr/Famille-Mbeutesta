@@ -13,6 +13,7 @@ import { Dashboard, type SessionData } from "./dashboard";
 import { LocationWizard } from "./location-wizard";
 import { RoleWizard } from "./role-wizard";
 import { loadVousRole } from "./tontine-bureau";
+import { CONSOLE_DU_ROLE, naviguerHash } from "./poste-console";
 import { purgerAppUneFois } from "./purge-app";
 import { FcSpinner } from "./ui";
 
@@ -153,7 +154,15 @@ export function MainApp() {
     setSession(null);
   }, []);
 
-  /** Localisation enregistrée → on nettoie le marqueur « plus tard » et on recharge la session. */
+  /** Localisation enregistrée → on nettoie le marqueur « plus tard » et on
+   *  recharge la session.
+   *  v34 — DEMANDE DE L'ADMINISTRATEUR : « lorsqu'une personne finit son
+   *  inscription et sa géolocalisation, la page qui suit est la page propre
+   *  au statut qu'il occupe » — si le compte porte déjà SON poste (posé par
+   *  le code du bureau), l'application ouvre DIRECTEMENT la console du poste
+   *  : président → #president, secrétaire → #secretaire, commissaire →
+   *  #commissaire, simple membre → #membre. Si le poste n'est pas encore
+   *  posé, l'assistant « Votre rôle » s'affiche d'abord (voir handleRoleDone). */
   const handleLocationSaved = useCallback(async () => {
     try {
       localStorage.removeItem("fc_loc_skipped");
@@ -162,6 +171,8 @@ export function MainApp() {
     }
     setLocSkipped(false);
     await loadSession();
+    const role = loadVousRole();
+    if (role) naviguerHash(CONSOLE_DU_ROLE[role]);
   }, [loadSession]);
 
   const skipLocation = useCallback(async () => {
@@ -177,9 +188,13 @@ export function MainApp() {
     await loadSession();
   }, [loadSession]);
 
-  /** Rôle validé juste après la géolocalisation → on entre dans l'application. */
+  /** Rôle validé juste après la géolocalisation → on entre dans l'application.
+   *  v34 — et la page qui s'ouvre est celle du poste CHOISI (console du bureau
+   *  pour les postes à console dédiée, Espace Membre pour les autres). */
   const handleRoleDone = useCallback(() => {
     setRoleChoisi(true);
+    const role = loadVousRole();
+    if (role) naviguerHash(CONSOLE_DU_ROLE[role]);
   }, []);
 
   const ready = !loading && !splashMin;

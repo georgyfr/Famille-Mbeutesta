@@ -305,23 +305,39 @@ function RenseignementScreen({
   const [lastName, setLastName] = useState(parties.length >= 3 ? parties.slice(1).join(" ") : (parties.length === 2 ? parties[1] : ""));
   const [pseudo, setPseudo] = useState("");
 
-  const { country, setCountry, ready } = usePhoneCountry();
+  const { country, setCountry, setAuto, ready } = usePhoneCountry();
   const [digits, setDigits] = useState("");
   const maxD = maxDigitsFor(country);
 
+  // v34 — le NUMÉRO INSCRIT PAR LE BUREAU sur le code fait foi : il est
+  // prérempli et affiché « Numéro du bureau ✓ ». Si la personne le modifie,
+  // un avertissement clair apparaît (le compte sera lié à CE numéro).
+  const telDuCodeRef = useRef("");
+  const telModifie = telDuCodeRef.current !== "" && onlyDigits(digits) !== telDuCodeRef.current;
+
   // Le préremplissage depuis le code s'applique UNE fois, APRÈS la détection
   // automatique du pays (sinon elle l'écraserait) — le code fait foi.
+  // v33 — code SANS téléphone (ex. le code du président) : la VILLE du code
+  // est camerounaise → l'indicatif +237 est PRÉSÉLECTIONNÉ (modifiable, sans
+  // épingler le choix) — la personne tape juste son numéro.
   const prechargeFait = useRef(false);
   useEffect(() => {
     if (!ready || prechargeFait.current) return;
     prechargeFait.current = true;
     const pays = paysDepuisTelephone(c.telephone);
-    if (pays) setCountry(pays);
-    const dial = pays?.dial ?? country.dial;
-    const brut = c.telephone.replace(/^\+/, "");
-    const d = brut.startsWith(dial) ? brut.slice(dial.length) : brut;
-    if (d) setDigits(onlyDigits(d).slice(0, maxDigitsFor(pays ?? country)));
-  }, [ready, c.telephone, country, setCountry]);
+    if (pays) {
+      setCountry(pays);
+      const dial = pays.dial;
+      const brut = c.telephone.replace(/^\+/, "");
+      const d = brut.startsWith(dial) ? brut.slice(dial.length) : brut;
+      if (d) {
+        telDuCodeRef.current = onlyDigits(d);
+        setDigits(onlyDigits(d).slice(0, maxDigitsFor(pays)));
+      }
+    } else if (c.ville) {
+      setAuto(countryByIso("CM") ?? country);
+    }
+  }, [ready]);
 
   const nomComplet = (firstName.trim().length >= 2 && lastName.trim().length >= 2) || pseudo.trim().length >= 2;
   const toutComplet = nomComplet && phoneDigitsOk(country, digits);
@@ -442,9 +458,27 @@ function RenseignementScreen({
           />
         </div>
       </div>
-      <p className="mb-4 px-1 text-center text-[12px] leading-relaxed text-[#8A9288]">
-        Votre numéro est prérempli depuis votre code — vérifiez-le et corrigez-le si nécessaire.
-      </p>
+      {/* v34 — état du numéro : celui du BUREAU fait foi (badge vert), et la
+          moindre modification déclenche un avertissement visible — le faux
+          numéro ne passe plus inaperçu. */}
+      <div aria-live="polite" className="mb-3">
+        {c.telephone ? (
+          telModifie ? (
+            <p className="rounded-xl border border-[#C89F62]/60 bg-[#FBF7EA] px-3.5 py-3 text-[12px] font-semibold leading-relaxed text-[#7A5B2E]">
+              ⚠️ Vous avez modifié le numéro enregistré par le bureau ({groupPhone(telDuCodeRef.current)}).
+              Votre compte sera lié à CE nouveau numéro — vérifiez-le soigneusement : c&apos;est lui qui recevra les notifications de la Tontine.
+            </p>
+          ) : (
+            <p className="flex items-center gap-1.5 px-1 text-[12px] font-bold text-[#2F6B45]">
+              <ShieldCheck className="h-3.5 w-3.5" /> Numéro enregistré par le bureau — vérifiez-le et corrigez-le en cas d&apos;erreur.
+            </p>
+          )
+        ) : (
+          <p className="px-1 text-[12px] font-semibold text-[#5C6B60]">
+            Le bureau n&apos;a pas enregistré de numéro sur votre code — saisissez le VÔTRE : c&apos;est lui qui recevra les notifications.
+          </p>
+        )}
+      </div>
 
       <FcButton onClick={() => void continuer()} disabled={busy || !toutComplet} className="h-[54px] w-full text-[16px]">
         {busy ? <FcSpinner /> : <ShieldCheck className="h-5 w-5" />}
