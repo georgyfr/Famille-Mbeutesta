@@ -1,3 +1,3 @@
 :HL["/_next/static/chunks/5e1ab0610a64816c.css","style"]
 :HL["/logo-famille.webp","image"]
-0:{"buildId":"VyVRwPJo1MKtF7WFHaRAw","tree":{"name":"","paramType":null,"paramKey":"","hasRuntimePrefetch":false,"slots":{"children":{"name":"__PAGE__","paramType":null,"paramKey":"__PAGE__","hasRuntimePrefetch":false,"slots":null,"isRootLayout":false}},"isRootLayout":true},"staleTime":300}
+0:{"buildId":"ua8eyZ5B704VHYei7-0_v","tree":{"name":"","paramType":null,"paramKey":"","hasRuntimePrefetch":false,"slots":{"children":{"name":"__PAGE__","paramType":null,"paramKey":"__PAGE__","hasRuntimePrefetch":false,"slots":null,"isRootLayout":false}},"isRootLayout":true},"staleTime":300}
