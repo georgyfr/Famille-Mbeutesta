@@ -6,8 +6,8 @@
 // Après l'inscription, l'application demande OÙ SE TROUVE la personne :
 // pays, région, département, ville, arrondissement et quartier.
 //
-//  1. DÉTECTION AUTOMATIQUE (gratuite, sans clé API) :
-//     GPS du téléphone → OpenStreetMap/Nominatim → secours par IP.
+//  1. DÉTECTION AUTOMATIQUE : GPS du téléphone → LocationIQ (clé de la
+//     famille) → BigDataCloud / Nominatim → secours par IP.
 //  2. VÉRIFICATION & CORRECTION : tous les champs restent modifiables,
 //     avec des listes d'aide (régions et villes du Cameroun, pays courants).
 //  3. CONFIRMATION & ENREGISTREMENT : récapitulatif clair puis enregistrement.

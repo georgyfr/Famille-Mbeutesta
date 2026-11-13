@@ -1,17 +1,17 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Détection de localisation — 100 % GRATUIT, SANS CLÉ API, ILLIMITÉ
+// Détection de localisation — SERVICES GRATUITS + CLÉ LOCATIONIQ (famille)
 //
-// v34 — CASCADE PARALLÈLE (signalement : « incapable de détecter le
-// département, ni l'arrondissement, voire même le quartier »). CAUSE TROUVÉE :
-// Nominatim (OpenStreetMap) RENVOIE 429 « Too many requests » dès que
-// plusieurs personnes partagent la même IP publique (NAT des opérateurs
-// mobiles — cas RÉEL au Cameroun) — l'ancienne cascade en série retombait
-// alors sur BigDataCloud DONT LE CODE IGNORAIT la hiérarchie complète
-// (localityInfo) : département et arrondissement restaient VIDES.
+// v34-quater — LOCATIONIQ INTÉGRÉE (clé gratuite souscrite par
+// l'administrateur, 5 000 requêtes/jour, quota DÉDIÉ : jamais de 429 lié
+// au NAT des opérateurs mobiles camerounais). Format de réponse identique
+// à Nominatim, hiérarchie complète du Cameroun vérifiée en direct :
+//   Rue Tsoungui Akoa · suburb=Ngoa-Ékélé (QUARTIER) · city_district=
+//   Yaoundé III (ARRONDISSEMENT) · city=Yaoundé (VILLE) · county=Mfoundi
+//   (DÉPARTEMENT) · state=Région du Centre (RÉGION) · country=Cameroun.
 //
-// NOUVELLE ARCHITECTURE (toutes gratuites, sans clé, sans compte) :
+// ARCHITECTURE (cascade PARALLÈLE, fusion champ par champ) :
 //  1. GPS du navigateur (navigator.geolocation) — intégré au téléphone ;
 //  2. BigDataCloud « reverse-geocode-client » — GRATUIT, ILLIMITÉ côté
 //     client, hiérarchie COMPLÈTE du Cameroun (localityInfo.administrative) :
@@ -19,16 +19,13 @@
 //       7 = ville · 8 = ARRONDISSEMENT (Douala I / Yaoundé VI) —
 //     c'est la BASE GARANTIE : jamais de champ administratif vide ;
 //  3. Nominatim (OpenStreetMap) — en PARALLÈLE, pour le QUARTIER
-//     (suburb/neighbourhood, zoom 18) : 1 seule requête, avec un 2ᵉ essai
-//     automatique si 429 ;
-//  4. GeoCode.xyz — dernier secours pour le QUARTIER (gratuit, sans clé) ;
-//  5. Localisation par IP (si GPS refusé) : ipapi.co → freeipapi.com →
+//     (suburb/neighbourhood, zoom 18) : 1 relance automatique si 429 ;
+//  4. LocationIQ — en PARALLÈLE aussi (clé pk. de la famille) : son
+//     QUARTIER, plus fiable, est PRIORITAIRE dans la fusion ;
+//  5. GeoCode.xyz — dernier secours pour le QUARTIER (gratuit, sans clé) ;
+//  6. Localisation par IP (si GPS refusé) : ipapi.co → freeipapi.com →
 //     ipwho.is.
-// Les réponses sont FUSIONNÉES champ par champ : BigDataCloud pose la
-// hiérarchie administrative, Nominatim/GeoCode.xyz ajoutent le quartier —
 // AUCUN champ ne peut rester vide s'il existe chez l'un des fournisseurs.
-//
-// Aucune de ces APIs ne demande de carte bancaire ni de compte.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type LocationDraft = {
@@ -134,6 +131,15 @@ function nettoyerVille(s: string): string {
     .trim();
 }
 
+/** « Région du Centre » → « Centre » — LocationIQ francise les régions avec
+ *  un préfixe « Région … » ; l'application les stocke nues (CM_REGIONS). */
+function nettoyerRegion(s: string): string {
+  return (s ?? "")
+    .replace(/^r[ée]gion\s+(d[ue]\s+|des\s+|de\s+l[’']\s*|de\s+|d[’'])/i, "")
+    .replace(/^r[ée]gion\s+/i, "")
+    .trim();
+}
+
 function fromNominatim(json: { address?: NominatimAddress; lat?: string; lon?: string }, lat: number, lon: number, accuracy: number | null): LocationDraft {
   const a = json.address ?? {};
   // VILLE — la « grande entité » : municipality (communauté urbaine) sinon
@@ -152,7 +158,7 @@ function fromNominatim(json: { address?: NominatimAddress; lat?: string; lon?: s
   }
   return {
     country: pick(a, ["country"]),
-    region: pick(a, ["state", "region"]),
+    region: nettoyerRegion(pick(a, ["state", "region"])),
     department: pick(a, ["county", "state_district"]),
     city: ville,
     arrondissement,
@@ -175,6 +181,38 @@ async function reverseNominatim(lat: number, lon: number, accuracy: number | nul
   try {
     const res = await fetch(url, { signal: ctrl.signal, headers: { Accept: "application/json" } });
     if (!res.ok) throw new Error(`Nominatim HTTP ${res.status}`);
+    const json = (await res.json()) as { address?: NominatimAddress };
+    return fromNominatim(json, lat, lon, accuracy);
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/* ─── 2 bis. LocationIQ — clé gratuite fournie par l'ADMINISTRATEUR ──
+   v34-quater : l'administrateur a souscrit le compte gratuit LocationIQ
+   (5 000 requêtes/jour) et fourni sa clé publique « pk. ». Format de
+   réponse IDENTIQUE à Nominatim (données OpenStreetMap) : fromNominatim()
+   le décode directement. Testé en direct sur Yaoundé (3.848/11.502) :
+     suburb=Ngoa-Ékélé (QUARTIER) · city_district=Yaoundé III
+     (ARRONDISSEMENT) · city=Yaoundé (VILLE) · county=Mfoundi (DÉPARTEMENT)
+     · state=Région du Centre (RÉGION) · country=Cameroun — tout en
+     français (accept-language=fr).
+   Avantages : quota DÉDIÉ (jamais de 429 lié au NAT des opérateurs),
+   serveur us1/eu1 au choix. La clé « pk. » est une clé publique conçue
+   pour tourner côté navigateur ; elle peut être restreinte au domaine de
+   l'application depuis le tableau de bord LocationIQ (sécurité). */
+export const LOCATIONIQ_KEY = "pk.73359b2869b0ea9673d10a11731990c0";
+
+async function reverseLocationIQ(lat: number, lon: number, accuracy: number | null): Promise<LocationDraft> {
+  const url =
+    `https://us1.locationiq.com/v1/reverse.php?key=${LOCATIONIQ_KEY}` +
+    `&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}` +
+    `&format=json&zoom=18&addressdetails=1&accept-language=fr`;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 12000);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal, headers: { Accept: "application/json" } });
+    if (!res.ok) throw new Error(`LocationIQ HTTP ${res.status}`);
     const json = (await res.json()) as { address?: NominatimAddress };
     return fromNominatim(json, lat, lon, accuracy);
   } finally {
@@ -267,20 +305,42 @@ async function reverseGeocodeXyz(lat: number, lon: number): Promise<string> {
 
 /* ─── FUSION champ par champ — la garantie « jamais de champ vide » ──
     a = base (BigDataCloud — hiérarchie administrative garantie),
-    b = enrichissement (Nominatim/GeoCode.xyz — surtout le QUARTIER).
+    b = enrichissement (Nominatim / LocationIQ / GeoCode.xyz).
     Chaque champ vide de a est comblé par b ; a garde la priorité quand
-    les deux sont remplis (sauf quartier : b est spécialisé). */
-function fusionnerDraft(base: LocationDraft, enrich: LocationDraft): LocationDraft {
+    les deux sont remplis (sauf quartier : b est spécialisé).
+    v34-quater — TEXTE PROPRE : quand les deux fournisseurs nomment la MÊME
+    entité à des accents près (« Yaounde III » ≡ « Yaoundé III »), c'est le
+    texte de l'enrichissement qui gagne — LocationIQ/Nominatim renvoient des
+    noms correctement accentués quand BigDataCloud casse les accents. */
+function memeTexte(a: string, b: string): boolean {
+  const norm = (x: string) =>
+    x
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+  return norm(a) === norm(b);
+}
+
+function fusionnerChamp(base: string, enrich: string): string {
   const vide = (x: string) => !x || !x.trim();
+  if (vide(enrich)) return base;
+  if (vide(base)) return enrich;
+  return memeTexte(base, enrich) ? enrich : base;
+}
+
+function fusionnerDraft(base: LocationDraft, enrich: LocationDraft): LocationDraft {
   return {
-    country: vide(base.country) ? enrich.country : base.country,
-    region: vide(base.region) ? enrich.region : base.region,
-    department: vide(base.department) ? enrich.department : base.department,
+    country: fusionnerChamp(base.country, enrich.country),
+    region: fusionnerChamp(base.region, enrich.region),
+    department: fusionnerChamp(base.department, enrich.department),
     // VILLE — BigDataCloud donne la vraie ville (« Yaoundé », « Douala ») ;
-    // Nominatim donne parfois la commune détaillée — la base reste prioritaire.
-    city: vide(base.city) ? enrich.city : base.city,
-    arrondissement: vide(base.arrondissement) ? enrich.arrondissement : base.arrondissement,
-    quartier: vide(enrich.quartier) ? base.quartier : enrich.quartier,
+    // Nominatim donne parfois la commune détaillée — la base reste
+    // prioritaire, sauf même entité (alors le texte propre est retenu).
+    city: fusionnerChamp(base.city, enrich.city),
+    arrondissement: fusionnerChamp(base.arrondissement, enrich.arrondissement),
+    quartier: !enrich.quartier.trim() ? base.quartier : enrich.quartier,
     latitude: base.latitude ?? enrich.latitude,
     longitude: base.longitude ?? enrich.longitude,
     accuracy: base.accuracy ?? enrich.accuracy,
@@ -371,29 +431,37 @@ export async function detectLocation(): Promise<DetectOutcome> {
   }
 
   if (lat !== null && lon !== null) {
-    // v34 — CASCADE PARALLÈLE : BigDataCloud (base garantie : région,
-    // département, ville, arrondissement) tourne EN MÊME TEMPS que Nominatim
-    // (le quartier). Les deux réponses sont fusionnées champ par champ :
-    // même si Nominatim renvoie 429 (IP partagée), la hiérarchie complète
-    // arrive quand même — seul le quartier peut alors manquer.
-    const base = await reverseBigDataCloud(lat, lon, accuracy);
-    let enrich: LocationDraft | null = null;
-    try {
-      enrich = await nominatimAvecRelance(lat, lon, accuracy);
-    } catch {
-      enrich = null;
+    // v34-quater — CASCADE PARALLÈLE à 3 fournisseurs : BigDataCloud (base
+    // garantie : région, département, ville, arrondissement), Nominatim
+    // (quartier) et LocationIQ (clé gratuite de l'administrateur, quota
+    // dédié 5 000/jour — jamais de 429) tournent EN MÊME TEMPS. Les
+    // réponses sont fusionnées champ par champ dans l'ordre :
+    // BigDataCloud pose la hiérarchie administrative, Nominatim ajoute le
+    // quartier, LocationIQ finalise (son quartier, plus fiable, est
+    // prioritaire) — aucun champ ne peut rester vide s'il existe chez
+    // l'un des fournisseurs.
+    const [bdcRes, liqRes, nomRes] = await Promise.allSettled([
+      reverseBigDataCloud(lat, lon, accuracy),
+      reverseLocationIQ(lat, lon, accuracy),
+      nominatimAvecRelance(lat, lon, accuracy),
+    ]);
+    const bdc = bdcRes.status === "fulfilled" ? bdcRes.value : null;
+    const liq = liqRes.status === "fulfilled" ? liqRes.value : null;
+    const nom = nomRes.status === "fulfilled" ? nomRes.value : null;
+    const ordre = [bdc, nom, liq].filter(Boolean) as LocationDraft[];
+    if (ordre.length === 0) throw new Error("Services de localisation indisponibles (connexion limitée).");
+    let draft = ordre[0];
+    for (const enrich of ordre.slice(1)) draft = fusionnerDraft(draft, enrich);
+    // Dernier secours pour le QUARTIER : GeoCode.xyz (gratuit, sans clé).
+    if (!draft.quartier.trim()) {
+      try {
+        const quartier = await reverseGeocodeXyz(lat, lon);
+        if (quartier) draft = { ...draft, quartier };
+      } catch {
+        /* pas de quartier — la hiérarchie administrative reste complète */
+      }
     }
-    if (enrich) {
-      return { draft: fusionnerDraft(base, enrich), method: "gps" };
-    }
-    // Nominatim indisponible → GeoCode.xyz tente le QUARTIER seul.
-    try {
-      const quartier = await reverseGeocodeXyz(lat, lon);
-      if (quartier) return { draft: { ...base, quartier }, method: "gps" };
-    } catch {
-      /* pas de quartier — la hiérarchie administrative reste complète */
-    }
-    return { draft: base, method: "gps" };
+    return { draft, method: "gps" };
   }
 
   const ipDraft = await ipGeolocate();
@@ -491,7 +559,30 @@ export async function forwardGeocode(d: {
     .filter(Boolean)
     .join(", ");
   if (!q) return null;
-  // 1) Nominatim — adresse complète (quartier inclus quand il connaît)
+  // 1) LocationIQ — clé gratuite fournie par l'administrateur (quota dédié,
+  //    jamais de 429) : le plus fiable, essayé en premier.
+  {
+    const urlLiq =
+      `https://us1.locationiq.com/v1/search.php?key=${LOCATIONIQ_KEY}` +
+      `&q=${encodeURIComponent(q)}&format=json&limit=1&accept-language=fr`;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 12000);
+    try {
+      const res = await fetch(urlLiq, { signal: ctrl.signal, headers: { Accept: "application/json" } });
+      if (res.ok) {
+        const arr = (await res.json()) as { lat?: string; lon?: string }[];
+        const first = arr?.[0];
+        const lat = parseFloat(String(first?.lat ?? ""));
+        const lon = parseFloat(String(first?.lon ?? ""));
+        if (isFinite(lat) && isFinite(lon)) return { latitude: lat, longitude: lon };
+      }
+    } catch {
+      /* LocationIQ indisponible → secours ci-dessous */
+    } finally {
+      clearTimeout(t);
+    }
+  }
+  // 2) Nominatim — adresse complète (quartier inclus quand il connaît)
   const url =
     `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=fr` +
     `&q=${encodeURIComponent(q)}`;
@@ -511,7 +602,7 @@ export async function forwardGeocode(d: {
   } finally {
     clearTimeout(t);
   }
-  // 2) Open-Meteo geocoding — GRATUIT, sans clé, jamais de 429 — la VILLE
+  // 3) Open-Meteo geocoding — GRATUIT, sans clé, jamais de 429 — la VILLE
   //    suffit : les coordonnées servent à centrer la carte de la famille.
   const ville = [d.city, d.region, d.country].map((x) => (x || "").trim()).filter(Boolean).join(", ");
   if (!ville) return null;
