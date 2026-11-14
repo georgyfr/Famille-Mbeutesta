@@ -3,6 +3,7 @@
    que detectLocation() renvoie la hiérarchie complète :
    · Yaoundé (Rue Tsoungui Akoa) → Centre · Mfoundi · Yaoundé · Yaoundé III · Ngoa-Ékélé ;
    · Douala (Akwa) → Littoral · Wouri · Douala · Douala I · quartier. */
+export {};
 const normaliser = (x: string) =>
   (x || "")
     .normalize("NFD")

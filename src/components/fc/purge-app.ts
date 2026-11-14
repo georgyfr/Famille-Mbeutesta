@@ -155,11 +155,12 @@ function scrubTypesCotisations(): void {
 }
 
 /** Réinitialise les CODES SEMÉS de l'application (FCM-K7M2PV — le premier
- *  secrétaire ; FCM-A3V29V — le président Albert Fotsos, v34) : si une
- *  machine avait marqué l'un d'eux « utilisé » lors d'un essai, la purge
- *  efface la trace locale — les codes redeviennent VIERGES et utilisables
- *  sur tous les appareils (chargerCodes() retombe sur la version semée dans
- *  l'app ; l'ancien FCM-PL82US est écarté à la lecture par chargerCodes). */
+ *  secrétaire ; FCM-A3V29V — le président Albert Fotsos ; FCM-C7QKPT — le
+ *  Coach, v34-quinquies) : si une machine avait marqué l'un d'eux « utilisé »
+ *  lors d'un essai, la purge efface la trace locale — les codes redeviennent
+ *  VIERGES et utilisables sur tous les appareils (chargerCodes() retombe sur
+ *  la version semée dans l'app ; l'ancien FCM-PL82US est écarté à la lecture
+ *  par chargerCodes). */
 function scrubCodeSeed(): void {
   try {
     const brut = window.localStorage.getItem("fc_codes_membres_v1");
@@ -167,7 +168,10 @@ function scrubCodeSeed(): void {
     const codes = JSON.parse(brut) as { id?: string }[];
     if (!Array.isArray(codes)) return;
     const filtre = codes.filter(
-      (c) => c?.id !== "cm-seed-premier" && c?.id !== "cm-seed-president",
+      (c) =>
+        c?.id !== "cm-seed-premier" &&
+        c?.id !== "cm-seed-president" &&
+        c?.id !== "cm-seed-coach",
     );
     if (filtre.length !== codes.length) {
       window.localStorage.setItem("fc_codes_membres_v1", JSON.stringify(filtre));

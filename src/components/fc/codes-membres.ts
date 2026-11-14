@@ -141,8 +141,47 @@ export const CODE_SEED_PRESIDENT: CodeMembre = {
   utiliseNom: null,
 };
 
+/* ═══ CODE SEMÉ — LE COACH (v34-quinquies) ═══
+ * Demande de l'administrateur : « génère un nouveau coach qui sera un membre
+ * simple et qui fait la tontine de 30 000 francs, son numéro de téléphone
+ * est +237699872156 ».
+ * Comme les deux codes du bureau, ce code est EMBARQUÉ dans l'application :
+ * il fonctionne sur N'IMPORTE QUEL appareil, N'EXPIRE JAMAIS et est
+ * consommable une seule fois (ensuite reconnexion par le numéro).
+ *   · appelation : « Coach » (prérempli au champ prénom — la personne
+ *     complète son nom ou son pseudo à la page renseignements) ;
+ *   · téléphone : +237 6 99 87 21 56 (prérempli, vérifié et modifiable) ;
+ *   · type : MEMBRE SIMPLE (aucun poste du bureau — sa page « Membre »
+ *     s'ouvre après la géolocalisation ; il voit les autres membres mais
+ *     UNIQUEMENT ses propres cotisations, épargnes et prêts) ;
+ *   · cotisation : 30 000 FCFA/mois (type « tc-seed-30000 » créé
+ *     automatiquement à l'activation s'il n'existe pas encore) ;
+ *   · ville : Yaoundé (la tontine par défaut de la famille).
+ * AUCUNE notification ne part à la génération du code — elles ne partent
+ * qu'à l'inscription (nom + confirmation du numéro) : aux AUTRES membres
+ * « Coach a rejoint le groupe », à LUI « Bienvenue Coach » avec le lien
+ * vers la suite (géolocalisation puis sa page de Membre).
+ * Lien cliquable : https://famille-mbeutetsa.pages.dev/?code=FCM-C7QKPT */
+export const CODE_SEED_COACH: CodeMembre = {
+  id: "cm-seed-coach",
+  code: "FCM-C7QKPT",
+  telephone: "+237699872156",
+  nomOptionnel: "Coach",
+  cotisationTypeId: "tc-seed-30000",
+  cotisationNom: "Cotisation mensuelle — 30 000 FCFA",
+  cotisationMontant: 30000,
+  typeMembre: "simple",
+  bureauRole: null,
+  ville: VILLE_DEFAUT,
+  creePar: "president",
+  creeParNom: "Bureau de la Tontine",
+  creeLe: "2026-11-13T00:00:00.000Z",
+  utiliseLe: null,
+  utiliseNom: null,
+};
+
 /** Codes SEMÉS dans l'application (fonctionnent sur tout appareil). */
-const CODES_SEED: CodeMembre[] = [CODE_SEED_PREMIER, CODE_SEED_PRESIDENT];
+const CODES_SEED: CodeMembre[] = [CODE_SEED_PREMIER, CODE_SEED_PRESIDENT, CODE_SEED_COACH];
 
 /** Complète un code lu du stockage : les codes créés avant la v27 n'ont pas
  *  de ville — Yaoundé (la ville par défaut) leur est attribuée. */
@@ -152,8 +191,8 @@ function completeVille(c: CodeMembre): CodeMembre {
 
 /** Lit tous les codes : ceux générés par le bureau (stockage local) PLUS les
  *  codes semés dans l'application (v27 — le tout premier utilisateur ; v34 —
- *  le président Albert Fotsos). Le plus récent d'abord ; les semés n'y
- *  figurent qu'une fois (jamais en double).
+ *  le président Albert Fotsos ; v34-quinquies — le Coach). Le plus récent
+ *  d'abord ; les semés n'y figurent qu'une fois (jamais en double).
  *  v34 — RETRAIT SILENCIEUX des ANCIENTS codes semés : un appareil qui aurait
  *  stocké une version remplacée d'un seed (ex. FCM-PL82US, l'ancien code du
  *  président) ne doit plus jamais la proposer — elle est écartée à la lecture,

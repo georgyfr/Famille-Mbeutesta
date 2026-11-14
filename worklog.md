@@ -1812,3 +1812,20 @@ Stage Summary:
 - LINT : 0 erreur sur les fichiers modifiés (13 erreurs TOUTES dans .next-demo minifié préexistant). TSC : 44 erreurs TOUTES préexistantes — 0 nouvelle.
 - DÉPLOIEMENT : Pages v34-quater (ca33152c) — production famille-mbeutetsa.pages.dev vérifiée (HTTP 200, clé présente dans le chunk déployé 2ef03f45). .env.cloudflare recréé (workspace renouvelé), token vérifié → compte « Famille mbeutetsa » ead74f172a86c9debb937c356976260f.
 - GIT : commit local — PUSH GitHub TOUJOURS EN ATTENTE (token GitHub perdu avec le workspace ; le redonner pour pousser sur georgyfr/Famille-Mbeutesta).
+
+## Task 78-quinquies — v34 : NOUVEAU CODE SEMÉ « LE COACH » (FCM-C7QKPT — membre simple, 30 000 FCFA/mois, +237699872156)
+
+- DEMANDE DE L'ADMINISTRATEUR : « génère un nouveau coach qui sera un membre simple et qui fait la tontine de 30000 francs. son numero de tel est +237699872156 ».
+- 1. CODE SEMÉ AJOUTÉ (codes-membres.ts) : CODE_SEED_COACH — id cm-seed-coach, code FCM-C7QKPT (alphabet sans O/I/0/1), téléphone +237699872156, nomOptionnel « Coach » (prérempli au champ prénom — la personne complète son nom ou son pseudo), cotisationTypeId tc-seed-30000 (« Cotisation mensuelle — 30 000 FCFA », type créé automatiquement à l'activation), typeMembre « simple » (bureauRole null — AUCUN poste du bureau), ville Yaoundé. Ajouté au tableau CODES_SEED → fonctionne sur N'IMPORTE QUEL appareil, N'EXPIRE JAMAIS, consommable une seule fois (ensuite reconnexion par le numéro). Lien cliquable : https://famille-mbeutetsa.pages.dev/?code=FCM-C7QKPT.
+- 2. SCRUB MAINTENU (purge-app.ts scrubCodeSeed) : cm-seed-coach ajouté aux ids protégés — si un appareil de test avait marqué le code « utilisé », la purge le fait redevenir vierge (même mécanique que FCM-K7M2PV et FCM-A3V29V).
+- 3. COMPORTEMENT AUTOMATIQUE (aucun nouveau code de flux nécessaire) :
+  · Page renseignements : bandeau « FCM-C7QKPT · Membre simple · Tontine de Yaoundé · 30 000 FCFA/mois » + prénom « Coach » + téléphone « 6 99 87 21 56 » préremplis (indicatif +237 épinglé) + badge « Numéro du bureau — corrigez-le si besoin » ;
+  · AUCUNE notification à la génération — uniquement à l'inscription complétée : aux autres « Coach a rejoint le groupe » (exclusion de son propre appareil), à lui « Bienvenue Coach » → clic → géolocalisation ;
+  · Redirection par poste : après la géolocalisation, sa page « Membre » s'ouvre (#membre) — membre simple voit les autres membres mais UNIQUEMENT ses cotisations/épargnes/prêts (isolation stricte déjà en place) ;
+  · Futurs membres (bureau) : « Futur membre · +237 6 99 87 21 56 » — allocations possibles avant son arrivée (prêts, épargnes, cotisation 30 000), tout remappé vers son compte réel à l'activation.
+- 4. TSC : retour à 44 erreurs TOUTES préexistantes (les 2 erreurs du script test-geo-cascade.ts corrigées — module manquant export {}). LINT : 0 erreur sur les fichiers modifiés.
+- 5. E2E LOCAL + PRODUCTION (agent-browser 390, code NON consommé — aucune notification réelle) :
+  · Local /?code=FCM-C7QKPT et production famille-mbeutetsa.pages.dev/?code=FCM-C7QKPT → page renseignements PRÉREMPLIE (Coach / 6 99 87 21 56 / +237 / Membre simple / Yaoundé / 30 000 FCFA/mois) — bouton Continuer reste verrouillé tant que la personne n'a pas complété son nom ;
+  · 0 erreur console/page en local comme en production.
+- DÉPLOIEMENT : Pages v34-quinquies (déploiement 3fae8c07) — code présent dans le chunk déployé (0859e809). .env.cloudflare recréé à nouveau (workspace renouvelé), token vérifié.
+- GIT : commit local — PUSH GitHub TOUJOURS EN ATTENTE (token GitHub perdu ; le redonner pour pousser sur georgyfr/Famille-Mbeutesta).
