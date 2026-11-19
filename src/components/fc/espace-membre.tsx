@@ -43,11 +43,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
-  Bell, CalendarCheck, CalendarClock, CalendarDays, CheckCircle2, ClipboardList, Coins, Coffee,
-  Crown, FileText, Gavel, HandCoins, HandHeart, Landmark, LogOut, Mail, MessageSquarePlus, Mic,
-  PiggyBank, ReceiptText, ScrollText, Send, Square, Trash2, TrendingUp, User, UserCheck, Users,
+  Bell, CalendarCheck, CalendarClock, CalendarDays, CheckCircle2, ChevronDown, ClipboardList, Coins, Coffee,
+  Crown, FileText, Gavel, HandCoins, HandHeart, Landmark, Lock, LogOut, Mail, MapPinned, MessageSquarePlus, Mic,
+  Navigation, PiggyBank, ReceiptText, ScrollText, Send, Square, Trash2, TrendingUp, User, UserCheck, Users,
   Wallet, X,
 } from "lucide-react";
+import { FcRouteMap, type DestCarte } from "./fc-route-map";
+import { FcGuideMap } from "./fc-guide-map";
 import { FcCard } from "./ui";
 import { ReglageNotifications } from "./reglage-notifications";
 import { api } from "@/lib/fc-client";
@@ -62,10 +64,10 @@ import {
   loadMontants, loadPrets, loadEpargnes, moisDuTour, saveEpargnes, savePrets, secondSunday,
   type Epargne, type Member, type Pret, type RoleKey,
 } from "./tontine-data";
-import { loadTypesCotisation, saveTypesCotisation, typeDuMembre, cotisationDuMembre, type TypeCotisation } from "./cotisations-types";
+import { loadTypesCotisation, typeDuMembre, cotisationDuMembre, type TypeCotisation } from "./cotisations-types";
 import { loadCollations, collationDuMembre, type Collation } from "./collations";
 import {
-  loadEpargnesReunion, saveEpargnesReunion, loadPretsReunion, savePretsReunion,
+  loadEpargnesReunion, loadPretsReunion, savePretsReunion,
   interetsAttribution, type AttributionReunion,
 } from "./registres-bureau";
 import {
@@ -105,6 +107,15 @@ type Moi = {
 const DEMO_MOI: Moi = {
   id: "f07", nom: "Patrick Talla", phone: "+237 6 96 74 20 51", city: "Douala",
   tour: 7, role: "membre", connecte: false,
+};
+
+/** Position GPS d'un membre de l'annuaire famille (positions VALIDÉES —
+ *  /api/family/locations) : sert au calendrier de cotisations pour le trajet
+ *  jusqu'au domicile du bénéficiaire de la réunion. */
+type PositionFamille = {
+  id: string; fullName: string; isMe: boolean;
+  city: string | null; arrondissement: string | null; quartier: string | null;
+  latitude: number; longitude: number;
 };
 
 /** Nom normalisé pour les rapprochements (comme membres-app.ts). */
@@ -415,7 +426,7 @@ function MembreAccueil(p: { ctx: CtxMembre; aller: (t: TabKey) => void }): React
 
   const tauxEpargne = regl.epargne.tauxFixe ? regl.epargne.tauxMensuel : 3;
   const maCotis = cotisationDuMembre(moi.id, typesCotis, TONTINE.montantCotisation);
-  const mesCollations = collationDuMembre(moi.id, collations);
+  const mesCollations = collationDuMembre(moi.id, collations) || 2000; // défaut fixé par le bureau
   const monMois = cotisMois[moi.id] ?? { cotisation: false, collation: false };
   const mesEpargnes = epargnes.filter((e) => e.membreId === moi.id);
   const soldeEpargne = mesEpargnes.reduce((s, e) => s + e.montant, 0);
@@ -434,13 +445,20 @@ function MembreAccueil(p: { ctx: CtxMembre; aller: (t: TabKey) => void }): React
   const stats = statsPresence(presences, moi.id, moisKey, rachatAuto);
   const prochainDimanche = secondSunday(p.ctx.annee, moisCourantIdx);
   const monMoisTour = moisDuTour(moi.tour);
+  /* — v37 : le montant du mois suit le bénéficiaire (celui qui cotise 30 000
+   *    verse toujours 30 000 ; celui qui cotise plus verse le taux du
+   *    bénéficiaire quand il est plus bas). — */
+  const benefMois = roster.find((m) => m.tour === moisCourantIdx + 1) ?? null;
+  const maCotisDuMois = benefMois
+    ? Math.min(maCotis, cotisationDuMembre(benefMois.id, typesCotis, TONTINE.montantCotisation))
+    : maCotis;
 
   return (
     <>
       {/* — KPIs de ma vie de membre — */}
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         <button type="button" onClick={() => p.aller("cotisations")} className="text-left">
-          <KpiCard icon={<Wallet className="h-4 w-4" />} label="Ma cotisation du mois" value={fcfa(maCotis + mesCollations)}
+          <KpiCard icon={<Wallet className="h-4 w-4" />} label="Ma cotisation du mois" value={fcfa(maCotisDuMois + mesCollations)}
             sub={monMois.cotisation ? "à jour — merci !" : "à cotiser"}
             accent={monMois.cotisation ? "#2F6B45" : "#8A6420"} />
         </button>
@@ -547,46 +565,55 @@ function MembreAccueil(p: { ctx: CtxMembre; aller: (t: TabKey) => void }): React
 /* ══════════════════════════════ MES COTISATIONS & COLLATIONS ══════════════════════════════ */
 
 function MesCotisationsTab(p: { ctx: CtxMembre }): ReactNode {
-  const { moi, cotisMois, majCotisMois } = p.ctx;
+  const { moi, roster, cotisMois, majCotisMois, annee, moisCourantIdx } = p.ctx;
   const [typesCotis, setTypesCotis] = useState<TypeCotisation[]>([]);
   const [collations, setCollations] = useState<Collation[]>([]);
+  const [positions, setPositions] = useState<PositionFamille[]>([]);
+  const [moisOuvert, setMoisOuvert] = useState<number | null>(null);
+  const [guidage, setGuidage] = useState<DestCarte | null>(null);
 
   useEffect(() => {
     const t0 = setTimeout(() => {
       setTypesCotis(loadTypesCotisation());
       setCollations(loadCollations());
       loadMontants(); // applique la cotisation de base persistée à TONTINE
+      // Annuaire localisé — trajets jusqu'au domicile du bénéficiaire du mois.
+      api<{ ok: boolean; members?: PositionFamille[] }>("/api/family/locations")
+        .then((res) => setPositions(res.members ?? []))
+        .catch(() => { /* hors connexion — le calendrier reste lisible */ });
     }, 0);
     return () => clearTimeout(t0);
   }, [p.ctx.tick]);
 
+  const base = TONTINE.montantCotisation;
+  const tauxDe = (id: string) => cotisationDuMembre(id, typesCotis, base);
   const monType = typeDuMembre(moi.id, typesCotis);
-  const maCotis = cotisationDuMembre(moi.id, typesCotis, TONTINE.montantCotisation);
-  const mesCollations = collationDuMembre(moi.id, collations);
-  const total = maCotis + mesCollations;
+  const maCotis = tauxDe(moi.id);
+  const mesCollations = collationDuMembre(moi.id, collations) || 2000; // défaut fixé par le bureau
   const monMois = cotisMois[moi.id] ?? { cotisation: false, collation: false };
   const aJour = monMois.cotisation;
   const moisLabel = labelMoisKey(p.ctx.moisKey);
 
-  /* — ELLE/IL CHOISIT son type de cotisation (règle de la maison : UNE seule) — */
-  const choisirType = (id: string) => {
-    const types = loadTypesCotisation().map((t) => ({
-      ...t,
-      membreIds: t.membreIds.filter((m) => m !== moi.id),
-    }));
-    if (id) {
-      const idx = types.findIndex((t) => t.id === id);
-      if (idx >= 0) types[idx] = { ...types[idx], membreIds: [...types[idx].membreIds, moi.id] };
-    }
-    saveTypesCotisation(types);
-    setTypesCotis(types);
-    const t = types.find((x) => x.id === id);
-    toast.success("Votre type de cotisation est enregistré", {
-      description: t
-        ? `Vous cotiserez ${fcfa(t.montant)} par mois (« ${t.nom} »).`
-        : `Vous revenez à la cotisation de base (${fcfa(TONTINE.montantCotisation)}/mois).`,
-    });
-  };
+  /* — v37 — RÈGLE DU BUREAU : le type de cotisation est ATTRIBUÉ par le
+   *    secrétaire ou le président — le membre le voit en LECTURE SEULE. Le
+   *    montant du mois suit le bénéficiaire de la réunion : celui qui cotise
+   *    30 000 verse toujours 30 000 (même si le bénéficiaire est à 50 000) ;
+   *    celui qui cotise 50 000 verse 30 000 quand le bénéficiaire est un
+   *    membre à 30 000. Sans bénéficiaire ce mois-ci (ou assemblée générale),
+   *    chacun verse son taux normal. — */
+  const benefMois = roster.find((m) => m.tour === moisCourantIdx + 1) ?? null;
+  const maCotisDuMois = benefMois ? Math.min(maCotis, tauxDe(benefMois.id)) : maCotis;
+  const total = maCotisDuMois + mesCollations;
+  const ligneBenef = benefMois
+    ? benefMois.id === moi.id
+      ? `MON tour — je cotise aussi ${fcfa(maCotisDuMois)}`
+      : `Bénéficiaire : ${benefMois.name} — je cotise ${fcfa(maCotisDuMois)}`
+    : moisCourantIdx === 11
+      ? "Assemblée générale — pas de pot ce mois-ci"
+      : "Aucun bénéficiaire désigné ce mois-ci";
+
+  const potDuMois = (benefId: string) => roster.reduce((s, m) => s + Math.min(tauxDe(m.id), tauxDe(benefId)), 0);
+  const collationsDuMois = roster.reduce((s, m) => s + collationDuMembre(m.id, collations), 0);
 
   const cotiser = () => {
     if (aJour) { toast("Votre cotisation du mois est déjà enregistrée"); return; }
@@ -604,81 +631,160 @@ function MesCotisationsTab(p: { ctx: CtxMembre }): ReactNode {
     });
   };
 
+  const destDe = (benef: Member): DestCarte | null => {
+    const pos = positions.find((x) => x.id === benef.id);
+    if (!pos) return null;
+    return {
+      nom: benef.name, estVous: benef.id === moi.id,
+      quartier: pos.quartier, arrondissement: pos.arrondissement,
+      city: pos.city, latitude: pos.latitude, longitude: pos.longitude,
+    };
+  };
+
   return (
     <>
-      <FcCard className="overflow-hidden">
-        <div className="flex items-start gap-3 bg-[#3D6B72] px-4 py-3.5 text-white">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/15"><Wallet className="h-4.5 w-4.5" /></span>
-          <div>
-            <p className="fc-serif text-[15px] font-bold">Je cotise comme tout le monde</p>
-            <p className="mt-0.5 text-[12px] leading-relaxed text-white/85">
-              Choisissez votre type puis cotisez.
+      <FcCard className="p-4">
+        {/* — MON TYPE DE COTISATIONS : attribué par le bureau, LECTURE SEULE — */}
+        <div className="flex items-center justify-between gap-2 rounded-2xl border border-[#E5DCC0] bg-white px-3.5 py-3">
+          <div className="min-w-0">
+            <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Mon type de cotisations</p>
+            <p className="text-[13.5px] font-black text-[#2B3530]">
+              {monType ? `${monType.nom} — ${fcfa(monType.montant)}` : `Cotisation de base — ${fcfa(base)}`}
             </p>
+            <p className="mt-0.5 text-[10.5px] text-[#8A9288]">Fixé par le bureau — non modifiable ici.</p>
           </div>
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#3D6B72]/12 text-[#3D6B72]" aria-hidden><Lock className="h-4 w-4" /></span>
         </div>
-        <div className="p-4">
-          <div className="rounded-2xl border-2 border-[#3D6B72]/40 bg-[#3D6B72]/8 px-3.5 py-3">
-            <p className="text-[11.5px] font-black uppercase tracking-wide text-[#3D6B72]">Quel type de cotisation faites-vous ?</p>
-            <p className="mt-0.5 text-[10.5px] leading-snug text-[#5C6B60]">
-              Choisissez un type ou restez à la base.
-            </p>
-            <select
-              value={monType?.id ?? ""}
-              onChange={(e) => choisirType(e.target.value)}
-              aria-label="Mon type de cotisation"
-              className="mt-2 w-full rounded-lg border-2 border-[#E5DCC0] bg-white px-2.5 py-2.5 text-[13px] font-bold text-[#2B3530] outline-none focus:border-[#3D6B72]"
-            >
-              <option value="">Cotisation de base — {fcfa(TONTINE.montantCotisation)} / mois</option>
-              {typesCotis.map((t) => (
-                <option key={t.id} value={t.id}>{t.nom} — {fcfa(t.montant)} / mois</option>
-              ))}
-            </select>
-          </div>
 
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] px-4 py-3.5">
-            <div>
-              <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Ma cotisation — {moisLabel}</p>
-              <p className="text-[19px] font-black text-[#2B3530]">
-                {fcfa(maCotis)}{mesCollations > 0 && <span className="text-[12px] font-semibold text-[#8A9288]"> + {fcfa(mesCollations)} de collation</span>}
-              </p>
-              <p className="mt-0.5 text-[11px] font-semibold text-[#8A6420]">
-                {monType ? `Type attribué : ${monType.nom}` : "Cotisation de base de la Tontine"}
-              </p>
-            </div>
-            {aJour ? (
-              <P cls={OK_CLS}><CheckCircle2 className="h-3.5 w-3.5" /> Cotisation à jour</P>
-            ) : (
-              <Btn tone="teal" onClick={cotiser}><Wallet className="h-4 w-4" /> Cotiser {fcfa(total)}</Btn>
-            )}
+        {/* — MA COTISATION DU MOIS : suit le bénéficiaire, LECTURE SEULE — */}
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border-2 border-[#3D6B72]/40 bg-[#3D6B72]/8 px-4 py-3.5">
+          <div className="min-w-0">
+            <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#3D6B72]">Ma cotisation — {moisLabel}</p>
+            <p className="text-[19px] font-black text-[#2B3530]">{fcfa(maCotisDuMois)}</p>
+            <p className="mt-0.5 text-[11px] font-semibold text-[#8A6420]">{ligneBenef}</p>
           </div>
+          {aJour ? (
+            <P cls={OK_CLS}><CheckCircle2 className="h-3.5 w-3.5" /> Cotisation à jour</P>
+          ) : (
+            <Btn tone="teal" onClick={cotiser}><Wallet className="h-4 w-4" /> Cotiser {fcfa(total)}</Btn>
+          )}
+        </div>
 
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <div className="rounded-2xl border border-[#E5DCC0] bg-white px-3.5 py-3">
-              <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Ma part de collation</p>
-              <p className="flex items-center gap-1.5 text-[13.5px] font-black text-[#2B3530]"><Coffee className="h-4 w-4 text-[#8A6420]" /> {fcfa(mesCollations)}</p>
-              <p className="mt-0.5 text-[10.5px] text-[#8A9288]">Somme des collations où je suis désigné.</p>
-            </div>
-            <div className="rounded-2xl border border-[#E5DCC0] bg-white px-3.5 py-3">
-              <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Reçu de cotisation</p>
-              <p className="flex items-center gap-1.5 text-[13.5px] font-black text-[#2F6B45]"><ReceiptText className="h-4 w-4" /> Reçu remis par le trésorier</p>
-              <p className="mt-0.5 text-[10.5px] text-[#8A9288]">Encaissé et inscrit au journal de caisse.</p>
-            </div>
+        {/* — MA PART DE COLLATION : créée par la secrétaire ou le président,
+         *    LECTURE SEULE (défaut 2 000 FCFA) — */}
+        <div className="mt-2 flex items-center justify-between gap-2 rounded-2xl border border-[#E5DCC0] bg-white px-3.5 py-3">
+          <div className="min-w-0">
+            <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Ma part de collation</p>
+            <p className="flex items-center gap-1.5 text-[13.5px] font-black text-[#2B3530]"><Coffee className="h-4 w-4 text-[#8A6420]" /> {fcfa(mesCollations)}</p>
+            <p className="mt-0.5 text-[10.5px] text-[#8A9288]">Fixée par la secrétaire ou le président.</p>
           </div>
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#8A6420]/12 text-[#8A6420]" aria-hidden><Lock className="h-4 w-4" /></span>
         </div>
       </FcCard>
 
-      <Block title="Mon historique du mois" icon={<CalendarCheck className="h-4.5 w-4.5" />} accent="#3D6B72"
-        note="Votre encaissement apparaît au registre du secrétariat.">
-        <div className="flex flex-wrap gap-1.5 p-3.5">
-          <P cls={aJour ? OK_CLS : OR_CLS}>
-            {aJour ? <CheckCircle2 className="h-3 w-3" /> : <Coins className="h-3 w-3" />} {moisLabel} {aJour ? "— cotisé" : "— à cotiser"}
-          </P>
-          {mesCollations > 0 && (
-            <P cls={monMois.collation ? OK_CLS : VI_CLS}><Coffee className="h-3 w-3" /> Collation {monMois.collation ? "encaissée" : `— ${fcfa(mesCollations)}`}</P>
-          )}
-          {monType?.valideLe && <P cls={TE_CLS}><CheckCircle2 className="h-3 w-3" /> Type validé par le bureau</P>}
-        </div>
+      {/* — CALENDRIER DE COTISATIONS : chaque mois → qui reçoit, combien, et
+       *    le trajet jusqu'à la réunion (carte interne + guidage GPS). — */}
+      <Block title="Calendrier de cotisations" icon={<CalendarDays className="h-4.5 w-4.5" />} accent="#3D6B72"
+        note="Touchez un mois : qui reçoit, combien, et le trajet.">
+        <ul className="fc-scroll max-h-96 divide-y divide-[#E5DCC0] overflow-y-auto">
+          {MOIS_FR.map((nom, m0) => {
+            const benef = roster.find((m) => m.tour === m0 + 1) ?? null;
+            const monCotisMois = benef ? Math.min(maCotis, tauxDe(benef.id)) : maCotis;
+            const jour = secondSunday(annee, m0);
+            const estCourant = m0 === moisCourantIdx;
+            const monTour = benef?.id === moi.id;
+            const ouvert = moisOuvert === m0;
+            const dest = benef ? destDe(benef) : null;
+            const sansBenef = benef ? null : m0 === 11 ? "ag" : "libre";
+            return (
+              <li key={nom}>
+                <button type="button" onClick={() => setMoisOuvert(ouvert ? null : m0)} aria-expanded={ouvert}
+                  className={`flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-[#FBF7EA] ${estCourant ? "bg-[#C89F62]/15" : "bg-[#FFFDF6]"}`}>
+                  <span className="w-11 shrink-0 text-[12px] font-black text-[#2B3530]">{MOIS_FR_SHORT[m0]}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[12.5px] font-bold text-[#2B3530]">
+                      {sansBenef === "ag" ? "Assemblée générale" : sansBenef === "libre" ? "Aucun bénéficiaire" : benef?.name}
+                      {monTour && <span className="ml-1.5 rounded-full bg-[#C89F62] px-1.5 py-0.5 text-[9px] font-black text-[#2B2416]">MOI</span>}
+                    </span>
+                    <span className="block text-[10.5px] text-[#8A9288]">
+                      {sansBenef === "ag" ? `Le ${jour} décembre` : `Séance le ${jour} — je cotise ${fcfa(monCotisMois)}`}
+                    </span>
+                  </span>
+                  {estCourant && <span className="shrink-0 rounded-full border border-[#C89F62] px-1.5 py-0.5 text-[9px] font-black text-[#8A6420]">ce mois</span>}
+                  <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-[#8A9288] transition-transform ${ouvert ? "rotate-180" : ""}`} />
+                </button>
+
+                {ouvert && (
+                  <div className="space-y-2.5 border-t border-[#E5DCC0] bg-[#FBF7EA] p-3.5">
+                    {benef && dest ? (
+                      <>
+                        <div className="grid gap-2 sm:grid-cols-3">
+                          <div className="rounded-2xl border border-[#E5DCC0] bg-white px-3 py-2.5">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-[#8A9288]">Bénéficiaire</p>
+                            <p className="flex items-center gap-1 text-[12.5px] font-black text-[#2B3530]"><Crown className="h-3.5 w-3.5 shrink-0 text-[#8A6420]" /> {benef.name}</p>
+                            <p className="text-[10.5px] text-[#8A9288]">Tour n°{benef.tour} · {ROLE_META[benef.role].short}</p>
+                          </div>
+                          <div className="rounded-2xl border border-[#E5DCC0] bg-white px-3 py-2.5">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-[#8A9288]">Je cotise</p>
+                            <p className="text-[12.5px] font-black text-[#2B3530]">{fcfa(monCotisMois)}</p>
+                            <p className="text-[10.5px] text-[#8A9288]">+ collation {fcfa(mesCollations)}</p>
+                          </div>
+                          <div className="rounded-2xl border border-[#E5DCC0] bg-white px-3 py-2.5">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-[#8A9288]">La réunion reçoit</p>
+                            <p className="text-[12.5px] font-black text-[#1E4D2B]">{fcfa(potDuMois(benef.id) + collationsDuMois)}</p>
+                            <p className="text-[10.5px] text-[#8A9288]">cotisations + collations</p>
+                          </div>
+                        </div>
+
+                        {benef.id === moi.id ? (
+                          <P cls={OK_CLS}><Crown className="h-3 w-3" /> C&apos;est MON tour — la réunion se tient chez moi.</P>
+                        ) : (
+                          <>
+                            <FcRouteMap dest={dest} height={210} />
+                            <Btn tone="teal" onClick={() => setGuidage(dest)}>
+                              <Navigation className="h-4 w-4" /> S&apos;y rendre
+                            </Btn>
+                          </>
+                        )}
+                      </>
+                    ) : benef ? (
+                      <>
+                        <div className="grid gap-2 sm:grid-cols-3">
+                          <div className="rounded-2xl border border-[#E5DCC0] bg-white px-3 py-2.5">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-[#8A9288]">Bénéficiaire</p>
+                            <p className="flex items-center gap-1 text-[12.5px] font-black text-[#2B3530]"><Crown className="h-3.5 w-3.5 shrink-0 text-[#8A6420]" /> {benef.name}</p>
+                            <p className="text-[10.5px] text-[#8A9288]">Tour n°{benef.tour} · {ROLE_META[benef.role].short}</p>
+                          </div>
+                          <div className="rounded-2xl border border-[#E5DCC0] bg-white px-3 py-2.5">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-[#8A9288]">Je cotise</p>
+                            <p className="text-[12.5px] font-black text-[#2B3530]">{fcfa(monCotisMois)}</p>
+                            <p className="text-[10.5px] text-[#8A9288]">+ collation {fcfa(mesCollations)}</p>
+                          </div>
+                          <div className="rounded-2xl border border-[#E5DCC0] bg-white px-3 py-2.5">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-[#8A9288]">La réunion reçoit</p>
+                            <p className="text-[12.5px] font-black text-[#1E4D2B]">{fcfa(potDuMois(benef.id) + collationsDuMois)}</p>
+                            <p className="text-[10.5px] text-[#8A9288]">cotisations + collations</p>
+                          </div>
+                        </div>
+                        {benef.id === moi.id ? (
+                          <P cls={OK_CLS}><Crown className="h-3 w-3" /> C&apos;est MON tour — la réunion se tient chez moi.</P>
+                        ) : (
+                          <Vide icon={<MapPinned className="h-6 w-6" />} texte={`Localisation de ${benef.name} non enregistrée`}
+                            note="Le trajet apparaîtra dès que le membre aura validé sa position." />
+                        )}
+                      </>
+                    ) : (
+                      <P cls={TE_CLS}><CalendarDays className="h-3 w-3" /> {m0 === 11 ? "Assemblée générale — aucune cotisation de pot ce mois-ci." : "Aucun bénéficiaire désigné pour ce mois."}</P>
+                    )}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       </Block>
+
+      {guidage && <FcGuideMap dest={guidage} onFermer={() => setGuidage(null)} />}
     </>
   );
 }
@@ -688,21 +794,23 @@ function MesCotisationsTab(p: { ctx: CtxMembre }): ReactNode {
 function MesEpargnesTab(p: { ctx: CtxMembre }): ReactNode {
   const { moi, regl, moisCourantIdx } = p.ctx;
   const [epargnes, setEpargnes] = useState<AttributionReunion[]>([]);
-  const [montant, setMontant] = useState("");
-  const [moisChoisi, setMoisChoisi] = useState<number | null>(null);
 
   const taux = regl.epargne.tauxFixe ? regl.epargne.tauxMensuel : 3;
 
   useEffect(() => {
-    const t0 = setTimeout(() => {
-      setEpargnes(loadEpargnesReunion());
-      setMoisChoisi(moisCourantIdx);
-    }, 0);
+    const t0 = setTimeout(() => setEpargnes(loadEpargnesReunion()), 0);
     return () => clearTimeout(t0);
-  }, [p.ctx.tick, moisCourantIdx]);
+  }, [p.ctx.tick]);
 
   const mes = useMemo(() => epargnes.filter((e) => e.membreId === moi.id).sort((a, b) => a.moisIdx - b.moisIdx), [epargnes, moi.id]);
   const solde = mes.reduce((s, e) => s + e.montant, 0);
+  /* — v37 : LECTURE SEULE — l'épargne est attribuée par le bureau (secrétaire,
+   *    président ou trésorier) selon les pourcentages du règlement ; le membre
+   *    vérifie simplement ce qu'il a épargné, les intérêts produits et ce qu'il
+   *    percevra en décembre. — */
+  const realise = mes.reduce((s, e) => s + interetsAttribution(e.montant, taux, e.moisIdx, moisCourantIdx).realise, 0);
+  const totalAnnee = mes.reduce((s, e) => s + interetsAttribution(e.montant, taux, e.moisIdx, moisCourantIdx).totalAnnee, 0);
+  const percevoirDecembre = solde + totalAnnee;
 
   const lignes = useMemo(() => {
     const parMois: number[] = Array.from({ length: 12 }, () => 0);
@@ -719,79 +827,23 @@ function MesEpargnesTab(p: { ctx: CtxMembre }): ReactNode {
   }, [mes, taux, moisCourantIdx]);
   const projection = lignes.reduce((s, l) => s + l.interet, 0);
 
-  const mAttribuer = () => {
-    const n = Number(montant);
-    if (!n || n <= 0) { toast.error("Indiquez la somme de votre épargne"); return; }
-    const mi = moisChoisi ?? moisCourantIdx ?? 0;
-    const next: AttributionReunion[] = [...epargnes, { id: nid(), membreId: moi.id, montant: n, moisIdx: Math.min(11, Math.max(0, mi)) }];
-    setEpargnes(next);
-    saveEpargnesReunion(next);
-    setMontant("");
-    pushNotif({
-      id: `epargne-membre:${next[next.length - 1].id}`, le: `${dateCourte()} ${heure()}`,
-      destinataire: "president", destinataireNom: "Président", type: "visa",
-      titre: `Épargne inscrite — ${moi.nom}`,
-      message: `${moi.nom} a inscrit ${fcfa(n)} d'épargne (${MOIS_FR[Math.min(11, Math.max(0, mi))]}) — à viser.`,
-    });
-    toast.success("Votre épargne est inscrite au registre du bureau", {
-      description: `${fcfa(n)} rattaché à ${MOIS_FR[Math.min(11, Math.max(0, mi))]}.`,
-    });
-  };
-
-  const retirerVersement = (id: string) => {
-    const e = epargnes.find((x) => x.id === id);
-    if (!e) return;
-    const next = epargnes.filter((x) => x.id !== id);
-    setEpargnes(next);
-    saveEpargnesReunion(next);
-    toast.success("Versement retiré du registre", { description: `${fcfa(e.montant)} (${MOIS_FR[Math.min(11, Math.max(0, e.moisIdx))]}) retiré.` });
-  };
-
   return (
     <>
-      <FcCard className="p-4">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#8A9288]">Mon épargne personnelle</p>
-            <p className="text-[26px] font-black leading-none text-[#1E4D2B]">{fcfa(solde)}</p>
-            <p className="mt-0.5 text-[11px] font-semibold text-[#8A9288]">{mes.length} versement(s) au registre du bureau</p>
-          </div>
-          <P cls={TE_CLS}><Coins className="h-3 w-3" /> Rémunérée à {taux} %/mois — comme chaque membre</P>
-        </div>
+      {/* — mes 3 chiffres : ce que j'ai épargné, les intérêts produits, et ce
+       *    que je percevrai en décembre (capital + intérêts de l'année). — */}
+      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-3">
+        <KpiCard icon={<PiggyBank className="h-4 w-4" />} label="Épargné à ce jour" value={fcfa(solde)}
+          sub={`${mes.length} versement(s) — attribué(s) par le bureau`} accent="#1E4D2B" />
+        <KpiCard icon={<TrendingUp className="h-4 w-4" />} label="Intérêts produits" value={`+${fmt(realise)}`}
+          sub={`rémunération à ${taux} %/mois`} accent="#3D6B72" />
+        <KpiCard icon={<CalendarCheck className="h-4 w-4" />} label="Perception en décembre" value={fcfa(percevoirDecembre)}
+          sub="capital + intérêts de l'année" accent="#8A6420" />
+      </div>
 
-        <div className="mt-3 rounded-2xl border-2 border-[#3D6B72]/35 bg-[#3D6B72]/8 p-3.5">
-          <p className="text-[12px] font-black uppercase tracking-wide text-[#3D6B72]">M&apos;attribuer une épargne</p>
-          <div className="mt-2 grid gap-2 sm:grid-cols-3">
-            <input
-              value={montant}
-              onChange={(e) => setMontant(e.target.value.replace(/[^\d]/g, ""))}
-              inputMode="numeric"
-              placeholder="Somme (FCFA)"
-              aria-label="Somme de mon épargne en FCFA"
-              className="rounded-lg border border-[#C9B98A] bg-white px-3 py-2.5 text-[13px] font-bold text-[#2B3530] outline-none placeholder:text-[#8A9288]"
-            />
-            <select
-              value={moisChoisi ?? ""}
-              onChange={(e) => setMoisChoisi(Number(e.target.value))}
-              aria-label="Mois réel de mon épargne"
-              className="rounded-lg border-2 border-[#E5DCC0] bg-white px-2.5 py-2.5 text-[12.5px] font-bold text-[#2B3530] outline-none focus:border-[#3D6B72]"
-            >
-              {MOIS_FR.map((nom, mi) => (
-                <option key={nom} value={mi}>
-                  {nom}{moisCourantIdx != null && mi === moisCourantIdx ? " — mois en cours" : moisCourantIdx != null && mi > moisCourantIdx ? " — à venir" : ""}
-                </option>
-              ))}
-            </select>
-            <Btn tone="teal" onClick={mAttribuer}><PiggyBank className="h-4 w-4" /> Épargner {montant ? fcfa(Number(montant)) : ""}</Btn>
-          </div>
-          <p className="mt-2 text-[10.5px] leading-snug text-[#5C6B60]">
-            Intérêts à {taux} %/mois — collecte : {COLLECTE_COURTE(regl)}.
-          </p>
-        </div>
-      </FcCard>
-
-      <Block title="Mes intérêts mois par mois" icon={<TrendingUp className="h-4.5 w-4.5" />} accent="#3D6B72"
-        note={`Intérêts de ${taux} %/mois — réalisés et projetés.`}>
+      {/* — le calendrier de mes épargnes : attribué par le bureau (secrétaire,
+       *    président ou trésorier) selon les pourcentages du règlement. — */}
+      <Block title="Le calendrier de mes épargnes" icon={<CalendarDays className="h-4.5 w-4.5" />} accent="#3D6B72"
+        note={`Attribué par le bureau — intérêts de ${taux} %/mois (${COLLECTE_COURTE(regl)}).`}>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[440px] border-collapse text-[12px]">
             <thead>
@@ -827,10 +879,11 @@ function MesEpargnesTab(p: { ctx: CtxMembre }): ReactNode {
         </div>
       </Block>
 
-      <Block title="Mes versements — registre du bureau" icon={<ReceiptText className="h-4.5 w-4.5" />} accent="#3D6B72"
-        note="Retirez un versement erroné d'un geste.">
+      <Block title="Mes versements" icon={<ReceiptText className="h-4.5 w-4.5" />} accent="#3D6B72"
+        note="Inscrits au registre du bureau — lecture seule.">
         {mes.length === 0 ? (
-          <p className="px-4 py-3 text-[12px] font-semibold text-[#8A9288]">Aucun versement — utilisez le formulaire ci-dessus.</p>
+          <Vide icon={<PiggyBank className="h-6 w-6" />} texte="Aucune épargne à votre nom"
+            note="Le bureau vous attribuera votre épargne — elle apparaîtra ici." />
         ) : (
           <ul className="divide-y divide-[#E5DCC0]">
             {mes.map((e) => {
@@ -842,9 +895,7 @@ function MesEpargnesTab(p: { ctx: CtxMembre }): ReactNode {
                     <span className="block text-[12.5px] font-bold text-[#2B3530]">{MOIS_FR[mi]} — {fcfa(e.montant)}</span>
                     <span className="block text-[10.5px] text-[#8A9288]">intérêt du mois : +{fcfa(Math.round(e.montant * (taux / 100)))} — registre partagé</span>
                   </span>
-                  <BtnConfirme tone="rouge" labelConfirmer="Confirmer ?" onConfirmer={() => retirerVersement(e.id)}>
-                    Retirer ce versement
-                  </BtnConfirme>
+                  <P cls={TE_CLS}><CheckCircle2 className="h-3 w-3" /> au registre</P>
                 </li>
               );
             })}
@@ -869,17 +920,13 @@ function COLLECTE_COURTE(regl: Reglement): string {
 /* ══════════════════════════════ MES PRÊTS & DETTES ══════════════════════════════ */
 
 function MesPretsTab(p: { ctx: CtxMembre }): ReactNode {
-  const { moi, regl, moisCourantIdx, roster } = p.ctx;
+  const { moi, regl, moisCourantIdx, roster, annee } = p.ctx;
   const [dossiers, setDossiers] = useState<DossierPret[]>([]);
   const [pretsReunion, setPretsReunion] = useState<AttributionReunion[]>([]);
   const [dettes, setDettes] = useState<Pret[]>([]);
   const [montant, setMontant] = useState("");
-  const [motif, setMotif] = useState("");
-  const [garanties, setGaranties] = useState("");
-  const [moisChoisi, setMoisChoisi] = useState<number | null>(null);
 
   const taux = regl.prets.tauxMensuel || 3;
-  const duree = regl.prets.dureeMaxMois > 0 ? regl.prets.dureeMaxMois : 6;
   const garantiesExigees = (Object.keys(GARANTIES_LABELS) as (keyof typeof GARANTIES_LABELS)[])
     .filter((k) => regl.prets.garanties?.[k]);
 
@@ -889,28 +936,32 @@ function MesPretsTab(p: { ctx: CtxMembre }): ReactNode {
       setPretsReunion(loadPretsReunion());
       loadMontants();
       setDettes(loadPrets());
-      setMoisChoisi(moisCourantIdx);
     }, 0);
     return () => clearTimeout(t0);
-  }, [p.ctx.tick, moisCourantIdx]);
+  }, [p.ctx.tick]);
 
   const mesDossiers = useMemo(() => dossiers.filter((x) => x.membreId === moi.id), [dossiers, moi.id]);
   const mesPretsReunion = useMemo(() => pretsReunion.filter((x) => x.membreId === moi.id).sort((a, b) => a.moisIdx - b.moisIdx), [pretsReunion, moi.id]);
   const mesDettes = useMemo(() => dettes.filter((x) => x.statut === "validée"), [dettes]);
   const dettesTotal = mesDettes.reduce((s, x) => s + (x.rembourseMois != null ? 0 : dettePretAuMois(x.capital, taux, x.month0, moisCourantIdx)), 0);
 
-  const souscrire = () => {
+  /* — v37 : la demande se dépose AVANT la séance du mois (2ᵉ dimanche).
+   *    Passée la séance, elle est instruite à la séance suivante. — */
+  const jourSeance = secondSunday(annee, moisCourantIdx);
+  const seancePassee = new Date(annee, moisCourantIdx, jourSeance).getTime() <= Date.now();
+  const moisDemande = seancePassee ? (moisCourantIdx + 1) % 12 : moisCourantIdx;
+
+  const deposer = () => {
     const n = Number(montant);
-    if (!n || n <= 0) { toast.error("Indiquez le montant souhaité"); return; }
+    if (!n || n <= 0) { toast.error("Indiquez la somme à emprunter"); return; }
     if (regl.prets.plafondFcfa > 0 && n > regl.prets.plafondFcfa) {
       toast.error(`Plafond dépassé`, { description: `Le règlement limite un prêt à ${fcfa(regl.prets.plafondFcfa)}.` });
       return;
     }
-    const mi = moisChoisi ?? moisCourantIdx ?? 0;
     const nd: DossierPret = {
-      id: nid(), membreId: moi.id, montant: n, motif: motif.trim() || "Prêt à la caisse de la Tontine",
-      garanties: garanties.trim(), avalisteId: null, cosignTresorier: false, statut: "en_attente", motifRefus: "",
-      moisIdx: Math.min(11, Math.max(0, mi)),
+      id: nid(), membreId: moi.id, montant: n, motif: "Prêt à la caisse de la Tontine",
+      garanties: "", avalisteId: null, cosignTresorier: false, statut: "en_attente", motifRefus: "",
+      moisIdx: moisDemande,
     };
     const next = [nd, ...dossiers];
     setDossiers(next);
@@ -919,11 +970,11 @@ function MesPretsTab(p: { ctx: CtxMembre }): ReactNode {
       id: `pret-demande:${nd.id}`, le: `${dateCourte()} ${heure()}`,
       destinataire: "president", destinataireNom: "Président", type: "decision",
       titre: `Demande de prêt — ${moi.nom}`,
-      message: `${moi.nom} demande ${fcfa(n)} (${MOIS_FR[Math.min(11, Math.max(0, mi))]}) — dossier à instruire.`,
+      message: `${moi.nom} demande ${fcfa(n)} (${MOIS_FR[moisDemande]}) — dossier à instruire.`,
     });
-    setMontant(""); setMotif(""); setGaranties("");
+    setMontant("");
     toast.success("Votre demande de prêt est déposée", {
-      description: `${fcfa(n)} rattaché à ${MOIS_FR[Math.min(11, Math.max(0, mi))]}.`,
+      description: `${fcfa(n)} — instruite avant la séance de ${MOIS_FR[moisDemande]}.`,
     });
   };
 
@@ -951,62 +1002,9 @@ function MesPretsTab(p: { ctx: CtxMembre }): ReactNode {
 
   return (
     <>
-      <FcCard className="p-4">
-        <div className="flex items-start gap-2.5">
-          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#B85C33]/12 text-[#B85C33]"><Landmark className="h-4 w-4" /></span>
-          <p className="text-[13px] leading-relaxed text-[#5C6B60]">
-            <strong className="text-[#B85C33]">Emprunter à la caisse de la Tontine.</strong>{" "}
-            {taux} %/mois, échéance {duree} mois{regl.prets.plafondFcfa > 0 ? `, plafond ${fcfa(regl.prets.plafondFcfa)}` : ""}.
-          </p>
-        </div>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          <input
-            value={montant} onChange={(e) => setMontant(e.target.value.replace(/[^\d]/g, ""))}
-            inputMode="numeric" placeholder="Montant souhaité (FCFA)"
-            aria-label="Montant de mon prêt en FCFA"
-            className="rounded-lg border border-[#C9B98A] bg-white px-3 py-2.5 text-[13px] font-bold text-[#2B3530] outline-none placeholder:text-[#8A9288]"
-          />
-          <select
-            value={moisChoisi ?? ""} onChange={(e) => setMoisChoisi(Number(e.target.value))}
-            aria-label="Mois auquel rattacher mon prêt"
-            className="rounded-lg border-2 border-[#E5DCC0] bg-white px-2.5 py-2.5 text-[12.5px] font-bold text-[#2B3530] outline-none focus:border-[#B85C33]"
-          >
-            {MOIS_FR.map((nom, mi) => (
-              <option key={nom} value={mi}>
-                {nom}{moisCourantIdx != null && mi === moisCourantIdx ? " — mois en cours" : moisCourantIdx != null && mi > moisCourantIdx ? " — à venir" : ""}
-              </option>
-            ))}
-          </select>
-          <input
-            value={motif} onChange={(e) => setMotif(e.target.value)}
-            placeholder="Motif (ex. : rentrée scolaire)" aria-label="Motif de mon prêt"
-            className="rounded-lg border border-[#C9B98A] bg-white px-3 py-2.5 text-[13px] font-semibold text-[#2B3530] outline-none placeholder:text-[#8A9288]"
-          />
-          <input
-            value={garanties} onChange={(e) => setGaranties(e.target.value)}
-            placeholder="Garanties proposées (libre)" aria-label="Garanties proposées"
-            className="rounded-lg border border-[#C9B98A] bg-white px-3 py-2.5 text-[13px] font-semibold text-[#2B3530] outline-none placeholder:text-[#8A9288]"
-          />
-          <div className="sm:col-span-2">
-            <Btn tone="or" onClick={souscrire}><HandCoins className="h-4 w-4" /> Souscrire ce prêt {montant ? `de ${fcfa(Number(montant))}` : ""}</Btn>
-          </div>
-        </div>
-        {garantiesExigees.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            <span className="text-[10.5px] font-black uppercase tracking-wide text-[#8A9288]">Garanties exigées par le règlement :</span>
-            {garantiesExigees.map((k) => <P key={k} cls={TE_CLS}>{GARANTIES_LABELS[k]}</P>)}
-            {regl.prets.cosignTresorier && <P cls={VI_CLS}><Wallet className="h-3 w-3" /> Co-signature du trésorier</P>}
-          </div>
-        )}
-        {Number(montant) > 0 && (
-          <p className="mt-2 rounded-2xl border border-[#C89F62]/50 bg-[#C89F62]/10 px-3 py-2 text-[11.5px] font-semibold text-[#8A6420]">
-            En direct — {fcfa(Number(montant))} sur {duree} mois à {taux} %/mois : intérêts ≈ {fcfa(Math.round(Number(montant) * (taux / 100) * duree))}, mensualité ≈ {fcfa(Math.round((Number(montant) * (1 + (taux / 100) * duree)) / duree))}.
-          </p>
-        )}
-      </FcCard>
-
-      {/* — mes dettes — */}
-      <Block title="Mes dettes envers la Tontine" icon={<Coins className="h-4.5 w-4.5" />} accent="#B85C33"
+      {/* — MA DETTE ENVERS LA TONTINE (v37 : en tête de page — ce que nous
+       *    avons eu à faire dans le passé, PAS un emprunt à souscrire). — */}
+      <Block title="Ma dette envers la Tontine" icon={<Coins className="h-4.5 w-4.5" />} accent="#B85C33"
         note="Déclarez votre remboursement — le bureau confirme.">
         {mesDettes.length === 0 ? (
           <p className="px-4 py-3 text-[12px] font-semibold text-[#8A9288]">Aucune dette à votre nom — tant mieux !</p>
@@ -1040,36 +1038,69 @@ function MesPretsTab(p: { ctx: CtxMembre }): ReactNode {
         )}
       </Block>
 
-      {/* — mes dossiers — */}
-      <Block title="Mes demandes de prêt (caisse de la Tontine)" icon={<HandCoins className="h-4.5 w-4.5" />} accent="#B85C33"
-        note="Suivez ici vos dossiers de prêt.">
-        {mesDossiers.length === 0 ? (
-          <p className="px-4 py-3 text-[12px] font-semibold text-[#8A9288]">Aucune demande à votre nom — remplissez le formulaire ci-dessus.</p>
-        ) : (
-          <div className="space-y-2.5 p-4">
-            {mesDossiers.map((d) => {
-              const mi = Math.min(11, Math.max(0, d.moisIdx ?? moisCourantIdx ?? 0));
-              const av = d.avalisteId ? roster.find((x) => x.id === d.avalisteId) : null;
-              return (
-                <div key={d.id} className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3.5">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-[13.5px] font-bold text-[#2B3530]">{fcfa(d.montant)} — rattaché à {MOIS_FR[mi]}</p>
-                    <P cls={STATUT[d.statut].cls}>{STATUT[d.statut].label}</P>
-                  </div>
-                  {d.motif && <p className="mt-0.5 text-[11.5px] text-[#8A9288]">{d.motif}</p>}
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {av && <P cls={OK_CLS}><UserCheck className="h-3 w-3" /> Avaliste : {av.name}</P>}
-                    {d.cosignTresorier && <P cls={OK_CLS}><Wallet className="h-3 w-3" /> Co-signé trésorier</P>}
-                    {d.garanties && <P cls={TE_CLS}><Landmark className="h-3 w-3" /> Garantie : {d.garanties}</P>}
-                  </div>
-                  {d.statut === "refuse" && d.motifRefus && (
-                    <p className="mt-2 rounded-lg bg-[#A5473D]/8 px-3 py-2 text-[12px] text-[#A5473D]">Motif du refus : {d.motifRefus}</p>
-                  )}
-                </div>
-              );
-            })}
+      {/* — MES DEMANDES DE PRÊT : la somme à emprunter, déposée AVANT la
+       *    séance du mois (2ᵉ dimanche) — passée la séance, la demande est
+       *    instruite à la séance suivante. — */}
+      <Block title="Mes demandes de prêt" icon={<HandCoins className="h-4.5 w-4.5" />} accent="#B85C33"
+        note="La demande se dépose avant la séance du mois.">
+        <div className="p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[11.5px] font-black uppercase tracking-wide text-[#B85C33]">Somme à emprunter (FCFA)</p>
+            {seancePassee ? (
+              <P cls={OR_CLS}><CalendarClock className="h-3 w-3" /> Séance de {MOIS_FR[moisCourantIdx]} passée — instruite en {MOIS_FR[moisDemande]}</P>
+            ) : (
+              <P cls={TE_CLS}><CalendarClock className="h-3 w-3" /> Avant la séance du {jourSeance} {MOIS_FR[moisCourantIdx]}</P>
+            )}
           </div>
-        )}
+          <div className="mt-2 flex gap-2">
+            <input
+              value={montant} onChange={(e) => setMontant(e.target.value.replace(/[^\d]/g, ""))}
+              inputMode="numeric" placeholder="Ex. : 100000"
+              aria-label="Somme à emprunter en FCFA"
+              className="min-w-0 flex-1 rounded-lg border border-[#C9B98A] bg-white px-3 py-2.5 text-[13px] font-bold text-[#2B3530] outline-none placeholder:text-[#8A9288]"
+            />
+            <Btn tone="or" onClick={deposer}><HandCoins className="h-4 w-4" /> Déposer</Btn>
+          </div>
+          {(garantiesExigees.length > 0 || regl.prets.cosignTresorier) && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <span className="text-[10.5px] font-black uppercase tracking-wide text-[#8A9288]">Garanties exigées :</span>
+              {garantiesExigees.map((k) => <P key={k} cls={TE_CLS}>{GARANTIES_LABELS[k]}</P>)}
+              {regl.prets.cosignTresorier && <P cls={VI_CLS}><Wallet className="h-3 w-3" /> Co-signature du trésorier</P>}
+            </div>
+          )}
+
+          <div className="mt-3.5">
+            {mesDossiers.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-[#C9B98A] bg-[#FBF7EA] px-3 py-2.5 text-[11.5px] text-[#8A9288]">
+                Aucune demande à votre nom — déposez la somme ci-dessus.
+              </p>
+            ) : (
+              <div className="space-y-2.5">
+                {mesDossiers.map((d) => {
+                  const mi = Math.min(11, Math.max(0, d.moisIdx ?? moisCourantIdx ?? 0));
+                  const av = d.avalisteId ? roster.find((x) => x.id === d.avalisteId) : null;
+                  return (
+                    <div key={d.id} className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-[13.5px] font-bold text-[#2B3530]">{fcfa(d.montant)} — rattaché à {MOIS_FR[mi]}</p>
+                        <P cls={STATUT[d.statut].cls}>{STATUT[d.statut].label}</P>
+                      </div>
+                      {d.motif && <p className="mt-0.5 text-[11.5px] text-[#8A9288]">{d.motif}</p>}
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {av && <P cls={OK_CLS}><UserCheck className="h-3 w-3" /> Avaliste : {av.name}</P>}
+                        {d.cosignTresorier && <P cls={OK_CLS}><Wallet className="h-3 w-3" /> Co-signé trésorier</P>}
+                        {d.garanties && <P cls={TE_CLS}><Landmark className="h-3 w-3" /> Garantie : {d.garanties}</P>}
+                      </div>
+                      {d.statut === "refuse" && d.motifRefus && (
+                        <p className="mt-2 rounded-lg bg-[#A5473D]/8 px-3 py-2 text-[12px] text-[#A5473D]">Motif du refus : {d.motifRefus}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       </Block>
 
       {/* — prêter à la réunion — */}
