@@ -2216,6 +2216,7 @@ export function EspaceMembre({ voirApp }: { voirApp?: () => void }) {
         ariaLabel="Sections de l'espace membre"
         libelle={`${groupes.length} sections · ${groupes.reduce((s, g) => s + g.onglets.length, 0)} onglets`}
         couleurPoint="#1E4D2B"
+        filRacine={{ label: "Espace Membre", onClick: () => aller("accueil") }}
         groupes={groupes}
         actif={tab}
         goTab={aller}

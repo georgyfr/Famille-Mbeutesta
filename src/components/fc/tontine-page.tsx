@@ -49,6 +49,7 @@ import { type LocationDraft } from "@/lib/fc-geo";
 import { FcRouteMap, type DestCarte } from "./fc-route-map";
 import { FcGuideMap } from "./fc-guide-map";
 import { LocationWizard } from "./location-wizard";
+import { FilAriane } from "./maquette-ui";
 import { FcButton, FcCard, FcSpinner } from "./ui";
 import {
   DELAI_VALIDATION_JOURS, RAPPEL_SIGNALEMENT_JOURS,
@@ -207,6 +208,23 @@ type TPage =
 type BureauPage = Exclude<RoleKey, "membre">;
 
 const PAGES_BUREAU: TPage[] = ["president", "vice_president", "secretariat", "commissaire", "tresorier", "censeur"];
+
+/* v35 — fil d'Ariane de la Tontine : libellé humain de chaque sous-page
+   (Réunions, Membres, Mes finances, page d'un poste du bureau…) — le chemin
+   « Accueil › Finances › <page courante> » s'affiche au-dessus de l'en-tête. */
+const LIBELLE_PAGE: Record<TPage, string> = {
+  reunion: "Réunions",
+  membres: "Membres",
+  cotisations: "Mes finances",
+  dettes: "Mes prêts",
+  stats: "Statistiques",
+  president: "Président",
+  vice_president: "Vice-président",
+  secretariat: "Secrétaire",
+  commissaire: "Commissaire",
+  tresorier: "Trésorier",
+  censeur: "Censeur",
+};
 
 const HASH_ALIASES: Record<string, TPage> = {
   reunion: "reunion", membres: "membres",
@@ -459,6 +477,14 @@ export function TontinePage({ onBack, vousName, vousPhone }: { onBack: () => voi
   if (!mounted || annee.length === 0) {
     return (
       <div className="space-y-4">
+        <FilAriane
+          couleur="#1E4D2B"
+          segments={[
+            { label: "Accueil", onClick: onBack },
+            { label: "Finances", onClick: () => goPage("reunion") },
+            { label: LIBELLE_PAGE[page] },
+          ]}
+        />
         <EntetePage />
         <div className="flex justify-center py-10 text-[#2A4A3A]" role="status" aria-label="Chargement de la tontine">
           <FcSpinner />
@@ -469,6 +495,18 @@ export function TontinePage({ onBack, vousName, vousPhone }: { onBack: () => voi
 
   return (
     <div className="space-y-3.5">
+      {/* v35 — fil d'Ariane : Accueil › Finances › page courante. « Accueil »
+          ramène au tableau de bord, « Finances » à la page d'accueil de la
+          tontine (réunions) — chaque sous-page reste remontable d'un clic. */}
+      <FilAriane
+        couleur="#1E4D2B"
+        segments={[
+          { label: "Accueil", onClick: onBack },
+          { label: "Finances", onClick: () => goPage("reunion") },
+          { label: LIBELLE_PAGE[page] },
+        ]}
+      />
+
       <EntetePage vousRole={roleActif} onGo={goPage} nbOuverts={ouverts.length} sigVersion={sigVersion} />
 
       <OngletsPrincipaux page={page} onGo={goPage} />

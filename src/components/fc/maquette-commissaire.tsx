@@ -214,6 +214,7 @@ export function MaquetteCommissaire() {
         ariaLabel="Sections du commissariat aux comptes"
         libelle={`${TABS.length} onglets`}
         couleurPoint="#3D6B72"
+        filRacine={{ label: "Commissariat aux comptes", onClick: () => goTab(TABS[0].key) }}
         onglets={TABS.map((t) => ({ ...t, badge: badges[t.key] ?? 0 }))}
         actif={tab}
         goTab={goTab}

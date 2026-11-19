@@ -16,6 +16,7 @@ import { FamilyTab } from "./family-tab";
 import { ReglageNotifications } from "./reglage-notifications";
 import { LocationWizard } from "./location-wizard";
 import { TontinePage } from "./tontine-page";
+import { FilAriane } from "./maquette-ui";
 import { loadVousRole } from "./tontine-bureau";
 import { naviguerHash } from "./poste-console";
 import { ROLE_META, ROLES_BUREAU, type RoleKey } from "./tontine-data";
@@ -83,10 +84,23 @@ type AdminMember = {
 
 const isAdminRole = (r: string) => ["SECRETAIRE", "PATRIARCHE", "CHEF_BRANCHE", "CONSEIL"].includes(r);
 
+type TabDash = "home" | "famille" | "notif" | "security" | "admin";
+
+/* v35 — fil d'Ariane du tableau de bord : chaque page ouverte depuis
+   l'accueil affiche « Accueil › … » cliquable — la remontée est toujours
+   à portée de pouce, plus besoin du bouton retour du navigateur. */
+const LIBELLES_TAB: Record<TabDash, string> = {
+  home: "Accueil",
+  famille: "La famille",
+  notif: "Alertes",
+  security: "Ma sécurité",
+  admin: "Secrétariat",
+};
+
 export function Dashboard({
   session, onLoggedOut, onRefresh,
 }: { session: SessionData; onLoggedOut: () => void; onRefresh: () => Promise<void> }) {
-  const [tab, setTab] = useState<"home" | "famille" | "notif" | "security" | "admin">("home");
+  const [tab, setTab] = useState<TabDash>("home");
   const [editLocation, setEditLocation] = useState(false);
   const [showTontine, setShowTontine] = useState(false);
   const isAdmin = isAdminRole(session.user.role);
@@ -115,9 +129,28 @@ export function Dashboard({
     };
   }, []);
 
+  /* v35 — remontée d'un niveau : quitter la page Finances et revenir à
+     l'accueil (le hash #tontine est retiré — le bouton du fil d'Ariane
+     remplace le bouton retour du navigateur). */
+  const retourAccueil = useCallback(() => {
+    try {
+      history.replaceState(null, "", window.location.pathname);
+    } catch {
+      /* rien */
+    }
+    setShowTontine(false);
+    setTab("home");
+  }, []);
+
   if (editLocation) {
     return (
       <div className="relative z-10 mx-auto w-full max-w-md px-4 pb-16 pt-4">
+        {/* v35 — fil d'Ariane : retour à l'accueil depuis l'assistant */}
+        <FilAriane
+          couleur="#1E4D2B"
+          className="mb-3"
+          segments={[{ label: "Accueil", onClick: () => setEditLocation(false) }, { label: "Ma localisation" }]}
+        />
         <LocationWizard
           initial={locationToDraft(session.location)}
           onSaved={async () => {
@@ -161,6 +194,26 @@ export function Dashboard({
           )}
         </button>
       </header>
+
+      {/* v35 — FIL D'ARIANE : présent dès qu'on quitte l'accueil — Finances,
+          Famille, Alertes, Ma sécurité, Secrétariat ; le clic sur « Accueil »
+          remonte d'un niveau sans passer par la barre du bas. */}
+      {showTontine ? (
+        <FilAriane
+          couleur="#1E4D2B"
+          className="mb-3"
+          segments={[
+            { label: "Accueil", onClick: retourAccueil },
+            { label: "Finances — Tontine familiale" },
+          ]}
+        />
+      ) : tab !== "home" ? (
+        <FilAriane
+          couleur="#1E4D2B"
+          className="mb-3"
+          segments={[{ label: "Accueil", onClick: () => setTab("home") }, { label: LIBELLES_TAB[tab] }]}
+        />
+      ) : null}
 
       {showTontine ? (
         <TontinePage

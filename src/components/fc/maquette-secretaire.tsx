@@ -659,6 +659,7 @@ export function MaquetteSecretaire() {
         ariaLabel="Sections du secrétariat"
         libelle={`${GROUPES.length} sections · ${TABS.length} onglets`}
         couleurPoint="#6E4B71"
+        filRacine={{ label: "Console du Secrétaire", onClick: () => goTab(GROUPES[0].keys[0]) }}
         groupes={GROUPES.map((g) => ({
           label: g.label,
           note: g.note,

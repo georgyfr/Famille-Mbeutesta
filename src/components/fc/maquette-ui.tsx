@@ -11,7 +11,7 @@
 
 import type { ReactNode, RefObject } from "react";
 import { useEffect, useRef, useState } from "react";
-import { ChevronsUp, Menu, X } from "lucide-react";
+import { ChevronsRight, ChevronsUp, Menu, X } from "lucide-react";
 import { toast } from "sonner";
 import { FcCard } from "./ui";
 
@@ -303,11 +303,16 @@ export function NavOnglets<T extends string>({ ariaLabel, etiquette, etiquetteCo
  *    cantine…) : le contenu des pages redevient lisible. MÊME MÉCANISME pour
  *    toutes les consoles du bureau : secrétaire, président, commissaire et
  *    espace membre — props identiques à NavOnglets (groupes | onglets). — */
-export function MenuHamburger<T extends string>({ ariaLabel, libelle, couleurPoint, onglets, groupes, actif, goTab }: {
+export function MenuHamburger<T extends string>({ ariaLabel, libelle, couleurPoint, onglets, groupes, actif, goTab, filRacine }: {
   ariaLabel: string; libelle?: string; couleurPoint: string;
   onglets?: OngletItem<T>[];
   groupes?: GroupeOnglets<T>[];
   actif: T; goTab: (t: T) => void;
+  /** v35 — fil d'Ariane : la RACINE du poste (« Console du Secrétaire »…).
+   *  Le chemin complet est rendu dans la barre collante : Racine › Section
+   *  › Onglet courant — cliquer la racine remonte à l'onglet d'accueil du
+   *  poste, cliquer la section ouvre le tiroir sur tous ses onglets. */
+  filRacine?: { label: string; onClick: () => void };
 }) {
   const [ouvert, setOuvert] = useState(false);
   const btnRef = useRef<HTMLButtonElement | null>(null);
@@ -317,6 +322,10 @@ export function MenuHamburger<T extends string>({ ariaLabel, libelle, couleurPoi
   const courant = plats.find((t) => t.key === actif) ?? plats[0];
   const badgeCourant = courant?.badge ?? 0;
   const autresBadges = plats.reduce((s, t) => s + (t.badge ?? 0), 0) - badgeCourant;
+  /* v35 — la SECTION qui porte l'onglet courant : 2ᵉ niveau du fil d'Ariane.
+   *   Cliquer dessus ouvre le tiroir (les sections ne sont pas des pages — le
+   *   tiroir montre tous les onglets de la section, c'est la remontée). */
+  const groupeCourant = groupes?.find((g) => g.onglets.some((t) => t.key === actif));
 
   /* Escape referme ; la page derrière ne défile plus ; focus clavier au
    * bouton de fermeture (différé : l'élément doit exister). */
@@ -381,7 +390,8 @@ export function MenuHamburger<T extends string>({ ariaLabel, libelle, couleurPoi
        *    (retour terrain : « le logo doit être au niveau du menu
        *    hamburger ») — même mécanique pour toutes les consoles du bureau. */}
       <div className="sticky top-[35px] z-20 -mx-3 mt-3 px-3 sm:-mx-4 sm:px-4">
-        <div className="flex items-center gap-2 rounded-2xl border-2 border-[#B8A87E] bg-white/95 py-1.5 pl-2 pr-2.5 shadow-[0_8px_24px_rgba(42,74,58,0.16)] backdrop-blur sm:pl-2.5">
+        <div className="rounded-2xl border-2 border-[#B8A87E] bg-white/95 shadow-[0_8px_24px_rgba(42,74,58,0.16)] backdrop-blur">
+          <div className="flex items-center gap-2 py-1.5 pl-2 pr-2.5 sm:pl-2.5">
           <img
             src="/logo-famille.webp"
             alt="Armoiries de la famille Mbeutetsa"
@@ -417,6 +427,25 @@ export function MenuHamburger<T extends string>({ ariaLabel, libelle, couleurPoi
           <span className="hidden shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] sm:inline" style={{ backgroundColor: `${couleurPoint}14`, color: couleurPoint }}>
             {libelle ?? `${plats.length} onglets`}
           </span>
+          </div>
+          {/* v35 — FIL D'ARIANE (2ᵉ ligne de la barre collante) : le chemin
+           *    Racine › Section › Onglet reste visible MÊME en scollant — un
+           *    clic ramène en arrière sans rouvrir le tiroir. */}
+          {filRacine && (
+            <div className="border-t border-[#E5DCC0] bg-[#FBF7EA]/70 px-2.5 py-1 sm:px-3">
+              <FilAriane
+                compact
+                couleur={couleurPoint}
+                segments={[
+                  { label: filRacine.label, onClick: filRacine.onClick },
+                  ...(groupeCourant
+                    ? [{ label: groupeCourant.label, onClick: () => setOuvert(true) }]
+                    : []),
+                  { label: courant?.label ?? "—" },
+                ]}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -468,6 +497,56 @@ export function MenuHamburger<T extends string>({ ariaLabel, libelle, couleurPoi
         </div>
       )}
     </>
+  );
+}
+
+/* — v35 : FIL D'ARIANE — « il est difficile de revenir à des pages
+ *    précédentes » (demande de l'administrateur). Un chemin CLIQUABLE qui
+ *    montre où l'on est et ramène en arrière d'un niveau : Accueil › Section
+ *    › Onglet courant. Le DERNIER segment est la page ouverte (aria-current),
+ *    les précédents sont des boutons ; un segment sans onClick s'affiche
+ *    comme un simple texte (niveau purement indicatif). — */
+export type SegmentAriane = { label: string; onClick?: () => void };
+
+export function FilAriane({ segments, couleur, className = "", compact }: {
+  segments: SegmentAriane[]; couleur?: string; className?: string; compact?: boolean;
+}) {
+  const utiles = segments.filter((s) => s.label.trim() !== "");
+  if (utiles.length === 0) return null;
+  return (
+    <nav aria-label="Fil d'Ariane" className={`min-w-0 ${className}`}>
+      <ol className={`flex min-w-0 items-center text-[12px] font-semibold text-[#2B3530] ${compact ? "gap-0.5" : "gap-1"}`}>
+        {utiles.map((s, i) => {
+          const dernier = i === utiles.length - 1;
+          return (
+            <li key={`${s.label}-${i}`} className="flex min-w-0 items-center gap-0.5">
+              {i > 0 && (
+                <ChevronsRight aria-hidden className="h-3 w-3 shrink-0 text-[#B8A87E]" />
+              )}
+              {dernier ? (
+                <span
+                  aria-current="page"
+                  className="min-w-0 max-w-[56vw] truncate font-bold sm:max-w-none"
+                  style={{ color: couleur ?? "#2A4A3A" }}
+                >
+                  {s.label}
+                </span>
+              ) : s.onClick ? (
+                <button
+                  type="button"
+                  onClick={s.onClick}
+                  className="min-w-0 max-w-[26vw] truncate rounded px-1 py-0.5 text-[#5C6B60] transition-colors hover:text-[#1E4D2B] hover:underline focus-visible:outline-2 focus-visible:outline-[#C89F62] sm:max-w-[220px]"
+                >
+                  {s.label}
+                </button>
+              ) : (
+                <span className="min-w-0 max-w-[26vw] truncate sm:max-w-[220px]">{s.label}</span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
   );
 }
 

@@ -1047,6 +1047,7 @@ export function MaquettePresident() {
         ariaLabel="Sections du poste de commandement"
         libelle={`${tabsVisibles.length} onglets`}
         couleurPoint="#1E4D2B"
+        filRacine={{ label: "Poste du Président", onClick: () => goTab(tabsGestion[0]?.key ?? tab) }}
         groupes={[
           {
             label: "Gestion de la Tontine",
