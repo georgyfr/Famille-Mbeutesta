@@ -182,7 +182,8 @@ export function MainApp() {
       // (ni manuel, ni créé par l'IA), plus aucune de leurs données (cotisations,
       // prêts, géolocalisations). La maquette garde TOUS ses utilisateurs. Une
       // seule fois : ensuite le premier utilisateur réel (secrétaire — code
-      // FCM-K7M2PV) s'inscrit sur une base vide qui ne se vide plus jamais.
+      // FCM-SAND2R, Sandrine Abessolo, v38) s'inscrit sur une base vide qui
+      // ne se vide plus jamais.
       purgerAppUneFois();
       if (process.env.NEXT_PUBLIC_DEMO_MODE === "1") {
         try {

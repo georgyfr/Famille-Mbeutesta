@@ -78,20 +78,34 @@ export function nouveauCodeMembre(): string {
   return `FCM-${corps}`;
 }
 
-/* ═══ CODE SEMÉ DANS L'APPLICATION — LE TOUT PREMIER UTILISATEUR (v27) ═══
- * « Tu vas générer un utilisateur avec les informations suivantes… Ce sera le
- * tout premier utilisateur qui ajoutera tous les autres sans exception. »
- * Ce code est EMBARQUÉ dans l'application : il fonctionne sur N'IMPORTE
- * QUEL appareil (pas besoin de le générer au préalable) — la personne colle
- * le code, donne son nom, et SA page s'ouvre en SECRTAIRE du bureau.
- *   · téléphone : +237 699 613 226 ;  · ville : Yaoundé ;
- *   · cotisation : 50 000 FCFA/mois (type créé automatiquement à l'activation).
- * Un seul compte peut le consommer — ensuite il est marqué « utilisé ». */
-export const CODE_SEED_PREMIER: CodeMembre = {
-  id: "cm-seed-premier",
-  code: "FCM-K7M2PV",
-  telephone: "+237699613226",
-  nomOptionnel: "",
+/* ═══ CODE SEMÉ — LA SECRÉTAIRE DU BUREAU (v38) ═══
+ * Demande de l'administrateur : « je souhaiterais que tu me proposes de
+ * nouveau une clé de connexion pour la secrétaire. Génère-moi donc une
+ * nouvelle clé avec un nouvel utilisateur. Elle s'appellera Sandrine
+ * Abessolo avec une épargne de 50 000 francs et résidant à Yaoundé au
+ * numéro +237619051120. »
+ * v38 — REMPLACEMENT de l'ancien code du premier secrétaire (FCM-K7M2PV,
+ * sans nom, +237 699 61 32 26) : le bureau a désigné SANDRINE ABESSOLO —
+ * le code porte désormais SON identité complète :
+ *   · nom : « Sandrine Abessolo » (prérempli à la page « Vos renseignements ») ;
+ *   · téléphone : +237 619 05 11 20 (prérempli, vérifié et modifiable) ;
+ *   · poste : Secrétaire ;  · ville : Yaoundé (tontine de Yaoundé) ;
+ *   · épargne/cotisation : 50 000 FCFA/mois (type « tc-seed-50000 » créé
+ *     automatiquement à l'activation s'il n'existe pas encore).
+ * Comme tous les codes semés, il est EMBARQUÉ dans l'application : il
+ * fonctionne sur N'IMPORTE QUEL appareil, N'EXPIRE JAMAIS et est
+ * consommable une seule fois (ensuite reconnexion par le numéro).
+ * AUCUNE notification ne part à la génération du code — elles ne partent
+ * qu'à l'inscription (nom + confirmation du numéro) : aux AUTRES membres
+ * « Sandrine Abessolo a rejoint le groupe », à ELLE « Bienvenue Sandrine
+ * Abessolo » avec le lien vers la suite (géolocalisation puis sa page de
+ * Secrétaire).
+ * Lien cliquable : https://famille-mbeutetsa.pages.dev/?code=FCM-SAND2R */
+export const CODE_SEED_SECRETAIRE: CodeMembre = {
+  id: "cm-seed-secretaire",
+  code: "FCM-SAND2R",
+  telephone: "+237619051120",
+  nomOptionnel: "Sandrine Abessolo",
   cotisationTypeId: "tc-seed-50000",
   cotisationNom: "Cotisation mensuelle — 50 000 FCFA",
   cotisationMontant: 50000,
@@ -100,7 +114,7 @@ export const CODE_SEED_PREMIER: CodeMembre = {
   ville: VILLE_DEFAUT,
   creePar: "president",
   creeParNom: "Bureau de la Tontine",
-  creeLe: "2026-11-01T00:00:00.000Z",
+  creeLe: "2026-11-19T00:00:00.000Z",
   utiliseLe: null,
   utiliseNom: null,
 };
@@ -181,7 +195,7 @@ export const CODE_SEED_COACH: CodeMembre = {
 };
 
 /** Codes SEMÉS dans l'application (fonctionnent sur tout appareil). */
-const CODES_SEED: CodeMembre[] = [CODE_SEED_PREMIER, CODE_SEED_PRESIDENT, CODE_SEED_COACH];
+const CODES_SEED: CodeMembre[] = [CODE_SEED_SECRETAIRE, CODE_SEED_PRESIDENT, CODE_SEED_COACH];
 
 /** Complète un code lu du stockage : les codes créés avant la v27 n'ont pas
  *  de ville — Yaoundé (la ville par défaut) leur est attribuée. */
@@ -190,8 +204,8 @@ function completeVille(c: CodeMembre): CodeMembre {
 }
 
 /** Lit tous les codes : ceux générés par le bureau (stockage local) PLUS les
- *  codes semés dans l'application (v27 — le tout premier utilisateur ; v34 —
- *  le président Albert Fotsos ; v34-quinquies — le Coach). Le plus récent
+ *  codes semés dans l'application (v38 — la secrétaire Sandrine Abessolo ;
+ *  v34 — le président Albert Fotsos ; v34-quinquies — le Coach). Le plus récent
  *  d'abord ; les semés n'y figurent qu'une fois (jamais en double).
  *  v34 — RETRAIT SILENCIEUX des ANCIENTS codes semés : un appareil qui aurait
  *  stocké une version remplacée d'un seed (ex. FCM-PL82US, l'ancien code du

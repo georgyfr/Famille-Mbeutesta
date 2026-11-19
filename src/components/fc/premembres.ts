@@ -194,12 +194,17 @@ export function remapperAllocationsApresActivation(code: CodeMembre, idUid: stri
 
 /** Vérifie à froid (au démarrage) que les allocations du code consommé par CE
  *  compte ont bien été remappées — filet de sécurité si l'activation avait été
- *  interrompue. Sans effet si tout était déjà en place. */
+ *  interrompue. Sans effet si tout était déjà en place.
+ *  v38 — la cible est le code SEMÉ de la SECRÉTAIRE du bureau (quelle que soit
+ *  sa génération : FCM-K7M2PV hier, FCM-SAND2R — Sandrine Abessolo —
+ *  aujourd'hui) : la recherche se fait par POSTE, plus par identifiant. */
 export function assuranceRemappage(): void {
   try {
     const uid = window.localStorage.getItem("fc_uid");
     if (!uid) return;
-    const seed = chargerCodes().find((c) => c.id === "cm-seed-premier");
+    const seed = chargerCodes().find(
+      (c) => c.id.startsWith("cm-seed-") && c.bureauRole === "secretariat",
+    );
     if (seed?.utiliseLe) {
       // Le remappage complet est refait sans risque : seuls les items portant
       // ENCORE l'id téléphone sont déplacés (idempotent — si un autre compte

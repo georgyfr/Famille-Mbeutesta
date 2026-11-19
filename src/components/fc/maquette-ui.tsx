@@ -11,8 +11,9 @@
 
 import type { ReactNode, RefObject } from "react";
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, ChevronsRight, ChevronsUp, Menu, X } from "lucide-react";
+import { ChevronRight, ChevronsRight, ChevronsUp, LogOut, Menu, X } from "lucide-react";
 import { toast } from "sonner";
+import { api } from "@/lib/fc-client";
 import { FcCard } from "./ui";
 
 /* — nombres & monnaie — */
@@ -365,6 +366,29 @@ export function MenuHamburger<T extends string>({ ariaLabel, libelle, couleurPoi
   const btnRef = useRef<HTMLButtonElement | null>(null);
   const fermerRef = useRef<HTMLButtonElement | null>(null);
 
+  /* v38 — DEMANDE DE L'ADMINISTRATEUR : « au niveau du menu hamburger, il
+   * faut créer un bouton de déconnexion. » La sortie de session (jusqu'ici
+   * limitée à « Mon profil » de l'Espace Membre) vit DÉSORMAIS au pied du
+   * tiroir — visible sur TOUS les postes (membre, secrétaire, président,
+   * commissaire) : même mécanique que le profil (API /api/auth/logout,
+   * fc_uid/fc_name nettoyés, hash retiré avant rechargement — retour à la
+   * porte d'entrée = écran du code, jamais d'aperçu de console après sortie). */
+  const [enSortie, setEnSortie] = useState(false);
+  const seDeconnecter = async () => {
+    setEnSortie(true);
+    try {
+      await api("/api/auth/logout", { method: "POST" });
+    } catch { /* on sort quand même */ }
+    try {
+      window.localStorage.removeItem("fc_uid");
+      window.localStorage.removeItem("fc_name");
+    } catch { /* rien */ }
+    try {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    } catch { /* rien */ }
+    window.location.reload();
+  };
+
   const plats: OngletItem<T>[] = groupes ? groupes.flatMap((g) => g.onglets) : (onglets ?? []);
   const courant = plats.find((t) => t.key === actif) ?? plats[0];
   const badgeCourant = courant?.badge ?? 0;
@@ -554,6 +578,21 @@ export function MenuHamburger<T extends string>({ ariaLabel, libelle, couleurPoi
                 <div className="space-y-1.5 pt-3">{plats.map((t) => ligne(t, couleurPoint))}</div>
               )}
             </nav>
+            {/* v38 — SORTIE DE SESSION au pied du tiroir, séparée des onglets :
+             *    un geste volontaire (fond blanc, liseré rouge), jamais une
+             *    navigation parmi les sections. */}
+            <div className="border-t-2 border-[#B8A87E]/60 bg-white px-3 py-3">
+              <button
+                type="button"
+                onClick={seDeconnecter}
+                disabled={enSortie}
+                aria-label="Se déconnecter de l'application"
+                className="flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl border-2 border-[#A5473D] bg-[#A5473D]/[0.07] text-[13.5px] font-bold text-[#A5473D] transition-all hover:bg-[#A5473D] hover:text-white active:scale-[0.98] disabled:cursor-wait disabled:opacity-60"
+              >
+                <LogOut aria-hidden className="h-4 w-4" />
+                {enSortie ? "Déconnexion…" : "Déconnexion"}
+              </button>
+            </div>
           </div>
         </div>
       )}
