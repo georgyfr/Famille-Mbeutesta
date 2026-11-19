@@ -1,82 +1,44 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BASCULE MAQUETTE ⇄ APPLICATION — Famille.Mbeutetsa (v34)
+// BASCULE MAQUETTE ⇄ APPLICATION — Famille.Mbeutetsa (v36)
 //
-// v34 — DEMANDES DE L'ADMINISTRATEUR (isolation des statuts) :
-//   « Au niveau de la version mobile, je ne souhaite plus que le bouton bureau
-//   apparaisse. […] Désormais lorsqu'une personne finit son inscription et sa
-//   géolocalisation, la page qui suit est la page propre au statut qu'il
-//   occupe. Et aucun membre ne devrait voir la page du statut d'un autre
-//   membre dans l'entreprise. Tu ne vois que ton statut. »
-//   · le bouton « Bureau › » du bandeau de l'application est SUPPRIMÉ — plus
-//     aucune porte des consoles de validation depuis l'app réelle ;
-//   · après la géolocalisation (et le rôle), l'app ouvre DIRECTEMENT la
-//     console du propre poste (main-app.tsx, poste-console.ts) ;
-//   · ISOLATION STRICTE : le gate lit le poste du compte connecté
-//     (fc_uid + fc_tontine_role_v1) — la console d'un AUTRE poste est
-//     refusée (redirection Espace Membre + message), et les pastilles du
-//     bandeau ne montrent que LA console du poste (plus de sélecteur de
-//     toutes les consoles pour les comptes réels ; sans compte connecté —
-//     validation de développement — les 4 consoles restent accessibles) ;
-//   · l'auto-attribution de postes est fermée : le rôle vient UNIQUEMENT du
-//     code d'invitation (role-wizard.tsx, dashboard.tsx alignés).
+// v36 — DEMANDES DE L'ADMINISTRATEUR (barre du haut + fin de la page accueil) :
+//   « À la place de Membres, tu mets le logo et tu écris en dessous Famille
+//   Mbeutetsa. Et au niveau de Apps, ce serait plutôt le menu hamburger qui
+//   s'y trouve. Concernant les boutons tels que Membres et Apps, tu les
+//   supprimes — ainsi que la petite icône qui montre que l'IA travaille.
+//   L'ancienne page d'accueil (tableau de bord, Finances, Mon poste au
+//   bureau) est supprimée : après la géolocalisation, on arrive DIRECTEMENT
+//   sur la page de son propre statut (Espace Membre, Président…). »
+//   · la barre du haut devient : LOGO + nom de la famille (en dessous) à
+//     gauche, MENU HAMBURGER à droite — plus de pastilles de consoles, plus
+//     de bouton « App », plus d'icône « IA » (Sparkles) ;
+//   · le hamburger GLOBAL ouvre le tiroir de la console courante (événement
+//     « fc-ouvrir-menu » — un seul MenuHamburger est monté à la fois) ;
+//   · en mode app (inscription / géolocalisation / rôle), la barre montre la
+//     marque seule : le hamburger n'existe pas encore (aucune console).
 //
-// v32 — DEMANDE DE L'ADMINISTRATEUR : « tout le monde se connecte avec le
-// code qu'on lui a généré — je veux une première page UNIQUEMENT avec le code
-// à coller qui va le rediriger vers une autre page de renseignement, en
-// interface mobile. »
-//   · PAGE 1 « Ouvrez votre page » : UNIQUEMENT le champ code (FCM-XXXXXX) —
-//     l'ancien écran « Bienvenue 🌳 » (choix inscription/connexion) est
-//     SUPPRIMÉ — plus AUCUNE autre porte d'entrée ;
-//   · PAGE 2 « Vos renseignements » : nom + téléphone PRÉREMPLI depuis le
-//     code (modifiable) → vérification automatique → compte créé DIRECTEMENT
-//     avec le nom saisi (l'ancien écran « être appelé » a disparu) ;
-//   · code déjà utilisé → reconnexion par numéro (prérempli depuis le code) —
-//     jamais de double compte.
+// v34 — ISOLATION STRICTE (inchangée) : le gate lit le poste du compte
+//   connecté (fc_uid + fc_tontine_role_v1) — la console d'un AUTRE poste est
+//   refusée (redirection Espace Membre + message). Chacun ne voit que SON
+//   statut ; sans compte connecté (validation de développement), les 4
+//   consoles restent accessibles par l'URL (#president/#secretaire/…).
 //
-// v30 — DEMANDE DE L'ADMINISTRATEUR : « les différents boutons des pages
-// occupent toute la page, ça rend la navigation difficile — organiser toutes
-// les sections dans un menu hamburger… et le même mécanisme pour tous les
-// autres membres du bureau. »
-//   · MENU HAMBURGER (MenuHamburger, maquette-ui) : UNE barre compacte
-//     collante (☰ + onglet courant) + un TIROIR latéral regroupant toutes
-//     les sections et leurs onglets (Mémoire de la réunion, Gestion de la
-//     cantine…) — le contenu redevient lisible ;
-//   · MÊME MÉCANISME sur les 4 consoles : Secrétaire (20 onglets / 4
-//     sections), Président (2 familles), Commissaire, Espace Membre ;
-//   · badges conservés : le ☰ affiche le total des actions attendues hors
-//     onglet courant, l'onglet courant garde son propre chiffre ;
-//   · chaque onglet garde son URL (#secretaire/…, #president/…).
+// v32 — PAGE 1 « Ouvrez votre page » (code seul) + PAGE 2 « Vos
+//   renseignements » : le parcours d'inscription reste celui-là (AuthFlow).
 //
-// v29 — DEMANDE DE L'ADMINISTRATEUR : « “Recevoir la notification” — supprime
-// cette phrase car la notification automatique doit être par défaut ; ajoute
-// cette option plutôt dans les paramètres. »
-//   · le bouton « Recevoir la notification » de l'inscription est SUPPRIMÉ :
-//     la vérification du numéro part TOUTE SEULE dès que le numéro est complet ;
-//   · les notifications push sont AUTOMATIQUES PAR DÉFAUT (aucun bouton
-//     « Activer les notifications ») ;
-//   · le réglage vit dans LES PARAMÈTRES : Ma sécurité, Espace Membre → Mon
-//     profil, Paramètres du secrétariat et du président (ReglageNotifications).
-//
-// v27 — DEMANDE DE L'ADMINISTRATEUR : « au niveau de l'application mobile,
-// que l'on ne voie PAS la maquette : qu'on voie l'APPLICATION TELLE QUELLE. »
-//   · À l'ouverture, c'est l'APPLICATION qui s'affiche (MainApp) — plus la
-//     maquette par défaut ;
-//   · en mode app, le bandeau est réduit à une fine barre discrète (marque
-//     + accès « Bureau » pour l'administrateur) : l'app est vue TELLE QUELLE ;
-//   · les consoles du bureau restent accessibles : pastille « Bureau », ou
-//     hash explicite (#president/#secretaire/#commissaire/#membre) posé par
-//     le switcher « Mon poste au bureau » — la vue bascule alors d'elle-même.
 // Trois consoles de gestion restent présentées en vue de validation, routées
 // par le hash de l'URL :
 //   · #president/…    → Poste de commandement du Président
 //   · #secretaire/…   → Console du Secrétaire (20 onglets)
 //   · #commissaire/…  → Console du Commissaire aux comptes
+//   · #membre/…       → Espace Membre
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Menu } from "lucide-react";
 import { MainApp } from "./main-app";
 import { MaquettePresident } from "./maquette-president";
 import { MaquetteSecretaire } from "./maquette-secretaire";
@@ -85,26 +47,8 @@ import { EspaceMembre } from "./espace-membre";
 import { corrigerFauxNegatifLegacy, forceLegacyDemande, gateMode } from "./gate-fix";
 import { CONSOLE_DU_ROLE, LIBELLE_CONSOLE, roleDuCompteConnecte } from "./poste-console";
 import type { RoleKey } from "./tontine-data";
-import { Sparkles, Crown, PenLine, Landmark, Users } from "lucide-react";
 
 type ConsoleKey = "president" | "secretaire" | "commissaire" | "membre";
-
-const CONSOLES: Record<ConsoleKey, string> = {
-  president: "Poste de commandement du Président (codes d'invitation + espace membre)",
-  secretaire: "Console du Secrétaire (20 onglets : mémoire, gestion, créer un membre)",
-  commissaire: "Console du Commissaire aux comptes (caisses, journal, registres, rapports)",
-  membre: "Espace Membre (15 onglets : ma vie, la Tontine, ma voix, mon compte)",
-};
-
-// v21 — pastilles du bandeau : une par console, cliquable PARTOUT (maquette
-// comme application). Dans l'ordre d'affichage du bureau. v26 : la 4ᵉ pastille
-// Membre ouvre l'ESPACE MEMBRE — l'espace des membres simples refait à neuf.
-const PILLES: Array<{ key: ConsoleKey; label: string; Icon: typeof Crown }> = [
-  { key: "president", label: "Président", Icon: Crown },
-  { key: "secretaire", label: "Secrétaire", Icon: PenLine },
-  { key: "commissaire", label: "Commissaire", Icon: Landmark },
-  { key: "membre", label: "Membre", Icon: Users },
-];
 
 function consoleFromHash(): ConsoleKey {
   try {
@@ -128,6 +72,53 @@ function hashConsoleExplicite(): boolean {
   }
 }
 
+/** v36 — le hamburger de la BARRE DU HAUT : ouvre le tiroir de la console
+ *  courante. La console (Espace Membre, Président, Secrétaire, Commissaire)
+ *  écoute « fc-ouvrir-menu » dans son MenuHamburger — un seul est monté à la
+ *  fois, donc le tiroir qui répond est toujours le bon. */
+function ouvrirMenuConsole(): void {
+  try {
+    window.dispatchEvent(new CustomEvent("fc-ouvrir-menu"));
+  } catch { /* rien */ }
+}
+
+/** v36 — BARRE DU HAUT : le logo de la famille + son nom écrit EN DESSOUS
+ *  (demande de l'administrateur), et — quand une console est affichée — le
+ *  menu hamburger à droite. Fini les pastilles « Membres » / « App » et
+ *  l'icône d'IA. */
+function BarreHaute({ avecMenu }: { avecMenu: boolean }) {
+  return (
+    <div
+      className="sticky top-0 z-30 flex items-center justify-between gap-2 bg-[#2A4A3A] px-3 py-1.5 text-white"
+      style={{ paddingBottom: "max(0.375rem, env(safe-area-inset-top))" }}
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        <div className="flex shrink-0 flex-col items-center">
+          <img
+            src="/logo-famille.webp"
+            alt="Armoiries de la famille Mbeutetsa"
+            className="h-7 w-7 rounded-lg border border-[#C89F62]/70 bg-[#FBF7EA] object-cover"
+          />
+          <p className="mt-0.5 text-[9px] font-bold leading-none tracking-wide text-[#FBF7EA]">
+            Famille Mbeutetsa
+          </p>
+        </div>
+      </div>
+      {avecMenu && (
+        <button
+          type="button"
+          onClick={ouvrirMenuConsole}
+          aria-label="Ouvrir le menu de la page"
+          aria-haspopup="dialog"
+          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 border-[#C89F62]/70 bg-white/10 text-[#FBF7EA] transition-all hover:bg-white/20 active:scale-95"
+        >
+          <Menu aria-hidden className="h-5 w-5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function MaquetteGate() {
   // Navigateurs 2015 (classe fc-legacy posée par le browser gate) : l'app Lite
   // ES5 reste maîtresse — la maquette React ne s'y affiche pas. v31 : la valeur
@@ -136,11 +127,13 @@ export function MaquetteGate() {
   const [legacy, setLegacy] = useState(
     () => typeof document !== "undefined" && /fc-legacy/.test(document.documentElement.className),
   );
-  // v27 — L'APPLICATION TELLE QUELLE à l'ouverture : le mode initial est « app »
-  // SAUF si l'URL vise déjà une console (#president/…, #secretaire/…).
-  const [mode, setMode] = useState<"maquette" | "app">(() =>
-    (typeof window !== "undefined" && hashConsoleExplicite()) ? "maquette" : "app",
-  );
+  // v27 — L'APPLICATION TELLE QUELLE à l'ouverture. v36 — HYDRATATION SÛRE :
+  // l'état initial est TOUJOURS « app » (identique côté serveur et client —
+  // lire window.location.hash à l'état initial crée un mismatch SSR/client,
+  // erreur « Hydration failed » avec la nouvelle barre). Le sync() post-montage
+  // (setTimeout 0, ci-dessous) bascule vers « maquette » si l'URL vise déjà
+  // une console (#president/…, #secretaire/…, #membre/…).
+  const [mode, setMode] = useState<"maquette" | "app">("app");
   const [console_, setConsole_] = useState<ConsoleKey>(() => consoleFromHash());
   // v34 — poste du compte connecté sur CET appareil : sert à l'ISOLATION DES
   // STATUTS (seule la console du propre poste est ouverte). "pas-de-compte"
@@ -154,31 +147,6 @@ export function MaquetteGate() {
    *  « aucun membre ne devrait voir la page du statut d'un autre membre ». */
   const consoleAutorisee = (c: ConsoleKey, role: RoleKey | "pas-de-compte"): boolean =>
     role === "pas-de-compte" || c === "membre" || CONSOLE_DU_ROLE[role] === c;
-
-  // v21 — pastille de console : ouvre IMMÉDIATEMENT la console visée (état
-  // posé à la main) et pose le hash via history.pushState — le pattern du
-  // projet (jamais location.hash= dans un composant, règle React 19).
-  // pushState ne déclenche pas « hashchange » : c'est voulu, l'état est déjà
-  // posé ici ; le listener reste utile pour les changements EXTERNES du hash
-  // (switcher « Mon poste au bureau », URL éditée, bouton retour). Piège
-  // hash identique (#president/… sous-page) : rien à faire, l'état est déjà bon.
-  // v34 — une console d'un AUTRE poste est refusée (message clair).
-  const allerConsole = (c: ConsoleKey): void => {
-    if (!consoleAutorisee(c, roleCompte)) {
-      toast.error(
-        `La page « ${LIBELLE_CONSOLE[c]} » est réservée à ce poste du bureau — vous ne voyez que VOTRE statut.`,
-      );
-      return;
-    }
-    setConsole_(c);
-    setMode("maquette");
-    try {
-      const h = (window.location.hash || "").toLowerCase();
-      if (!h.startsWith(`#${c}`)) {
-        window.history.pushState(null, "", `#${c}`);
-      }
-    } catch { /* rien */ }
-  };
 
   useEffect(() => {
     // v31 — CORRECTION DU FAUX NÉGATIF AVANT TOUT : React monte (preuve
@@ -209,9 +177,8 @@ export function MaquetteGate() {
         );
       }
       setConsole_(cible);
-      // v20 — switcher « Mon poste au bureau » : quand le hash vise une
-      // console, la vue bascule d'elle-même de l'application vers la maquette
-      // (le membre qui bascule vers son poste tombe directement dessus).
+      // v20 — quand le hash vise une console, la vue bascule d'elle-même de
+      // l'application vers la console du poste (lien profond, bouton retour).
       if (hashConsoleExplicite()) setMode("maquette");
     };
     const t0 = setTimeout(sync, 0);
@@ -247,79 +214,28 @@ export function MaquetteGate() {
 
   if (legacy) return <MainApp />;
 
-  // v27 — MODE APP : l'application TELLE QUELLE, avec une fine barre discrète
-  // (marque seule). v34 — le bouton « Bureau › » (vue de validation) est
-  // SUPPRIMÉ : plus aucune porte des consoles depuis l'application réelle —
-  // chacun est renvoyé à SON poste par la page qui suit la géolocalisation
-  // et, depuis l'accueil, par la carte « Mon poste au bureau ».
   if (mode === "app") {
+    // v36 — mode app : le parcours d'inscription (code → renseignements →
+    // géolocalisation → rôle) puis la redirection DIRECTE vers la page du
+    // poste. La barre du haut montre la marque seule : le hamburger n'a
+    // encore aucune console à ouvrir.
     return (
       <div className="flex flex-1 flex-col">
-        <div className="sticky top-0 z-30 flex items-center gap-2 bg-[#2A4A3A] px-3 py-1.5 text-white">
-          <Sparkles className="h-3 w-3 shrink-0 text-[#C89F62]" />
-          <p className="min-w-0 truncate text-[11px] font-semibold">Famille.Mbeutetsa</p>
-        </div>
+        <BarreHaute avecMenu={false} />
         <MainApp />
       </div>
     );
   }
 
+  // v36 — mode console : la page propre au statut connecté, sous la barre du
+  // haut (logo + hamburger). Plus aucune pastille « Membres » / « App ».
   return (
     <div className="flex flex-1 flex-col">
-      <div className="sticky top-0 z-30 flex items-center gap-1 bg-[#2A4A3A] px-1.5 py-1.5 text-white sm:gap-2 sm:px-3">
-        <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#C89F62]" />
-        <p className="hidden min-w-0 truncate text-[11px] font-semibold sm:block">
-          {console_ === "membre"
-            ? `Espace Membre v34 — ${CONSOLES[console_]}`
-            : `Maquette v34 — ${CONSOLES[console_]}`}
-        </p>
-        {/* v34 — sélecteur de consoles RÉDUIT AU PROPRE POSTE du compte
-            connecté (isolation des statuts) : un président ne voit que la
-            pastille Président, un membre simple que la pastille Membre.
-            Sans compte connecté (validation de développement), les 4
-            consoles restent accessibles. */}
-        <nav aria-label="Consoles du bureau" className="fc-scroll flex min-w-0 items-center gap-1 overflow-x-auto">
-          {PILLES.filter(({ key }) =>
-            roleCompte === "pas-de-compte" || key === CONSOLE_DU_ROLE[roleCompte],
-          ).map(({ key, label, Icon }) => {
-            const actif = mode === "maquette" && console_ === key;
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => allerConsole(key)}
-                aria-pressed={actif}
-                title={CONSOLES[key]}
-                className={`flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold transition-all active:scale-95 sm:text-[11px] ${
-                  actif
-                    ? "bg-[#C89F62] text-[#2B2416] shadow-sm"
-                    : "border border-white/25 bg-white/5 text-white/80 hover:border-white/50 hover:bg-white/15 hover:text-white"
-                }`}
-              >
-                <Icon className="h-3 w-3" />
-                <span className="whitespace-nowrap">{label}</span>
-              </button>
-            );
-          })}
-        </nav>
-        <button
-          type="button"
-          onClick={() => setMode("app")}
-          className="ml-auto shrink-0 rounded-full bg-[#C89F62] px-2.5 py-1 text-[11px] font-bold text-[#2B2416] transition-all hover:bg-[#b98f50] active:scale-95 sm:px-3"
-        >
-          <span className="hidden sm:inline">Voir l’app</span>
-          <span className="sm:hidden">App</span>
-          <span className="sr-only">Revenir à l’application</span>
-        </button>
-      </div>
-      {mode === "maquette" ? (
-        console_ === "president" ? <MaquettePresident />
-          : console_ === "secretaire" ? <MaquetteSecretaire />
-          : console_ === "membre" ? <EspaceMembre voirApp={() => setMode("app")} />
-          : <MaquetteCommissaire />
-      ) : (
-        <MainApp />
-      )}
+      <BarreHaute avecMenu />
+      {console_ === "president" ? <MaquettePresident />
+        : console_ === "secretaire" ? <MaquetteSecretaire />
+        : console_ === "membre" ? <EspaceMembre />
+        : <MaquetteCommissaire />}
     </div>
   );
 }

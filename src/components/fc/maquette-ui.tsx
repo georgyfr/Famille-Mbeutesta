@@ -11,7 +11,7 @@
 
 import type { ReactNode, RefObject } from "react";
 import { useEffect, useRef, useState } from "react";
-import { ChevronsRight, ChevronsUp, Menu, X } from "lucide-react";
+import { ChevronRight, ChevronsRight, ChevronsUp, Menu, X } from "lucide-react";
 import { toast } from "sonner";
 import { FcCard } from "./ui";
 
@@ -47,6 +47,34 @@ export function P({ children, cls = "bg-[#2A4A3A]/8 text-[#5C6B60] border-[#E5DC
     <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10.5px] font-bold ${cls}`}>
       {children}
     </span>
+  );
+}
+
+/* — v36 : PASTILLE CLIQUABLE (PBtn) — même silhouette que P, mais un vrai
+ *    bouton : les badges de l'Espace Membre (« 5 membres », « actions
+ *    attendue(s) », « 2ᵉ dimanche du mois ») deviennent INTERACTIFS — un clic
+ *    ouvre la page correspondante, et un chiffre apparaît quand il y a des
+ *    actions à faire (demande de l'administrateur). Le chevron signale le
+ *    geste ; l'indicateur optionnel porte le chiffre d'actions en attente. — */
+export function PBtn({ children, onClick, cls = "bg-[#2A4A3A]/8 text-[#5C6B60] border-[#E5DCC0]", ariaLabel, badge }: {
+  children: ReactNode; onClick: () => void;
+  cls?: string; ariaLabel: string; badge?: number;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={ariaLabel}
+      className={`inline-flex min-h-[26px] items-center gap-1 rounded-full border px-2 py-0.5 text-[10.5px] font-bold transition-all hover:brightness-95 active:scale-95 ${cls}`}
+    >
+      {children}
+      {badge != null && badge > 0 && (
+        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[#B91C1C] px-1 text-[9px] font-black leading-none text-white">
+          {badge > 9 ? "9+" : badge}
+        </span>
+      )}
+      <ChevronRight aria-hidden className="h-3 w-3 opacity-70" />
+    </button>
   );
 }
 
@@ -134,8 +162,12 @@ export function KpiCard({ icon, label, value, sub, accent, barre }: {
 }
 
 /* — bandeau d'en-tête de console : même gabarit que le président — */
+/* v36 — surtitre et sousTitre OPTIONNELS : la carte d'en-tête s'épure sur
+ * demande de l'administrateur (« supprime “la Tontine au quotidien” et les
+ * éléments tour n°1 (janvier) · Ma position — ce champ ne sert à rien »).
+ * Un libellé absent n'est simplement plus rendu. */
 export function EnteteConsole({ accent, accentClair, surtitre, titre, sousTitre, icon, badges }: {
-  accent: string; accentClair: string; surtitre: string; titre: string; sousTitre: string;
+  accent: string; accentClair: string; surtitre?: string; titre: string; sousTitre?: string;
   icon: ReactNode; badges: ReactNode;
 }) {
   return (
@@ -144,9 +176,13 @@ export function EnteteConsole({ accent, accentClair, surtitre, titre, sousTitre,
         <div className="flex items-start gap-3">
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/15">{icon}</span>
           <div className="min-w-0 flex-1">
-            <p className="text-[10.5px] font-bold uppercase tracking-widest" style={{ color: accentClair === accent ? "#C89F62" : "#EAD9EE" }}>{surtitre}</p>
+            {surtitre && surtitre.trim() !== "" && (
+              <p className="text-[10.5px] font-bold uppercase tracking-widest" style={{ color: accentClair === accent ? "#C89F62" : "#EAD9EE" }}>{surtitre}</p>
+            )}
             <p className="fc-serif text-[19px] font-bold leading-tight">{titre}</p>
-            <p className="mt-0.5 text-[12px] text-white/85">{sousTitre}</p>
+            {sousTitre && sousTitre.trim() !== "" && (
+              <p className="mt-0.5 text-[12px] text-white/85">{sousTitre}</p>
+            )}
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-1.5">{badges}</div>
@@ -302,8 +338,16 @@ export function NavOnglets<T extends string>({ ariaLabel, etiquette, etiquetteCo
  *    sections avec leurs onglets (Mémoire de la réunion, Gestion de la
  *    cantine…) : le contenu des pages redevient lisible. MÊME MÉCANISME pour
  *    toutes les consoles du bureau : secrétaire, président, commissaire et
- *    espace membre — props identiques à NavOnglets (groupes | onglets). — */
-export function MenuHamburger<T extends string>({ ariaLabel, libelle, couleurPoint, onglets, groupes, actif, goTab, filRacine }: {
+ *    espace membre — props identiques à NavOnglets (groupes | onglets).
+ *
+ * v36 — DEMANDE DE L'ADMINISTRATEUR : « le menu hamburger va dans la barre du
+ * haut (à la place de « App ») — la barre interne [logo ☰ Accueil] ne sert à
+ * rien, supprime-la. » L'Espace Membre (et toute console qui le souhaite)
+ * rend le MenuHamburger SANS sa barre interne (afficherBarre={false}) : il ne
+ * reste que le TIROIR — ouvert par le hamburger global de la barre du haut
+ * via l'événement « fc-ouvrir-menu ». Un seul tiroir est monté à la fois :
+ * le hamburger global ouvre toujours la console courante. — */
+export function MenuHamburger<T extends string>({ ariaLabel, libelle, couleurPoint, onglets, groupes, actif, goTab, filRacine, afficherBarre = true }: {
   ariaLabel: string; libelle?: string; couleurPoint: string;
   onglets?: OngletItem<T>[];
   groupes?: GroupeOnglets<T>[];
@@ -313,6 +357,9 @@ export function MenuHamburger<T extends string>({ ariaLabel, libelle, couleurPoi
    *  › Onglet courant — cliquer la racine remonte à l'onglet d'accueil du
    *  poste, cliquer la section ouvre le tiroir sur tous ses onglets. */
   filRacine?: { label: string; onClick: () => void };
+  /** v36 — barre interne masquable (défaut : affichée). À false, la console
+   *  ne garde que le tiroir — le hamburger vit dans la barre du haut. */
+  afficherBarre?: boolean;
 }) {
   const [ouvert, setOuvert] = useState(false);
   const btnRef = useRef<HTMLButtonElement | null>(null);
@@ -342,6 +389,15 @@ export function MenuHamburger<T extends string>({ ariaLabel, libelle, couleurPoi
       window.clearTimeout(t0);
     };
   }, [ouvert]);
+
+  /* v36 — LE HAMBURGER GLOBAL (barre du haut) ouvre le tiroir de la console
+   * courante : un seul MenuHamburger est monté à la fois, il répond à
+   * l'événement « fc-ouvrir-menu » quel que soit son affichage interne. */
+  useEffect(() => {
+    const onOuvrir = () => setOuvert(true);
+    window.addEventListener("fc-ouvrir-menu", onOuvrir);
+    return () => window.removeEventListener("fc-ouvrir-menu", onOuvrir);
+  }, []);
 
   const choisir = (t: T) => {
     setOuvert(false);
@@ -388,7 +444,11 @@ export function MenuHamburger<T extends string>({ ariaLabel, libelle, couleurPoi
        *    dessous en scollant mais le menu reste TOUJOURS accessible.
        *    v31 — LE LOGO (blason) est ici, AU NIVEAU DU MENU HAMBURGER
        *    (retour terrain : « le logo doit être au niveau du menu
-       *    hamburger ») — même mécanique pour toutes les consoles du bureau. */}
+       *    hamburger ») — même mécanique pour toutes les consoles du bureau.
+       *    v36 — SUPPRIMABLE : `afficherBarre={false}` — le hamburger vit
+       *    alors dans la barre du haut (demande de l'administrateur pour
+       *    l'Espace Membre : « cette barre ne sert à rien, supprime-la »). */}
+      {afficherBarre && (
       <div className="sticky top-[35px] z-20 -mx-3 mt-3 px-3 sm:-mx-4 sm:px-4">
         <div className="rounded-2xl border-2 border-[#B8A87E] bg-white/95 shadow-[0_8px_24px_rgba(42,74,58,0.16)] backdrop-blur">
           <div className="flex items-center gap-2 py-1.5 pl-2 pr-2.5 sm:pl-2.5">
@@ -448,6 +508,7 @@ export function MenuHamburger<T extends string>({ ariaLabel, libelle, couleurPoi
           )}
         </div>
       </div>
+      )}
 
       {/* tiroir latéral — toutes les sections et tous les onglets du poste */}
       {ouvert && (

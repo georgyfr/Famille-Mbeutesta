@@ -7,9 +7,10 @@ import { installDemoApi } from "@/lib/demo-api";
 import { consumedRestore, installStorageMirror } from "@/lib/fc-storage-mirror";
 import {
   initPushDebugListener, initServiceWorker, setDeferredInstallPrompt,
+  startInAppNotificationPolling,
 } from "@/lib/fc-push";
 import { AuthFlow } from "./auth-flow";
-import { Dashboard, type SessionData } from "./dashboard";
+import { type SessionData } from "./session-data";
 import { LocationWizard } from "./location-wizard";
 import { RoleWizard } from "./role-wizard";
 import { loadVousRole } from "./tontine-bureau";
@@ -80,6 +81,43 @@ function locSkippedActuel(): boolean {
   } catch {
     return false;
   }
+}
+
+/* v36 — FIN DE LA PAGE D'ACCUEIL GÉNÉRIQUE. Demande de l'administrateur :
+ * « Supprime cette page complètement, ainsi que dans les comptes des autres
+ * membres. Désormais, lorsqu'on finit la géolocalisation, c'est la page de
+ * SON statut qui s'affiche. » Une session complète pose le hash de la console
+ * du poste (Espace Membre, Président, Secrétaire, Commissaire) — le gate
+ * bascule aussitôt sur cette page. L'écran de transition ne dure qu'un clin
+ * d'œil ; le polling in-app des notifications y reste branché. */
+function PosteDirect() {
+  useEffect(() => {
+    const stopNotifs = startInAppNotificationPolling((n) => {
+      toast.info(n.title, { description: n.body });
+    });
+    const t = setTimeout(() => {
+      const role = loadVousRole();
+      naviguerHash(role ? CONSOLE_DU_ROLE[role] : "membre");
+    }, 0);
+    return () => {
+      clearTimeout(t);
+      stopNotifs();
+    };
+  }, []);
+  return (
+    <div
+      className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-24"
+      role="status"
+      aria-label="Ouverture de votre espace"
+    >
+      <img
+        src="/logo-famille.webp"
+        alt="Armoiries de la famille Mbeutetsa"
+        className="h-16 w-16 animate-pulse rounded-3xl bg-[#FBF7EA] p-2 shadow-lg ring-1 ring-[#C89F62]/70"
+      />
+      <FcSpinner className="h-6 w-6 text-[#C89F62]" />
+    </div>
+  );
 }
 
 export function MainApp() {
@@ -188,19 +226,15 @@ export function MainApp() {
     await loadSession();
   }, [loadSession]);
 
-  const handleLoggedOut = useCallback(() => {
-    setSession(null);
-  }, []);
-
   /** Localisation enregistrée → on nettoie le marqueur « plus tard » et on
    *  recharge la session.
-   *  v34 — DEMANDE DE L'ADMINISTRATEUR : « lorsqu'une personne finit son
-   *  inscription et sa géolocalisation, la page qui suit est la page propre
-   *  au statut qu'il occupe » — si le compte porte déjà SON poste (posé par
-   *  le code du bureau), l'application ouvre DIRECTEMENT la console du poste
-   *  : président → #president, secrétaire → #secretaire, commissaire →
-   *  #commissaire, simple membre → #membre. Si le poste n'est pas encore
-   *  posé, l'assistant « Votre rôle » s'affiche d'abord (voir handleRoleDone). */
+   *  v34 — « lorsqu'une personne finit son inscription et sa géolocalisation,
+   *  la page qui suit est la page propre au statut qu'il occupe » — si le
+   *  compte porte déjà SON poste (posé par le code du bureau), l'application
+   *  ouvre DIRECTEMENT la console du poste : président → #president,
+   *  secrétaire → #secretaire, commissaire → #commissaire, simple membre →
+   *  #membre. Si le poste n'est pas encore posé, l'assistant « Votre rôle »
+   *  s'affiche d'abord (voir handleRoleDone). */
   const handleLocationSaved = useCallback(async () => {
     try {
       localStorage.removeItem("fc_loc_skipped");
@@ -210,7 +244,7 @@ export function MainApp() {
     setLocSkipped(false);
     await loadSession();
     const role = loadVousRole();
-    if (role) naviguerHash(CONSOLE_DU_ROLE[role]);
+    naviguerHash(role ? CONSOLE_DU_ROLE[role] : "membre");
   }, [loadSession]);
 
   const skipLocation = useCallback(async () => {
@@ -232,7 +266,7 @@ export function MainApp() {
   const handleRoleDone = useCallback(() => {
     setRoleChoisi(true);
     const role = loadVousRole();
-    if (role) naviguerHash(CONSOLE_DU_ROLE[role]);
+    naviguerHash(role ? CONSOLE_DU_ROLE[role] : "membre");
   }, []);
 
   const ready = !loading && !splashMin;
@@ -252,7 +286,7 @@ export function MainApp() {
       ) : needsRole && session ? (
         <RoleWizard onDone={handleRoleDone} />
       ) : session ? (
-        <Dashboard session={session} onLoggedOut={handleLoggedOut} onRefresh={loadSession} />
+        <PosteDirect />
       ) : (
         <AuthFlow onReady={handleReady} />
       )}

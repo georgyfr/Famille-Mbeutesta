@@ -44,13 +44,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   Bell, CalendarCheck, CalendarClock, CalendarDays, CheckCircle2, ClipboardList, Coins, Coffee,
-  Crown, FileText, Gavel, HandCoins, HandHeart, Landmark, Mail, MessageSquarePlus, Mic, PiggyBank,
-  ReceiptText, ScrollText, Send, Square, Trash2, TrendingUp, User, UserCheck, Users, Wallet, X,
+  Crown, FileText, Gavel, HandCoins, HandHeart, Landmark, LogOut, Mail, MessageSquarePlus, Mic,
+  PiggyBank, ReceiptText, ScrollText, Send, Square, Trash2, TrendingUp, User, UserCheck, Users,
+  Wallet, X,
 } from "lucide-react";
 import { FcCard } from "./ui";
 import { ReglageNotifications } from "./reglage-notifications";
+import { api } from "@/lib/fc-client";
 import {
-  Block, Btn, BtnConfirme, EnteteConsole, KpiCard, MenuHamburger, P,
+  Block, Btn, BtnConfirme, EnteteConsole, KpiCard, MenuHamburger, P, PBtn,
   dateCourte, fcfa, fmt, heure, nid, useOngletsVus,
   OK_CLS, OR_CLS, RJ_CLS, TE_CLS, VI_CLS, toast,
 } from "./maquette-ui";
@@ -226,7 +228,6 @@ export type CtxMembre = {
   decisionsTaux: DecisionTaux[];
   majDecisionsTaux: (next: DecisionTaux[]) => void;
   tick: number;
-  voirApp?: () => void;
 };
 
 /* ══════════════════════════════ enregistreur vocal (courts messages) ══════════════════════════════ */
@@ -1317,6 +1318,10 @@ function ReunionsTab(p: { ctx: CtxMembre }): ReactNode {
   const jour = secondSunday(annee, moisCourantIdx);
   const seance = seances.find((s) => s.moisKey === moisKey);
   const etatMois: PresenceEtat = presences?.[moisKey]?.[moi.id] ?? "attente";
+  // v36 — QUI reçoit le pot ce mois-ci : le membre dont le tour correspond au
+  // mois courant (demande : « quand on clique sur « 2ᵉ dimanche du mois », il
+  // devra voir la personne qui est supposée recevoir la réunion »).
+  const benefMois = roster.find((m) => moisDuTour(m.tour) === MOIS_FR[moisCourantIdx]);
 
   return (
     <>
@@ -1330,6 +1335,11 @@ function ReunionsTab(p: { ctx: CtxMembre }): ReactNode {
             <div className="mt-2 flex flex-wrap gap-1.5">
               <P cls={COULEUR_PRESENCE[etatMois]}>{ETATS_PRESENCE.find((e) => e.cle === etatMois)?.label ?? "Appel en attente"}</P>
               <P cls={TE_CLS}><Users className="h-3 w-3" /> {roster.length} membres convoqués</P>
+              {benefMois && (
+                <P cls={benefMois.id === moi.id ? OR_CLS : VI_CLS}>
+                  <Crown className="h-3 w-3" /> Reçoit le pot : {benefMois.name} (tour n°{benefMois.tour}){benefMois.id === moi.id ? " — MON tour" : ""}
+                </P>
+              )}
             </div>
           </div>
         </div>
@@ -1952,11 +1962,31 @@ function ReglementTab(p: { ctx: CtxMembre }): ReactNode {
 function ProfilTab(p: { ctx: CtxMembre }): ReactNode {
   const { moi, roster, regl } = p.ctx;
   const [typesCotis, setTypesCotis] = useState<TypeCotisation[]>([]);
+  // v36 — déconnexion depuis « Mon profil » : l'ancienne page d'accueil
+  // (Ma sécurité) est supprimée — la sortie de session vit ICI.
+  const [enSortie, setEnSortie] = useState(false);
 
   useEffect(() => {
     const t0 = setTimeout(() => setTypesCotis(loadTypesCotisation()), 0);
     return () => clearTimeout(t0);
   }, [p.ctx.tick]);
+
+  const seDeconnecter = async () => {
+    setEnSortie(true);
+    try {
+      await api("/api/auth/logout", { method: "POST" });
+    } catch { /* on sort quand même */ }
+    try {
+      window.localStorage.removeItem("fc_uid");
+      window.localStorage.removeItem("fc_name");
+    } catch { /* rien */ }
+    // v36 — on repart de la PORTE D'ENTRÉE (le code) : le hash de console est
+    // retiré avant le rechargement — sinon la console s'ouvrirait en aperçu.
+    try {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    } catch { /* rien */ }
+    window.location.reload();
+  };
 
   const monType = typeDuMembre(moi.id, typesCotis);
   const moiRoster = roster.find((m) => m.id === moi.id);
@@ -1985,7 +2015,11 @@ function ProfilTab(p: { ctx: CtxMembre }): ReactNode {
           </p>
         )}
         <div className="mt-3 flex flex-wrap gap-2">
-          {p.ctx.voirApp && <Btn tone="vert" onClick={p.ctx.voirApp}><Users className="h-4 w-4" /> Ouvrir l&apos;application famille</Btn>}
+          {moi.connecte && (
+            <Btn tone="rouge" disabled={enSortie} onClick={seDeconnecter}>
+              <LogOut className="h-4 w-4" /> {enSortie ? "Déconnexion…" : "Se déconnecter"}
+            </Btn>
+          )}
           <a href="https://wa.me/?text=Je%20vous%20invite%20dans%20la%20Tontine%20Mbeutetsa%20—%20demandez%20votre%20code%20d'invitation%20au%20bureau%20!%20(FamilleConnect)"
             target="_blank" rel="noreferrer">
             <Btn tone="teal"><Send className="h-4 w-4" /> Inviter un proche par WhatsApp</Btn>
@@ -2029,7 +2063,19 @@ function ProfilTab(p: { ctx: CtxMembre }): ReactNode {
 
 /* ══════════════════════════════ LA CONSOLE ESPACE MEMBRE ══════════════════════════════ */
 
-export function EspaceMembre({ voirApp }: { voirApp?: () => void }) {
+/* v36 — DEMANDES DE L'ADMINISTRATEUR (capture « Espace Membre ») :
+ *   · la carte d'en-tête s'épure : le sur-titre « la Tontine au quotidien »
+ *     est SUPPRIMÉ, la ligne « Membre · tour n°1 (janvier) · Ma position »
+ *     aussi (« ce champ ne sert absolument à rien ») ;
+ *   · « Ouvrir l'application » SUPPRIMÉ (plus utile — la console EST
+ *     l'application) ;
+ *   · les badges deviennent INTERACTIFS : « N membres » ouvre l'Annuaire,
+ *     « action(s) attendue(s) » ouvre les Notifications et affiche un CHIFFRE
+ *     quand il y a des actions à faire, « 2ᵉ dimanche du mois » ouvre les
+ *     Réunions où l'on voit QUI reçoit le pot ;
+ *   · la barre interne [logo ☰ Accueil] est SUPPRIMÉE — le menu hamburger vit
+ *     dans la barre du haut (maquette-gate) et ouvre le tiroir des onglets. */
+export function EspaceMembre() {
   const [tab, setTab] = useState<TabKey>("accueil");
   const [moi, setMoi] = useState<Moi>(DEMO_MOI);
   const [roster, setRoster] = useState<Member[]>([]);
@@ -2150,7 +2196,6 @@ export function EspaceMembre({ voirApp }: { voirApp?: () => void }) {
     decisionsTaux,
     majDecisionsTaux: setDecisionsTaux,
     tick,
-    voirApp,
   };
 
   const aller = (t: TabKey) => { setTab(t); goTab(t); };
@@ -2185,38 +2230,58 @@ export function EspaceMembre({ voirApp }: { voirApp?: () => void }) {
 
   return (
     <div className="mx-auto w-full max-w-4xl px-3 pb-10 pt-3 sm:px-4">
+      {/* v36 — carte d'en-tête ÉPURÉE : plus de sur-titre « la Tontine au
+       *    quotidien », plus de ligne « tour n°1 (janvier) · Ma position » —
+       *    le nom du membre et les badges interactifs suffisent. */}
       <EnteteConsole
         accent="#1E4D2B" accentClair="#2F6B45"
-        surtitre="Espace Membre — la Tontine au quotidien"
         titre={`Espace Membre — ${moi.nom}`}
-        sousTitre={moi.connecte
-          ? `${ROLE_META[moi.role].label} · tour n°${moi.tour} (${moisDuTour(moi.tour)}) · ${moi.city}.`
-          : "Aperçu de démonstration — connectez-vous pour vos données."}
+        sousTitre={moi.connecte ? undefined : "Aperçu de démonstration — connectez-vous pour vos données."}
         icon={<Users className="h-6 w-6" />}
         badges={
           <>
-            <P cls="border-white/25 bg-white/10 text-white"><Users className="h-3 w-3" /> {roster.length} membres</P>
-            <P cls={nbNonLues > 0 ? "border-[#C89F62] bg-[#C89F62] text-[#2B2416]" : "border-white/25 bg-white/10 text-white"}>
+            {/* v36 — INTERACTIF : un clic ouvre l'Annuaire (la liste des membres) */}
+            <PBtn
+              ariaLabel={`Voir les ${roster.length} membres — ouvrir l'annuaire`}
+              onClick={() => aller("membres")}
+              cls="border-white/25 bg-white/10 text-white"
+            >
+              <Users className="h-3 w-3" /> {roster.length} membres
+            </PBtn>
+            {/* v36 — INTERACTIF : un clic ouvre les Notifications ; le CHIFFRE
+             *    des actions à faire apparaît sur la pastille (demande :
+             *   « en cas de notification, un chiffre devrait apparaître ») */}
+            <PBtn
+              ariaLabel={nbNonLues > 0
+                ? `${nbNonLues} action(s) attendue(s) — voir les notifications`
+                : "Aucune action attendue — voir les notifications"}
+              onClick={() => aller("notifications")}
+              badge={nbNonLues}
+              cls={nbNonLues > 0 ? "border-[#C89F62] bg-[#C89F62] text-[#2B2416]" : "border-white/25 bg-white/10 text-white"}
+            >
               <Mail className="h-3 w-3" /> {nbNonLues > 0 ? `${nbNonLues} action(s) attendue(s)` : "aucune action attendue"}
-            </P>
-            <P cls="border-white/25 bg-white/10 text-white"><Crown className="h-3 w-3" /> {TONTINE.jourLabel}</P>
-            {voirApp && (
-              <button type="button" onClick={voirApp}
-                className="inline-flex items-center gap-1 rounded-full border border-white/25 bg-white/10 px-2 py-0.5 text-[11px] font-bold text-white transition hover:bg-white/20">
-                <User className="h-3 w-3" /> Ouvrir l&apos;application
-              </button>
-            )}
+            </PBtn>
+            {/* v36 — INTERACTIF : un clic ouvre les Réunions, où l'on voit la
+             *    personne qui reçoit le pot du mois (le calendrier des tours) */}
+            <PBtn
+              ariaLabel="Qui reçoit le pot ce mois-ci — ouvrir les réunions"
+              onClick={() => aller("reunions")}
+              cls="border-white/25 bg-white/10 text-white"
+            >
+              <Crown className="h-3 w-3" /> {TONTINE.jourLabel}
+            </PBtn>
           </>
         }
       />
 
-      {/* v30 : MENU HAMBURGER — les 15 onglets en 3 sections dans un tiroir,
-       *    la page affiche enfin le CONTENU plutôt que des rangées de boutons */}
+      {/* v36 : MENU HAMBURGER dans la BARRE DU HAUT — la barre interne
+       *    [logo ☰ Accueil] est SUPPRIMÉE (elle ne sert à rien : on est déjà
+       *    sur la page d'accueil du membre) ; le tiroir des 15 onglets reste,
+       *    ouvert par le hamburger global de la barre du haut. */}
       <MenuHamburger<TabKey>
         ariaLabel="Sections de l'espace membre"
-        libelle={`${groupes.length} sections · ${groupes.reduce((s, g) => s + g.onglets.length, 0)} onglets`}
         couleurPoint="#1E4D2B"
-        filRacine={{ label: "Espace Membre", onClick: () => aller("accueil") }}
+        afficherBarre={false}
         groupes={groupes}
         actif={tab}
         goTab={aller}
