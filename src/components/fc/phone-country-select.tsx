@@ -47,13 +47,20 @@ function Flag({ iso, height = 19 }: { iso: string; height?: number }) {
   );
 }
 
-/* ─── Hook : pays courant + détection auto + mémoire du choix manuel ─── */
-export function usePhoneCountry() {
-  const [country, setCountryState] = useState<Country>(DEFAULT_COUNTRY);
-  const [ready, setReady] = useState(false);
+/* ─── Hook : pays courant + détection auto + mémoire du choix manuel ───
+ *    v39 — `initial` : pays POSÉ DÈS LE PREMIER RENDU (le numéro du bureau
+ *    porté par un code d'invitation). Quand il est fourni, la détection
+ *    automatique (IP → fuseau → langue) est ENTIÈREMENT écartée : le pays du
+ *    code fait foi et ne peut plus être remplacé après coup par le réseau —
+ *    sur une connexion lente, l'indicatif et le numéro restent stables. */
+export function usePhoneCountry(initial?: Country | null) {
+  const [country, setCountryState] = useState<Country>(initial ?? DEFAULT_COUNTRY);
+  const [ready, setReady] = useState<boolean>(() => Boolean(initial));
 
   // Détection automatique au montage (sauf si l'utilisateur a déjà choisi)
+  const isoInitial = initial?.iso;
   useEffect(() => {
+    if (isoInitial) return; // pays du code → aucune détection ne le remplace
     let alive = true;
     void resolveInitialCountry().then(({ country: c, detected }) => {
       if (!alive) return;
@@ -64,7 +71,7 @@ export function usePhoneCountry() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [isoInitial]);
 
   const setManual = (c: Country) => {
     setCountryState(c);

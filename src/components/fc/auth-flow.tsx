@@ -28,7 +28,7 @@
 // l'app DIRECTEMENT sur la PAGE 2, code déjà accepté et numéro prérempli.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api, deviceName } from "@/lib/fc-client";
 import { afterAuthPush, familyNotify } from "@/lib/fc-push";
@@ -331,39 +331,42 @@ function RenseignementScreen({
   const [lastName, setLastName] = useState(parties.length >= 3 ? parties.slice(1).join(" ") : (parties.length === 2 ? parties[1] : ""));
   const [pseudo, setPseudo] = useState("");
 
-  const { country, setCountry, setAuto, ready } = usePhoneCountry();
-  const [digits, setDigits] = useState("");
-  const maxD = maxDigitsFor(country);
-
-  // v34 — le NUMÉRO INSCRIT PAR LE BUREAU sur le code fait foi : il est
-  // prérempli et affiché « Numéro du bureau ✓ ». Si la personne le modifie,
-  // un avertissement clair apparaît (le compte sera lié à CE numéro).
-  const telDuCodeRef = useRef("");
-  const telModifie = telDuCodeRef.current !== "" && onlyDigits(digits) !== telDuCodeRef.current;
-
-  // Le préremplissage depuis le code s'applique UNE fois, APRÈS la détection
-  // automatique du pays (sinon elle l'écraserait) — le code fait foi.
-  // v33 — code SANS téléphone (ex. le code du président) : la VILLE du code
-  // est camerounaise → l'indicatif +237 est PRÉSÉLECTIONNÉ (modifiable, sans
-  // épingler le choix) — la personne tape juste son numéro.
-  const prechargeFait = useRef(false);
-  useEffect(() => {
-    if (!ready || prechargeFait.current) return;
-    prechargeFait.current = true;
+  // v39 — déduction UNIQUE du pays et du numéro depuis le code (stable, sans
+  //   effet de bord réseau). Le numéro du bureau fait foi ; à défaut de
+  //   numéro, la ville camerounaise du code présélectionne l'indicatif +237
+  //   (comportement v33 conservé).
+  const initialTel = useMemo((): { pays: Country; digits: string } | null => {
     const pays = paysDepuisTelephone(c.telephone);
     if (pays) {
-      setCountry(pays);
-      const dial = pays.dial;
       const brut = c.telephone.replace(/^\+/, "");
-      const d = brut.startsWith(dial) ? brut.slice(dial.length) : brut;
-      if (d) {
-        telDuCodeRef.current = onlyDigits(d);
-        setDigits(onlyDigits(d).slice(0, maxDigitsFor(pays)));
-      }
-    } else if (c.ville) {
-      setAuto(countryByIso("CM") ?? country);
+      const d = brut.startsWith(pays.dial) ? brut.slice(pays.dial.length) : brut;
+      return { pays, digits: onlyDigits(d).slice(0, maxDigitsFor(pays)) };
     }
-  }, [ready]);
+    const cm = countryByIso("CM");
+    if (c.ville && cm) return { pays: cm, digits: "" };
+    return null;
+  }, [c.telephone, c.ville]);
+
+  const { country, setCountry } = usePhoneCountry(
+    // v39 — le PAYS du numéro du bureau est posé DÈS LE PREMIER RENDU.
+    initialTel?.pays ?? null,
+  );
+  // v39 — LE NUMÉRO S'AFFICHE DÈS L'OUVERTURE DU CHAMP (demande de
+  //   l'administrateur : « lorsque ce champ s'ouvre, on doit voir le numéro
+  //   de téléphone qui a été renseigné par la secrétaire, quel que soit le
+  //   membre inscrit »). Avant, le préremplissage attendait la détection du
+  //   pays (IP → fuseau → langue) : sur une connexion lente, le champ restait
+  //   VIDE plusieurs secondes et le numéro semblait « demandé ». Désormais,
+  //   pays et numéro sont déduits du code DÈS LE PREMIER RENDU, en
+  //   LECTURE-ÉCRITURE : la personne corrige directement si le bureau a mal
+  //   renseigné le numéro — rien n'est verrouillé.
+  const [digits, setDigits] = useState(initialTel?.digits ?? "");
+  const maxD = maxDigitsFor(country);
+
+  // v34 conservé — le numéro inscrit par le BUREAU fait foi : le moindre
+  //   écart affiche l'avertissement visible (le compte sera lié à CE numéro).
+  const telDuCode = initialTel?.digits ?? "";
+  const telModifie = telDuCode !== "" && onlyDigits(digits) !== telDuCode;
 
   const nomComplet = (firstName.trim().length >= 2 && lastName.trim().length >= 2) || pseudo.trim().length >= 2;
   const toutComplet = nomComplet && phoneDigitsOk(country, digits);
@@ -533,23 +536,32 @@ function PhoneScreen({
   /** Numéro prérempli quand la personne arrive d'un code « déjà utilisé ». */
   prefillTel?: string | null;
 }) {
-  const [digits, setDigits] = useState("");
-  const { country, setCountry, ready } = usePhoneCountry();
-  const maxD = maxDigitsFor(country);
+  // v39 — préremplissage SYNCHRONE depuis le code « déjà utilisé » (ou du
+  //   dernier numéro utilisé sur l'appareil) : pays et numéro sont posés DÈS
+  //   LE PREMIER RENDU, sans attendre la détection du pays — le champ
+  //   n'est jamais vide quand le bureau (ou l'appareil) connaît le numéro.
+  //   Toujours en LECTURE-ÉCRITURE : la personne corrige si besoin.
+  const numeroConnu = useMemo((): string | null => {
+    if (prefillTel) return prefillTel;
+    try {
+      return localStorage.getItem("fc_phone") || null;
+    } catch {
+      return null;
+    }
+  }, [prefillTel]);
 
-  // Préremplissage depuis le code « déjà utilisé » — UNE fois, après la
-  // détection automatique du pays (le code fait foi).
-  const prechargeFait = useRef(false);
-  useEffect(() => {
-    if (!prefillTel || !ready || prechargeFait.current) return;
-    prechargeFait.current = true;
-    const pays = paysDepuisTelephone(prefillTel);
-    if (pays) setCountry(pays);
-    const dial = pays?.dial ?? country.dial;
-    const brut = prefillTel.replace(/^\+/, "");
-    const d = brut.startsWith(dial) ? brut.slice(dial.length) : brut;
-    if (d) setDigits(onlyDigits(d).slice(0, maxDigitsFor(pays ?? country)));
-  }, [prefillTel, ready, country, setCountry]);
+  const initialTel = useMemo((): { pays: Country; digits: string } | null => {
+    if (!numeroConnu) return null;
+    const pays = paysDepuisTelephone(numeroConnu);
+    if (!pays) return null;
+    const brut = numeroConnu.replace(/^\+/, "");
+    const d = brut.startsWith(pays.dial) ? brut.slice(pays.dial.length) : brut;
+    return { pays, digits: onlyDigits(d).slice(0, maxDigitsFor(pays)) };
+  }, [numeroConnu]);
+
+  const { country, setCountry } = usePhoneCountry(initialTel?.pays ?? null);
+  const [digits, setDigits] = useState(initialTel?.digits ?? "");
+  const maxD = maxDigitsFor(country);
 
   const send = async () => {
     if (!phoneDigitsOk(country, digits)) {
