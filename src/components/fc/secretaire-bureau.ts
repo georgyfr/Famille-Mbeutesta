@@ -160,10 +160,26 @@ function lireObj<T>(cle: string, defaut: T, valide: (x: unknown) => x is T): T {
     const raw = window.localStorage.getItem(cle);
     if (!raw) return defaut;
     const data: unknown = JSON.parse(raw);
-    return valide(data) ? data : defaut;
+    return valide(data) ? (purgerOPO(data) as T) : defaut;
   } catch {
     return defaut;
   }
+}
+
+/** v40 — SUPPRESSION DE « OPO » : la réunion ne porte JAMAIS ce nom. Toute
+ *  donnée stockée (PV, séances, convocations, décisions, notifications…)
+ *  qui le contient encore est corrigée AU CHARGEMENT : « OPO » devient
+ *  « la réunion » — y compris les variantes « O.P.O » / « O P O ». */
+const OPO_RE = /\bO\.?\s?P\.?\s?O\b/g;
+function purgerOPO(v: unknown): unknown {
+  if (typeof v === "string") return v.replace(OPO_RE, "la réunion");
+  if (Array.isArray(v)) return v.map(purgerOPO);
+  if (v && typeof v === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) out[k] = purgerOPO(val);
+    return out;
+  }
+  return v;
 }
 
 function ecrireObj(cle: string, valeur: unknown): void {

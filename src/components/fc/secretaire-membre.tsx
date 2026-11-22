@@ -191,6 +191,37 @@ function CarteReception({ ctx }: { ctx: CtxMembre | null }) {
     );
   };
 
+  /* — v40 — MODIFIER sa géolocalisation : un déménagement, une position GPS
+   *  imprécise ou un changement de quartier — la personne peut RE-ENREGISTRER
+   *  sa position à tout moment : le nouveau point remplace l'ancien. — */
+  const modifierGeoloc = () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      toast.error("Géolocalisation indisponible", { description: "Votre navigateur ne propose pas le GPS — ajoutez votre ville depuis Mon profil." });
+      return;
+    }
+    setEnCours(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          await api("/api/me/location", {
+            body: { latitude: pos.coords.latitude, longitude: pos.coords.longitude, source: "gps" },
+          });
+          toast.success("Votre position a été MODIFIÉE", { description: "Le nouveau point remplace l'ancien — trajets et guidage GPS recalculés." });
+          const res = await api<{ ok: boolean; members?: PositionFamille[] }>("/api/family/locations");
+          setPositions(res.members ?? []);
+        } catch {
+          toast.error("Modification impossible", { description: "Vérifiez votre connexion puis réessayez." });
+        }
+        setEnCours(false);
+      },
+      () => {
+        setEnCours(false);
+        toast.error("Position refusée", { description: "Autorisez la localisation dans votre navigateur pour modifier votre position." });
+      },
+      { enableHighAccuracy: true, timeout: 12000 },
+    );
+  };
+
   if (!moi) {
     return (
       <FcCard className="p-4">
@@ -221,11 +252,16 @@ function CarteReception({ ctx }: { ctx: CtxMembre | null }) {
         <div className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] px-3.5 py-3">
           <p className="text-[10px] font-bold uppercase tracking-wide text-[#8A9288]">Ma géolocalisation pour recevoir</p>
           {maPos ? (
-            <p className="mt-0.5 flex items-center gap-1.5 text-[13px] font-black text-[#2F6B45]"><CheckCircle2 className="h-4 w-4" /> Position enregistrée{maPos.city ? ` — ${maPos.city}` : ""}</p>
+            <>
+              <p className="mt-0.5 flex items-center gap-1.5 text-[13px] font-black text-[#2F6B45]"><CheckCircle2 className="h-4 w-4" /> Position enregistrée{maPos.city ? ` — ${maPos.city}` : ""}</p>
+              <Btn small tone="teal" disabled={enCours} onClick={modifierGeoloc} className="mt-1.5">
+                <Navigation className="h-3.5 w-3.5" /> {enCours ? "Modification…" : "Modifier ma géolocalisation"}
+              </Btn>
+            </>
           ) : (
             <>
               <p className="mt-0.5 flex items-center gap-1.5 text-[13px] font-bold text-[#8A6420]"><MapPin className="h-4 w-4" /> Position non enregistrée</p>
-              <Btn small tone="teal" disabled={enCours} onClick={activerGeoloc}>
+              <Btn small tone="teal" disabled={enCours} onClick={activerGeoloc} className="mt-1.5">
                 <Navigation className="h-3.5 w-3.5" /> {enCours ? "Activation…" : "Activer ma géolocalisation"}
               </Btn>
             </>

@@ -1953,3 +1953,31 @@ Stage Summary:
 - E2E navigateur (dev + production) : fil d'Ariane, PV, séance (créer/modifier/ajouter/confirmer/envoyer), modale trésorier 2 étapes (notification écrite), collation 2000 + boutons actifs, demande de présence → réponse membre → « Réponses : 1 présent(s) » + boissons, calendrier épargnes, m-cotis (tour juin, géoloc), Aa zoom 1.15.
 - `.env.cloudflare` recréé (token cfut…, compte ead74f172a86c9debb937c356976260f), chmod 600.
 - Déploiement : https://famille-mbeutetsa.pages.dev (v39, déploiement 26969f21). Commit local + push GitHub en attente.
+
+## Task 83 — v40 : montants évolutifs (modale trésorier), épargnes restructurées (noms réels + intérêts), prêts épurés, OPO → « la réunion », géolocalisation modifiable (22 nov. 2026)
+
+### Page Cotisations (#secretaire/cotisations)
+- Modale « Notifier le trésorier » étape 1 : la sélection d'UNE seule personne devient une MULTI-SÉLECTION (cases à cocher + recherche dynamique). Chaque ligne affiche la cotisation attendue de la personne ; le champ « Montant envoyé » ÉVOLUE au fur et à mesure des cochages (somme automatique, plus de saisie manuelle).
+- Bouton « Tout sélectionner » (tout le monde cotisé) + « Tout décocher » ; Continuer actif dès qu'une somme > 0 ; étape 2 inchangée (trésorier / trésorier + tous / personnes précises) ; la notification liste toutes les personnes et la somme totale.
+
+### Page Épargnes (#secretaire/epargnes)
+- NOMS RÉELS partout (registre, calendrier, détail, toasts) : assistant nomDe() — annuaire réel, puis f01-f09 de démonstration ; plus aucun code brut (« f04 »…) à l'écran.
+- TOUS les textes explicatifs supprimés (en-tête, notes de blocs, notes de champs, paragraphes « La règle / L'exemple », sous-titres).
+- SECTION « Registre des épargnes » SUPPRIMÉE ; NOUVEAU « Tableau récapitulatif des épargnes » : sommes globales épargnées / intérêts produits réalisés / projection au 31 décembre (capital + intérêts).
+- Calendrier des épargnes : colonnes « Évolution » et « Cumul » SUPPRIMÉES → colonne « Intérêts » (intérêts totaux des versements du mois jusqu'à décembre). Colonnes : Mois, Personnes (noms réels uniquement, dédoublonnés), Personnes ayant versé, Total du mois, Intérêts, Détail.
+- DÉTAIL d'un mois dépliable : pour CHAQUE personne — nom réel, montant versé, TAUX D'INTÉRÊT (fixé par le bureau) et INTÉRÊT CALCULÉ (taux × mois restants → ce qu'elle percevra en décembre) ; modification du montant et retrait confirmé conservés ; total du mois.
+- En-tête de page renommé « Épargnes de la réunion — tenues par la secrétaire ».
+
+### Page Prêts (#secretaire/prets)
+- VRAIS NOMS partout (registre actif, remboursés, dossiers, calendriers, aria-labels, toasts) — plus de codes.
+- TOUS les textes explicatifs supprimés (en-tête, notes, paragraphes de règle/exemple, notes des champs du paramétrage).
+
+### OPO → « la réunion » (tout le site)
+- Aucune occurrence d'« OPO » dans le code ; le terme subsistait dans les DONNÉES stockées. Nettoyant purgerOPO() appliqué AU CHARGEMENT (secretaire-bureau.ts + partage-bureau.ts) : toute chaîne stockée (PV, séances, convocations, décisions, notifications, partages, réponses de présence) qui contient « OPO », « O.P.O » ou « O P O » est corrigée en « la réunion ».
+
+### Géolocalisation modifiable (#secretaire/m-cotis)
+- Carte « Ma réception » : quand une position est enregistrée, bouton « MODIFIER MA GÉOLOCALISATION » (re-capture GPS, remplace l'ancien point via /api/me/location, toast de confirmation) ; « Activer ma géolocalisation » conservé sans position.
+
+### Vérifications
+- ESLint : 0 erreur sur les fichiers modifiés ; compilation dev OK (aucune erreur dans dev.log).
+- E2E navigateur : épargnes (noms réels, récapitulatif 55 000/13 350/70 000, calendrier +8 250 février, détail taux+intérêt calculé), prêts (Chantal Djuidje… plus de codes), modale trésorier (cochage → 50 000, Tout sélectionner → 3 personnes, étape 2 → envoi), m-cotis (bouton Modifier après enregistrement d'une position), sanitizer OPO (PV semé avec « OPO » corrigé à l'affichage), 20 onglets scannés : 0 OPO, 0 page vide/erreur, mobile 390 px OK.

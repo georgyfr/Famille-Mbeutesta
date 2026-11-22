@@ -96,10 +96,25 @@ function lireListe<T>(cle: string, valide: (x: unknown) => x is T): T[] {
     const brut = window.localStorage.getItem(cle);
     if (!brut) return [];
     const v = JSON.parse(brut) as unknown;
-    return Array.isArray(v) && v.every(valide) ? (v as T[]) : [];
+    return Array.isArray(v) && v.every(valide) ? (purgerOPO(v) as T[]) : [];
   } catch {
     return [];
   }
+}
+
+/** v40 — SUPPRESSION DE « OPO » : la réunion ne porte JAMAIS ce nom — les
+ *  séances partagées et les demandes de présence qui le contiennent encore
+ *  sont corrigées au chargement (« OPO » → « la réunion »). */
+const OPO_RE = /\bO\.?\s?P\.?\s?O\b/g;
+function purgerOPO(v: unknown): unknown {
+  if (typeof v === "string") return v.replace(OPO_RE, "la réunion");
+  if (Array.isArray(v)) return v.map(purgerOPO);
+  if (v && typeof v === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) out[k] = purgerOPO(val);
+    return out;
+  }
+  return v;
 }
 
 function ecrireListe<T>(cle: string, valeur: T[]): void {
