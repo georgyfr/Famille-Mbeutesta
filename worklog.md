@@ -1981,3 +1981,4 @@ Stage Summary:
 ### Vérifications
 - ESLint : 0 erreur sur les fichiers modifiés ; compilation dev OK (aucune erreur dans dev.log).
 - E2E navigateur : épargnes (noms réels, récapitulatif 55 000/13 350/70 000, calendrier +8 250 février, détail taux+intérêt calculé), prêts (Chantal Djuidje… plus de codes), modale trésorier (cochage → 50 000, Tout sélectionner → 3 personnes, étape 2 → envoi), m-cotis (bouton Modifier après enregistrement d'une position), sanitizer OPO (PV semé avec « OPO » corrigé à l'affichage), 20 onglets scannés : 0 OPO, 0 page vide/erreur, mobile 390 px OK.
+- Build statique v40 généré (.next-demo + _worker.js OK) ; déploiement Cloudflare en ATTENTE (aucun token CLOUDFLARE_API_TOKEN ni .env.cloudflare dans cette session — re-créez le token pour publier https://famille-mbeutetsa.pages.dev). Push GitHub en attente également (identifiants absents). Commit local v40 : c7e68b6.
