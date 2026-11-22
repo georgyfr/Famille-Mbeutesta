@@ -31,7 +31,10 @@ export type ReglagesTontine = {
  *  (bouton « Enregistrer »), et les membres le voient aussitôt. */
 export const TONTINE: ReglagesTontine = {
   montantCotisation: 0,
-  montantCollation: 0,
+  /* Collation à 2 000 FCFA PAR DÉFAUT (demande de l'administrateur) : « même
+   * si cela n'a pas été configuré, on devra voir 2000 francs par défaut au
+   * niveau de la collation, car c'est la somme que nous cotisons. » */
+  montantCollation: 2000,
   fraisAdhesion: 0,
   penaliteRetard: 0,
   penaliteAbsence: 0,

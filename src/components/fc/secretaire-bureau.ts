@@ -296,6 +296,9 @@ export type Seance = {
   /** Clé de mois ("2026-11") — une séance par réunion mensuelle. */
   moisKey: string;
   points: PointODJ[];
+  /** v39 — date de confirmation de l'ordre du jour (« 5 nov. 14:32 ») :
+   *  null/absent = la séance est encore en préparation. */
+  confirmeeLe?: string | null;
 };
 
 const SEANCE_DEMO: Seance[] = [

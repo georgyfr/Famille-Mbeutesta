@@ -48,15 +48,15 @@ import type { ReactNode } from "react";
 import { toast } from "sonner";
 import {
   BadgeCheck, Ban, CalendarCheck, CalendarClock, Check, CheckCircle2, CheckSquare,
-  ChevronDown, ChevronUp, Coffee, Coins, Eye, Hand, HandCoins, HandHeart,
+  ChevronDown, ChevronUp, Coffee, Coins, Hand, HandCoins, HandHeart,
   HeartHandshake, Hourglass, Landmark, Layers, ListChecks, Percent, PiggyBank, Plus,
-  ReceiptText, RotateCcw, Scale, Search, Send, ShieldCheck, Sparkles, Square, Tag,
+  ReceiptText, RotateCcw, Scale, Search, Send, ShieldCheck, Square, Tag,
   ThumbsDown, ThumbsUp, Trash2, TrendingUp, Undo2, UserCheck, UserPlus, Users, Vote,
   Wallet, XCircle,
 } from "lucide-react";
 import { FcCard } from "./ui";
 import {
-  Block, Btn, KpiCard, P, fmt, fcfa, nid,
+  Block, Btn, BtnConfirme, KpiCard, P, dateCourte, fmt, fcfa, heure, nid,
   OK_CLS, OR_CLS, RJ_CLS, TE_CLS, VI_CLS,
 } from "./maquette-ui";
 import {
@@ -66,10 +66,9 @@ import {
 } from "./tontine-data";
 import { estMembreApp } from "./membres-app";
 import {
-  COLLECTE_INTERETS_LABELS, COLLECTE_INTERETS_NOTES, GARANTIES_LABELS,
-  INTERETS_EPARGNE_LABELS, METHODES_SOLIDARITE, TYPES_EPARGNE_CATALOGUE,
+  GARANTIES_LABELS, METHODES_SOLIDARITE,
   loadReglement, saveReglement,
-  type Reglement, type TypeEpargneConfig,
+  type Reglement,
 } from "./reglement";
 import {
   evolutionPretReunion, interetsAttribution,
@@ -89,10 +88,24 @@ import {
   saveMainsLevees, saveTypesSolidarite, saveVisitesSolidarite,
   type MainLevee, type TypeSolidarite, type VariableSolidarite, type VisiteSolidarite,
 } from "./solidarite-bureau";
+import { pushNotif } from "./secretaire-bureau";
+import { telechargerPDF, telechargerWord } from "./partage-bureau";
 
 /* ══════════════════════════ types copiés du président ══════════════════════════ */
 
 type MouvementCotisMois = { cotisation: boolean; collation: boolean };
+
+/** État de la modale « Notifier le trésorier » — étape 1 : qui a envoyé combien ;
+ *  étape 2 : à qui envoyer la notification. */
+type NotifierTresorierEtat = {
+  etape: 1 | 2;
+  envoyeurId: string;
+  envoyeurNom: string;
+  recherche: string;
+  montant: string;
+  cible: "tresorier" | "tresorier_tous" | "specifiques";
+  ids: string[];
+};
 
 type VoteBureau = { vice: boolean | null; secretariat: boolean | null; tresorier: boolean | null; censeur: boolean | null };
 
@@ -129,6 +142,10 @@ const VOTEURS_PRET: { qui: "vice" | "tresorier" | "censeur"; nom: string; role: 
  *  même à 0, c'est une décision), c'est lui qui s'applique ; sinon le défaut de
  *  la maison (TAUX_DEFAUT = 3 %/mois) reste en vigueur. Copie du président. */
 const tauxEpargneVigueur = (r: Reglement) => (r.epargne.tauxFixe ? r.epargne.tauxMensuel : TAUX_DEFAUT);
+
+/** Recherche insensible à la casse ET aux accents (Émile ≡ emile) — utilisée
+ *  par la modale « Notifier le trésorier » et par le calendrier des épargnes. */
+const sansAccents = (s: string) => s.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 
 /* ══════════════════════════ NOUVEAUX STORES (états du président non persistés) ══════════════════════════ *
  * Mêmes seeds de démonstration que le président, copiés tels quels :
@@ -330,35 +347,6 @@ function ToggleRow({ label, note, actif, onToggle }: { label: string; note?: str
         <span className={`absolute h-5 w-5 rounded-full bg-white shadow transition-all ${actif ? "left-[22px]" : "left-0.5"}`} />
       </span>
     </button>
-  );
-}
-
-/** Contrôle segmenté — choix parmi des options fermées. */
-function Seg({ options, value, onChange, legende }: {
-  options: { v: string; label: string }[]; value: string; onChange: (v: string) => void; legende?: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] px-3 py-2.5">
-      {legende && <p className="text-[11.5px] font-bold text-[#2B3530]">{legende}</p>}
-      <div className="mt-1.5 flex flex-wrap gap-1.5">
-        {options.map((o) => {
-          const actif = o.v === value;
-          return (
-            <button
-              key={o.v}
-              type="button"
-              onClick={() => onChange(o.v)}
-              aria-pressed={actif}
-              className={`rounded-full border px-2.5 py-1.5 text-[11px] font-bold transition-all ${
-                actif ? "border-transparent bg-[#6E4B71] text-white shadow" : "border-[#E5DCC0] bg-white text-[#5C6B60] hover:border-[#6E4B71]/50"
-              }`}
-            >
-              {o.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
   );
 }
 
@@ -880,7 +868,7 @@ const LIBELLES_REGISTRE_SEC = {
     action: "Attribuer l’épargne",
     icone: <PiggyBank className="h-4.5 w-4.5" />,
     noteRegistre: "Chaque ligne = UN membre, TOUTES ses épargnes regroupées : la somme totale épargnée, les mois réels des versements, les intérêts produits chaque mois au taux en vigueur et la projection au 31 décembre. La secrétaire déplie la ligne (chevron Détail) pour l’évolution mois par mois ; une épargne attribuée PAR ERREUR se retire d’un geste (poubelle à confirmation). ⚠ MÊME SOURCE que la console du président (registre du bureau) : les deux postes voient la même réalité.",
-    noteAttrib: "Comme pour les prêts : cherchez le membre dans le tableau, tapez la somme de son épargne, choisissez le mois réel du dépôt puis attribuez — le taux configuré dans le paramétrage des épargnes s’applique aussitôt, avec la manière de collecter les intérêts décidée par le bureau.",
+    noteAttrib: "Comme pour les prêts : cherchez le membre dans le tableau, tapez la somme de son épargne, choisissez le mois réel du dépôt puis attribuez — le taux configuré dans le paramétrage des épargnes s’applique aussitôt.",
   },
 } as const;
 
@@ -1559,8 +1547,57 @@ export function SecCotisationsCollations(p: {
     ecrireSec(CLE_COTIS_MOIS, next);
     toast.success("Tout le mois est marqué encaissé", { description: `Cotisations et collations${mois ? ` de ${mois}` : ""} réglées pour les ${p.roster.length} membres — à transmettre au trésorier.` });
   };
-  const notifierTresorier = () => {
-    toast.success("Trésorier notifié", { description: "Émile Tchoumi reçoit l’état de la collecte tenue par la secrétaire — les reçus s’inscrivent au journal de caisse." });
+
+  /* — MODALE « NOTIFIER LE TRÉSORIER » (2 étapes) : l'étape 1 désigne QUI a
+   *  envoyé son argent et COMBIEN ; l'étape 2 choisit QUI reçoit la
+   *  notification (trésorier seul, trésorier + tout le monde, ou personnes
+   *  précises). Chaque destinataire reçoit une vraie notification (pushNotif). — */
+  const [notifier, setNotifier] = useState<NotifierTresorierEtat | null>(null);
+  const ouvrirNotifierTresorier = () =>
+    setNotifier({ etape: 1, envoyeurId: "", envoyeurNom: "", recherche: "", montant: "", cible: "tresorier", ids: [] });
+
+  const envoyerNotificationEncaissement = () => {
+    if (!notifier) return;
+    const montant = Number(notifier.montant);
+    if (!notifier.envoyeurId || !(montant > 0)) {
+      toast.error("Désignez l'envoyeur et tapez une somme valide");
+      return;
+    }
+    /* — destinataires selon le choix de l'étape 2 — */
+    let dest: Member[];
+    if (notifier.cible === "tresorier") {
+      dest = p.roster.filter((m) => m.role === "tresorier");
+    } else if (notifier.cible === "tresorier_tous") {
+      /* le trésorier d'abord, puis tout le roster — dédoublonné */
+      const vus = new Set<string>();
+      dest = [];
+      const tres = p.roster.find((m) => m.role === "tresorier");
+      if (tres) { vus.add(tres.id); dest.push(tres); }
+      p.roster.forEach((m) => { if (!vus.has(m.id)) { vus.add(m.id); dest.push(m); } });
+    } else {
+      /* uniquement les personnes cochées (sans ajout automatique) */
+      dest = p.roster.filter((m) => notifier.ids.includes(m.id));
+    }
+    if (dest.length === 0) {
+      toast.error("Aucun destinataire — cochez au moins une personne");
+      return;
+    }
+    const le = `${dateCourte()} ${heure()}`;
+    dest.forEach((m) => {
+      pushNotif({
+        id: `notif-encaissement:${Date.now().toString(36)}:${m.id}`,
+        le,
+        destinataire: m.id,
+        destinataireNom: m.name,
+        type: "rappel",
+        titre: "Encaissement enregistré par la secrétaire",
+        message: `${notifier.envoyeurNom} a envoyé ${fcfa(montant)} (Orange Money / Mobile Money) — encaissé par la secrétaire et notifié au trésorier.`,
+      });
+    });
+    toast.success(`Notification envoyée à ${dest.length} destinataire(s)`, {
+      description: `${notifier.envoyeurNom} — ${fcfa(montant)} encaissés par la secrétaire ; le trésorier voit l'opération à son journal de caisse.`,
+    });
+    setNotifier(null);
   };
 
   /* — règles de la Tontine : un membre ne cotise qu'UNE seule somme mensuelle — */
@@ -1612,7 +1649,7 @@ export function SecCotisationsCollations(p: {
   const lignes = p.roster.map((m) => {
     const t = typeDuMembre(m.id, typesCotis);
     const attenduCotis = t ? t.montant : cotisBase;
-    const attenduColl = collationDuMembre(m.id, collations);
+    const attenduColl = collationDuMembre(m.id, collations) || montants.montantCollation;
     const st = cotisMois[m.id] ?? { cotisation: false, collation: false };
     return {
       m,
@@ -1630,6 +1667,91 @@ export function SecCotisationsCollations(p: {
   const nbCotis = lignes.filter((l) => l.st.cotisation).length;
   const nbColl = lignes.filter((l) => l.st.collation).length;
   const totalRecu = totalCotisRecu + totalCollRecu;
+
+  /* — RAPPORT DE LA COLLECTE (A4) : téléchargeable en PDF / Word / Excel et
+   *  notifiable au bénéficiaire du mois (celui qui reçoit la somme). Les
+   *  exports ne quittent pas l'appareil ; le rapport reprend la table
+   *  membre par membre avec les totaux encaissés. — */
+  const moisRapport = mois ?? "mois en cours";
+  const nomFichierCollecte = `collecte-${sansAccents(moisRapport).replace(/\s+/g, "-")}-secretaire`;
+  const rapportHTML = () => {
+    const lignesHTML = lignes.map((l) =>
+      `<tr><td>${l.m.name}</td><td>${fmt(l.attenduCotis)}</td><td>${l.st.cotisation ? fmt(l.attenduCotis) : "—"}</td>` +
+      `<td>${fmt(l.attenduColl)}</td><td>${l.st.collation ? fmt(l.attenduColl) : "—"}</td><td>${fmt(l.totalRecu)}</td></tr>`,
+    ).join("");
+    return (
+      `<h2>Rapport de la collecte — ${moisRapport}</h2>` +
+      `<p class="meta">Cotisations et collations encaissées par la secrétaire pour le trésorier — ${nbCotis} cotisation(s) et ${nbColl} collation(s) reçue(s) sur ${p.roster.length} membre(s).</p>` +
+      `<table><thead><tr><th>Membre</th><th>Cotisation à</th><th>Cotisation reçue</th><th>Collation à</th><th>Collation reçue</th><th>Total reçu</th></tr></thead>` +
+      `<tbody>${lignesHTML}` +
+      `<tr><td><strong>Total encaissé</strong></td><td>${fmt(totalCotisAttendu)}</td><td>${fmt(totalCotisRecu)}</td><td>${fmt(totalCollAttendu)}</td><td>${fmt(totalCollRecu)}</td><td><strong>${fmt(totalRecu)}</strong></td></tr>` +
+      `</tbody></table>`
+    );
+  };
+  const telechargerRapportPDF = () => {
+    telechargerPDF(`Rapport de la collecte — ${moisRapport}`, rapportHTML());
+    toast.success("Rapport prêt — fenêtre d'impression ouverte", { description: "Choisissez « Enregistrer en PDF » pour archiver le rapport de la collecte." });
+  };
+  const telechargerRapportWord = () => {
+    telechargerWord(nomFichierCollecte, `Rapport de la collecte — ${moisRapport}`, rapportHTML());
+    toast.success("Rapport Word téléchargé", { description: `${nomFichierCollecte}.doc — prêt à envoyer au bénéficiaire de la réunion.` });
+  };
+  const telechargerRapportExcel = async () => {
+    const XLSX = await import("xlsx");
+    const data = lignes.map((l) => ({
+      Membre: l.m.name,
+      Rôle: ROLE_META[l.m.role]?.label ?? l.m.role,
+      "Cotisation attendue": Math.round(l.attenduCotis),
+      "Cotisation recue": Math.round(l.st.cotisation ? l.attenduCotis : 0),
+      "Collation attendue": Math.round(l.attenduColl),
+      "Collation recue": Math.round(l.st.collation ? l.attenduColl : 0),
+      "Total reçu": Math.round(l.totalRecu),
+    }));
+    data.push({
+      Membre: "TOTAL ENCAISSÉ",
+      Rôle: `${nbCotis} cotisation(s), ${nbColl} collation(s)`,
+      "Cotisation attendue": Math.round(totalCotisAttendu),
+      "Cotisation recue": Math.round(totalCotisRecu),
+      "Collation attendue": Math.round(totalCollAttendu),
+      "Collation recue": Math.round(totalCollRecu),
+      "Total reçu": Math.round(totalRecu),
+    });
+    const feuille = XLSX.utils.json_to_sheet(data);
+    feuille["!cols"] = [{ wch: 26 }, { wch: 22 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 14 }];
+    const classeur = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(classeur, feuille, "Collecte du mois");
+    XLSX.writeFile(classeur, `${nomFichierCollecte}.xlsx`);
+    toast.success("Rapport Excel téléchargé", { description: `${nomFichierCollecte}.xlsx — membre par membre, cotisations et collations.` });
+  };
+  const notifierBeneficiaire = () => {
+    if (p.moisIdx == null) {
+      toast.error("Aucun bénéficiaire désigné ce mois-ci");
+      return;
+    }
+    const moisIdx = p.moisIdx;
+    const benef = p.roster.find((m) => m.tour === moisIdx + 1);
+    if (!benef) {
+      toast.error("Aucun bénéficiaire désigné ce mois-ci");
+      return;
+    }
+    pushNotif({
+      id: `collecte-benef:${moisIdx}:${Date.now()}`,
+      le: `${dateCourte()} ${heure()}`,
+      destinataire: benef.id,
+      destinataireNom: benef.name,
+      type: "rappel",
+      titre: `Rapport de collecte — ${moisRapport}`,
+      message: `La secrétaire a encaissé ${fcfa(totalRecu)} (${nbCotis} cotisation(s), ${nbColl} collation(s)) — vous pouvez télécharger le rapport ou lui demander le détail.`,
+    });
+    toast.success(`${benef.name} notifié(e)`, { description: `Le bénéficiaire du mois voit le rapport de la collecte (${fcfa(totalRecu)}) dans ses notifications.` });
+  };
+
+  /* — liste filtrée pour la recherche de la modale « Notifier le trésorier »
+   *  (insensible à la casse et aux accents) — */
+  const rqNotifier = notifier ? sansAccents(notifier.recherche.trim()) : "";
+  const rosterNotifier = notifier
+    ? (rqNotifier ? p.roster.filter((m) => sansAccents(m.name).includes(rqNotifier)) : p.roster)
+    : [];
 
   return (
     <>
@@ -1659,7 +1781,9 @@ export function SecCotisationsCollations(p: {
             icon={<ReceiptText className="h-3.5 w-3.5" />}
             label="Collations encaissées"
             value={fcfa(totalCollRecu)}
-            sub={totalCollAttendu > 0 ? `attendu ${fcfa(totalCollAttendu)} — ${collations.length} collation(s) fixée(s) par le bureau` : "à fixer — voir le paramétrage ci-dessous"}
+            sub={collations.length === 0
+              ? `attendu ${fcfa(totalCollAttendu)} — collation de base ${fcfa(montants.montantCollation)} par membre`
+              : `attendu ${fcfa(totalCollAttendu)} — ${collations.length} collation(s) fixée(s) par le bureau`}
             accent="#C89F62"
             barre={{ pct: totalCollAttendu > 0 ? (totalCollRecu / totalCollAttendu) * 100 : 0 }}
           />
@@ -1676,7 +1800,7 @@ export function SecCotisationsCollations(p: {
         </p>
         <div className="mt-2.5 flex flex-wrap gap-2">
           <Btn small tone="violet" onClick={toutEncaisser}><CheckSquare className="h-3.5 w-3.5" /> Tout marquer encaissé</Btn>
-          <Btn small tone="teal" onClick={notifierTresorier}><Send className="h-3.5 w-3.5" /> Notifier le trésorier</Btn>
+          <Btn small tone="teal" onClick={ouvrirNotifierTresorier}><Send className="h-3.5 w-3.5" /> Notifier le trésorier</Btn>
         </div>
       </FcCard>
 
@@ -1725,6 +1849,20 @@ export function SecCotisationsCollations(p: {
         </div>
       </Block>
 
+      {/* ══════ RAPPORT DE LA COLLECTE (A4) — téléchargeable + notification au bénéficiaire ══════ */}
+      <FcCard className="p-4">
+        <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#6E4B71]">Le rapport de la collecte — à envoyer au bénéficiaire de la réunion</p>
+        <p className="mt-1 text-[12px] leading-relaxed text-[#5C6B60]">
+          La synthèse de la collecte du mois{mois ? ` (${mois})` : ""} : {fcfa(totalRecu)} encaissés par la secrétaire pour le trésorier ({nbCotis} cotisation(s), {nbColl} collation(s)). Téléchargez le rapport et transmettez-le à celui qui reçoit la somme ce mois-ci.
+        </p>
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          <Btn small tone="rouge" onClick={telechargerRapportPDF}><ReceiptText className="h-3.5 w-3.5" /> PDF</Btn>
+          <Btn small tone="teal" onClick={telechargerRapportWord}><ReceiptText className="h-3.5 w-3.5" /> Word</Btn>
+          <Btn small tone="vert" onClick={() => void telechargerRapportExcel()}><ReceiptText className="h-3.5 w-3.5" /> Excel</Btn>
+          <Btn small tone="violet" onClick={notifierBeneficiaire}><Send className="h-3.5 w-3.5" /> Notifier le bénéficiaire du mois</Btn>
+        </div>
+      </FcCard>
+
       {/* ══════ PARAMÉTRAGE — cotisations & collations (le paramétrage qui va avec) ══════ */}
       <Block
         title="Paramétrage — cotisations & collations"
@@ -1763,7 +1901,7 @@ export function SecCotisationsCollations(p: {
               <Btn small tone="violet" onClick={() => setFormCotisOpen((x) => !x)} aria-expanded={formCotisOpen}><Plus className="h-3.5 w-3.5" /> Ajouter une somme de cotisation mensuelle</Btn>
             </div>
             {formCotisOpen && (
-              <div className="mt-2.5 rounded-2xl border-2 border-[#6E4B71]/40 bg-[#F7EFF8] p-3">
+              <div className="mt-2.5 rounded-2xl border-2 border-[#6E4B71]/40 bg-[#FBF7EA] p-3">
                 <p className="text-[11.5px] font-black uppercase tracking-wider text-[#6E4B71]"><Layers className="mr-1 inline h-3.5 w-3.5" /> Nouveau type de cotisation mensuelle</p>
                 <div className="mt-2 space-y-2.5">
                   <input
@@ -1916,7 +2054,7 @@ export function SecCotisationsCollations(p: {
               <Btn small tone="violet" onClick={() => setFormCollOpen((x) => !x)} aria-expanded={formCollOpen}><Plus className="h-3.5 w-3.5" /> Ajouter une collation</Btn>
             </div>
             {formCollOpen && (
-              <div className="mt-2.5 rounded-2xl border-2 border-[#6E4B71]/40 bg-[#F7EFF8] p-3">
+              <div className="mt-2.5 rounded-2xl border-2 border-[#6E4B71]/40 bg-[#FBF7EA] p-3">
                 <p className="text-[11.5px] font-black uppercase tracking-wider text-[#6E4B71]"><Coffee className="mr-1 inline h-3.5 w-3.5" /> Nouvelle collation</p>
                 <div className="mt-2 space-y-2.5">
                   <input
@@ -2027,7 +2165,353 @@ export function SecCotisationsCollations(p: {
           </div>
         </div>
       </Block>
+      {/* ══════ MODALE « NOTIFIER LE TRÉSORIER » — 2 étapes (A3) ══════ */}
+      {notifier && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#1B141C]/60 p-3"
+          onClick={() => setNotifier(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={notifier.etape === 1 ? "Notifier le trésorier — qui a envoyé son argent ?" : "Notifier le trésorier — à qui envoyer la notification ?"}
+            className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-3xl border-2 border-[#B8A87E] bg-[#FFFDF6] p-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {notifier.etape === 1 ? (
+              <>
+                <p className="text-[14px] font-black text-[#6E4B71]">Notifier le trésorier — étape 1 sur 2</p>
+                <p className="mt-0.5 text-[11.5px] leading-snug text-[#5C6B60]">
+                  Qui a envoyé son argent (Orange Money / Mobile Money) et combien ? Le trésorier recevra la notification à l’étape 2.
+                </p>
+
+                {/* — recherche dynamique du membre (insensible aux accents) — */}
+                <label className="mt-3 block">
+                  <span className="flex items-center gap-1.5 text-[11.5px] font-black uppercase tracking-wide text-[#6E4B71]">
+                    <Search className="h-3.5 w-3.5" /> Qui a envoyé son argent ?
+                  </span>
+                  <span className="relative mt-1.5 block">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8A9288]" />
+                    <input
+                      value={notifier.recherche}
+                      onChange={(e) => setNotifier((x) => (x ? { ...x, recherche: e.target.value } : x))}
+                      type="search"
+                      placeholder="Tapez un nom…"
+                      aria-label="Rechercher le membre qui a envoyé son argent"
+                      className="w-full rounded-xl border-2 border-[#C9B98A] bg-white py-2.5 pl-9 pr-3 text-[13px] font-bold text-[#2B3530] outline-none placeholder:font-semibold placeholder:text-[#8A9288] focus:border-[#6E4B71]"
+                    />
+                  </span>
+                </label>
+                <div className="mt-2 max-h-56 space-y-1 overflow-y-auto rounded-xl border border-[#E5DCC0] bg-[#FBF7EA] p-2">
+                  {rosterNotifier.length === 0 ? (
+                    <p className="px-2 py-1.5 text-[11.5px] font-semibold text-[#8A9288]">
+                      Aucun membre ne correspond à « {notifier.recherche.trim()} » — vérifiez l’orthographe.
+                    </p>
+                  ) : (
+                    rosterNotifier.map((m) => {
+                      const choisi = notifier.envoyeurId === m.id;
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => setNotifier((x) => (x ? { ...x, envoyeurId: m.id, envoyeurNom: m.name } : x))}
+                          aria-pressed={choisi}
+                          className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors ${choisi ? "bg-[#6E4B71]/8" : "hover:bg-white"}`}
+                        >
+                          {choisi ? <CheckSquare className="h-4 w-4 shrink-0 text-[#6E4B71]" /> : <Square className="h-4 w-4 shrink-0 text-[#8A9288]" />}
+                          <span className={`min-w-0 flex-1 truncate text-[12px] font-semibold ${choisi ? "text-[#6E4B71]" : "text-[#2B3530]"}`}>
+                            {m.name}{m.role !== "membre" ? " — bureau" : ""}
+                          </span>
+                          <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-[#8A9288]">{ROLE_META[m.role]?.short ?? m.role}</span>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* — montant envoyé — */}
+                <label className="mt-3 block">
+                  <span className="block text-[11.5px] font-bold text-[#2B3530]">Montant envoyé (FCFA)</span>
+                  <input
+                    value={notifier.montant}
+                    onChange={(e) => setNotifier((x) => (x ? { ...x, montant: e.target.value.replace(/[^\d]/g, "") } : x))}
+                    inputMode="numeric"
+                    placeholder="Ex. 10000"
+                    aria-label="Montant envoyé par le membre, en FCFA"
+                    className="mt-1 w-full rounded-lg border border-[#C9B98A] bg-white px-3 py-2 text-[13px] font-bold text-[#2B3530] outline-none placeholder:font-semibold placeholder:text-[#8A9288] focus:border-[#6E4B71]"
+                  />
+                  {Number(notifier.montant) > 0 && (
+                    <span className="mt-1 block text-[10.5px] font-semibold text-[#8A6420]">{fcfa(Number(notifier.montant))}</span>
+                  )}
+                </label>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Btn
+                    tone="violet"
+                    disabled={!notifier.envoyeurId || !(Number(notifier.montant) > 0)}
+                    onClick={() => setNotifier((x) => (x ? { ...x, etape: 2 } : x))}
+                  >
+                    Continuer
+                  </Btn>
+                  <Btn tone="neutre" onClick={() => setNotifier(null)}>Annuler</Btn>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-[14px] font-black text-[#6E4B71]">Notifier le trésorier — étape 2 sur 2</p>
+                <p className="mt-0.5 text-[11.5px] leading-snug text-[#5C6B60]">
+                  {notifier.envoyeurNom} — {fcfa(Number(notifier.montant) || 0)} encaissés par la secrétaire. Envoyer la notification à qui ?
+                </p>
+
+                {/* — TROIS choix radio, TOUJOURS visibles — */}
+                <div className="mt-2.5 space-y-1.5">
+                  {([
+                    { v: "tresorier", label: "Uniquement au trésorier", note: "Le trésorier reçoit seul la notification d’encaissement." },
+                    { v: "tresorier_tous", label: "Au trésorier et à tout le monde", note: "Le trésorier d’abord, puis tous les membres — sans doublon." },
+                    { v: "specifiques", label: "À des personnes spécifiques", note: "Cochez ci-dessous les personnes qui recevront la notification." },
+                  ] as const).map((o) => {
+                    const actif = notifier.cible === o.v;
+                    return (
+                      <label
+                        key={o.v}
+                        className={`flex cursor-pointer items-start gap-2 rounded-2xl border px-3 py-2.5 transition-colors ${actif ? "border-[#6E4B71]/35 bg-[#6E4B71]/8" : "border-[#E5DCC0] bg-[#FBF7EA] hover:bg-white"}`}
+                      >
+                        <input
+                          type="radio"
+                          name="notifier-cible"
+                          className="sr-only"
+                          checked={actif}
+                          onChange={() => setNotifier((x) => (x ? { ...x, cible: o.v } : x))}
+                        />
+                        {actif ? <CheckSquare className="mt-0.5 h-4 w-4 shrink-0 text-[#6E4B71]" /> : <Square className="mt-0.5 h-4 w-4 shrink-0 text-[#8A9288]" />}
+                        <span className="min-w-0">
+                          <span className={`block text-[11.5px] font-bold ${actif ? "text-[#6E4B71]" : "text-[#2B3530]"}`}>{o.label}</span>
+                          <span className="mt-0.5 block text-[10.5px] leading-snug text-[#8A9288]">{o.note}</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+
+                {/* — personnes spécifiques : la liste multi-sélection apparaît SOUS les radios, qui restent visibles — */}
+                {notifier.cible === "specifiques" && (
+                  <div className="mt-2 rounded-2xl border border-[#E5DCC0] bg-white p-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-[11.5px] font-bold text-[#2B3530]">Personnes à notifier — {notifier.ids.length} sélectionnée(s)</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        <Btn small tone="neutre" onClick={() => setNotifier((x) => (x ? { ...x, ids: p.roster.map((m) => m.id) } : x))}>Tout cocher</Btn>
+                        <Btn small tone="neutre" onClick={() => setNotifier((x) => (x ? { ...x, ids: [] } : x))}>Tout décocher</Btn>
+                      </div>
+                    </div>
+                    <div className="mt-2 max-h-44 space-y-1 overflow-y-auto rounded-xl bg-[#FBF7EA] p-2">
+                      {p.roster.map((m) => {
+                        const coche = notifier.ids.includes(m.id);
+                        return (
+                          <label key={m.id} className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 transition-colors ${coche ? "bg-[#6E4B71]/8" : "hover:bg-white"}`}>
+                            {coche ? <CheckSquare className="h-4 w-4 shrink-0 text-[#6E4B71]" /> : <Square className="h-4 w-4 shrink-0 text-[#8A9288]" />}
+                            <input
+                              type="checkbox"
+                              className="sr-only"
+                              checked={coche}
+                              onChange={() => setNotifier((x) => (x ? { ...x, ids: coche ? x.ids.filter((id) => id !== m.id) : [...x.ids, m.id] } : x))}
+                            />
+                            <span className={`text-[12px] font-semibold ${coche ? "text-[#6E4B71]" : "text-[#2B3530]"}`}>{m.name}{m.role !== "membre" ? " — bureau" : ""}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Btn tone="violet" onClick={envoyerNotificationEncaissement}><Send className="h-4 w-4" /> Envoyer</Btn>
+                  <Btn tone="neutre" onClick={() => setNotifier((x) => (x ? { ...x, etape: 1 } : x))}>Retour</Btn>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </>
+  );
+}
+
+/* — CALENDRIER DES ÉPARGNES DE L'ANNÉE (demande de l'administrateur) : vue
+ *    d'ensemble de janvier à décembre — pour chaque mois, les personnes qui
+ *    ont pu cotiser (noms), la somme totale épargnée, l'évolution en
+ *    pourcentage par rapport au mois précédent et le cumul depuis janvier.
+ *    Chaque ligne de mois est DÉPLIABLE : on y corrige un versement (montant)
+ *    ou on le retire si jamais il y a une erreur de saisie — la correction
+ *    rejoint aussitôt le registre (même source que le président). — */
+function CalendrierEpargnes(p: {
+  epargnes: AttributionReunion[];
+  parMembre: Map<string, Member>;
+  onModifier: (id: string, montant: number) => void;
+  onRetirer: (id: string) => void;
+}) {
+  /* — un état par mois (0..11) : versements + total du mois — */
+  const donneesMois = MOIS_FR.map((nomMois, m0) => {
+    const versements = p.epargnes
+      .filter((e) => Math.min(11, Math.max(0, e.moisIdx)) === m0)
+      .sort((a, b) => a.montant - b.montant);
+    const total = versements.reduce((s, v) => s + v.montant, 0);
+    return { m0, nomMois, versements, total };
+  });
+  /* — évolution % (vs mois précédent) et cumul depuis janvier — */
+  const lignesCal = donneesMois.map((dm, i) => {
+    const totalPrecedent = i > 0 ? donneesMois[i - 1].total : 0;
+    const pct = totalPrecedent > 0 ? ((dm.total - totalPrecedent) / totalPrecedent) * 100 : dm.total > 0 ? 100 : 0;
+    const cumul = donneesMois.slice(0, i + 1).reduce((s, d) => s + d.total, 0);
+    return { ...dm, pct, cumul };
+  });
+  const totalAnnuel = lignesCal.reduce((s, l) => s + l.total, 0);
+  const nbVersements = p.epargnes.length;
+
+  const [moisOpen, setMoisOpen] = useState<number | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editMontant, setEditMontant] = useState("");
+
+  const commencerModification = (id: string, montant: number) => {
+    setEditId(id);
+    setEditMontant(String(montant));
+  };
+  const enregistrerModification = () => {
+    if (!editId) return;
+    const n = Number(editMontant);
+    if (!n || n <= 0) {
+      toast.error("Tapez une somme valide");
+      return;
+    }
+    p.onModifier(editId, n);
+    setEditId(null);
+    setEditMontant("");
+  };
+
+  return (
+    <Block
+      title="Calendrier des épargnes de l’année — de janvier à décembre"
+      icon={<CalendarCheck className="h-4.5 w-4.5" />}
+      accent="#6E4B71"
+      note="Vue d’ensemble des douze mois : qui a épargné (les noms), combien chaque mois, l’évolution en pourcentage d’un mois sur l’autre et le cumul depuis janvier. Cliquez sur un mois pour déplier son détail : corrigez un montant ou retirez un versement erroné — la correction rejoint aussitôt le registre (même source que le président)."
+    >
+      <div className="p-4">
+        <div className="overflow-x-auto rounded-2xl border border-[#E5DCC0] bg-white">
+          <table className="w-full min-w-[720px] border-collapse text-[12px]">
+            <thead>
+              <tr className="bg-[#6E4B71] text-white">
+                <th className="px-2.5 py-2 text-left font-black">Mois</th>
+                <th className="px-2.5 py-2 text-left font-black">Personnes</th>
+                <th className="px-2.5 py-2 text-right font-black">Versements</th>
+                <th className="px-2.5 py-2 text-right font-black">Total du mois</th>
+                <th className="px-2.5 py-2 text-right font-black">Évolution</th>
+                <th className="px-2.5 py-2 text-right font-black">Cumul</th>
+                <th className="px-2.5 py-2 text-center font-black">Détail</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lignesCal.map((l) => {
+                const ouvertMois = moisOpen === l.m0;
+                return (
+                  <Fragment key={l.m0}>
+                    <tr className={`border-b border-[#E5DCC0] ${ouvertMois ? "bg-[#FBF7EA]" : "bg-[#FFFDF6]"}`}>
+                      <td className="px-2.5 py-2 font-bold text-[#2B3530]">{l.nomMois}</td>
+                      <td className="px-2.5 py-2">
+                        {l.versements.length === 0 ? (
+                          <span className="text-[#8A9288]">—</span>
+                        ) : (
+                          <span className="flex flex-wrap gap-1">
+                            {l.versements.map((v) => (
+                              <span key={v.id} className="rounded-full border border-[#2F6B45]/35 bg-[#2F6B45]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#2F6B45]">
+                                {p.parMembre.get(v.membreId)?.name ?? v.membreId}
+                              </span>
+                            ))}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-2.5 py-2 text-right font-semibold text-[#2B3530]">{l.versements.length > 0 ? l.versements.length : "—"}</td>
+                      <td className="px-2.5 py-2 text-right font-black text-[#1E4D2B]">{l.total > 0 ? fmt(l.total) : "—"}</td>
+                      <td className="px-2.5 py-2 text-right">
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10.5px] font-black ${l.pct > 0 ? "border-[#2F6B45]/45 bg-[#2F6B45]/12 text-[#2F6B45]" : l.pct < 0 ? "border-[#A5473D]/45 bg-[#A5473D]/12 text-[#A5473D]" : "border-[#E5DCC0] bg-white text-[#8A9288]"}`}>
+                          {l.pct > 0 ? "+" : ""}{l.pct.toFixed(0)} %
+                        </span>
+                      </td>
+                      <td className="px-2.5 py-2 text-right font-black text-[#7A5210]">{fmt(l.cumul)}</td>
+                      <td className="px-2.5 py-2 text-center">
+                        <button
+                          type="button"
+                          onClick={() => setMoisOpen(ouvertMois ? null : l.m0)}
+                          aria-expanded={ouvertMois}
+                          aria-label={`Détail des épargnes de ${l.nomMois}`}
+                          className="mx-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[#6E4B71]/30 bg-[#6E4B71]/8 text-[#6E4B71] transition hover:bg-[#6E4B71]/18"
+                        >
+                          {ouvertMois ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </button>
+                      </td>
+                    </tr>
+                    {ouvertMois && (
+                      <tr className="border-b border-[#E5DCC0] bg-[#FBF7EA]">
+                        <td colSpan={7} className="px-2.5 py-2.5">
+                          {l.versements.length === 0 ? (
+                            <p className="text-[11.5px] leading-snug text-[#8A9288]">
+                              Aucun versement en {l.nomMois} — attribuez une épargne dans la section « Attribution des épargnes » ci-dessus.
+                            </p>
+                          ) : (
+                            <div className="space-y-1.5">
+                              {l.versements.map((v) => {
+                                const enEdition = editId === v.id;
+                                const nom = p.parMembre.get(v.membreId)?.name ?? v.membreId;
+                                return (
+                                  <div key={v.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-[#E5DCC0] bg-[#FFFDF6] px-2.5 py-1.5">
+                                    <PiggyBank className="h-3.5 w-3.5 shrink-0 text-[#6E4B71]" />
+                                    <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-[#2B3530]">{nom}</span>
+                                    {enEdition ? (
+                                      <>
+                                        <input
+                                          value={editMontant}
+                                          onChange={(e) => setEditMontant(e.target.value.replace(/[^\d]/g, ""))}
+                                          inputMode="numeric"
+                                          aria-label={`Nouveau montant de l’épargne de ${nom}, en FCFA`}
+                                          className="w-32 rounded-lg border border-[#C9B98A] bg-white px-2 py-1 text-[12px] font-bold text-[#2B3530] outline-none focus:border-[#6E4B71]"
+                                        />
+                                        <Btn small tone="vert" onClick={enregistrerModification}><CheckCircle2 className="h-3.5 w-3.5" /> Enregistrer</Btn>
+                                        <Btn small tone="neutre" onClick={() => { setEditId(null); setEditMontant(""); }}>Annuler</Btn>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className="text-[12.5px] font-black text-[#1E4D2B]">{fcfa(v.montant)}</span>
+                                        <Btn small tone="violet" onClick={() => commencerModification(v.id, v.montant)}>Modifier</Btn>
+                                        <BtnConfirme tone="rouge" onConfirmer={() => p.onRetirer(v.id)} labelConfirmer="Confirmer ?">
+                                          <Trash2 className="h-3.5 w-3.5" /> Retirer
+                                        </BtnConfirme>
+                                      </>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+              <tr className="bg-[#6E4B71]/14">
+                <td className="px-2.5 py-2.5 font-black text-[#3E2A40]">Total annuel</td>
+                <td className="px-2.5 py-2.5 text-[11.5px] font-bold text-[#3E2A40]">
+                  {new Set(p.epargnes.map((e) => e.membreId)).size} épargnant(s) — {nbVersements} versement{nbVersements > 1 ? "s" : ""}
+                </td>
+                <td className="px-2.5 py-2.5 text-right font-black text-[#3E2A40]">{nbVersements}</td>
+                <td className="px-2.5 py-2.5 text-right font-black text-[#3E2A40]">{fmt(totalAnnuel)}</td>
+                <td className="px-2.5 py-2.5" />
+                <td className="px-2.5 py-2.5 text-right font-black text-[#3E2A40]">{fmt(totalAnnuel)}</td>
+                <td className="px-2.5 py-2.5" />
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </Block>
   );
 }
 
@@ -2078,8 +2562,6 @@ export function SecEpargnes(p: {
   };
   const majEp = (patch: Partial<Reglement["epargne"]>) =>
     setBrouillonEp((x) => ({ ...x, ...patch }));
-  const majTypeEpargne = (id: string, patch: Partial<TypeEpargneConfig>) =>
-    setBrouillonEp((x) => ({ ...x, types: { ...x.types, [id]: { ...x.types[id], ...patch } } }));
   const enregistrerParamEpargne = () => {
     /* fusion au dernier moment : on relit le règlement courant pour n'écraser
      * QUE le bloc épargne (jamais les réglages faits ailleurs). */
@@ -2088,8 +2570,6 @@ export function SecEpargnes(p: {
     saveReglement(next);
     toast.success("Paramétrage des épargnes enregistré", { description: `Taux en vigueur : ${tauxEpargneVigueur(next)} %/mois — le président et les membres voient le même règlement (même clé de stockage).` });
   };
-
-  const typeEpargne = brouillonEp.typeChoisi ? TYPES_EPARGNE_CATALOGUE.find((t) => t.id === brouillonEp.typeChoisi) ?? null : null;
 
   return (
     <>
@@ -2100,6 +2580,9 @@ export function SecEpargnes(p: {
             <p className="fc-serif text-[16px] font-black leading-tight text-[#2B3530]">Registre des épargnes de la réunion — tenu par la secrétaire</p>
             <p className="mt-0.5 text-[11.5px] leading-relaxed text-[#5C6B60]">
               La secrétaire inscrit les épargnes POUR LE BUREAU : mêmes mois réels, mêmes sommes, mêmes intérêts. ⚠ C’est LA MÊME SOURCE que la console du président (registre du bureau, clé fc_epargnes_reunion_v1) — les deux postes voient la même réalité.
+            </p>
+            <p className="mt-1 text-[11.5px] font-semibold leading-relaxed text-[#6E4B71]">
+              Toute épargne attribuée ici rejoint AUTOMATIQUEMENT le registre des épargnes de la réunion (page Registre + console du président) — même source, à la seconde.
             </p>
           </div>
           <P cls={VI_CLS}><PiggyBank className="h-3 w-3" /> Taux en vigueur : {taux} %/mois</P>
@@ -2125,6 +2608,25 @@ export function SecEpargnes(p: {
         }}
       />
 
+      {/* — CALENDRIER DES ÉPARGNES DE L'ANNÉE : janvier → décembre, dépliable mois par mois — */}
+      <CalendrierEpargnes
+        epargnes={epargnes}
+        parMembre={p.parMembre}
+        onModifier={(id, montant) => {
+          const e = epargnes.find((x) => x.id === id);
+          if (!e || !montant || montant <= 0) {
+            toast.error("Tapez une somme valide");
+            return;
+          }
+          majEpargnes(epargnes.map((x) => (x.id === id ? { ...x, montant } : x)), `Épargne de ${p.parMembre.get(e.membreId)?.name ?? e.membreId} corrigée : ${fcfa(e.montant)} → ${fcfa(montant)}.`);
+        }}
+        onRetirer={(id) => {
+          const e = epargnes.find((x) => x.id === id);
+          if (!e) return;
+          majEpargnes(epargnes.filter((x) => x.id !== id), `Épargne de ${p.parMembre.get(e.membreId)?.name ?? e.membreId} retirée du calendrier (${fcfa(e.montant)} — ${MOIS_FR[Math.min(11, Math.max(0, e.moisIdx))]}).`);
+        }}
+      />
+
       {/* ══════ PARAMÉTRAGE — épargnes (le paramétrage qui va avec) ══════ */}
       <Block
         title="Paramétrage — épargnes"
@@ -2133,10 +2635,9 @@ export function SecEpargnes(p: {
         note="La secrétaire règle POUR LE BUREAU le taux mensuel et les options du règlement (bloc « reglement.epargne », même clé que le président) : le taux peut être REMPLACÉ, RETIRÉ (0 %) ou rétabli au défaut de la maison (3 %/mois). Le membre voit tout cela en lecture seule."
       >
         <div className="space-y-3 p-4">
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-2">
             <KpiCard icon={<Percent className="h-3.5 w-3.5" />} label="Taux en vigueur" value={`${tauxEpargneVigueur({ ...p.regl, epargne: brouillonEp })} %/mois`} sub={brouillonEp.tauxFixe ? "Décision du bureau — remplace le défaut de la maison" : `Défaut de la maison (${TAUX_DEFAUT} %/mois)`} accent="#6E4B71" />
-            <KpiCard icon={<Eye className="h-3.5 w-3.5" />} label="Règles de dépôt & retrait" value={`Préavis ${brouillonEp.preavisJours} j`} sub={`Dépôt min. ${fcfa(brouillonEp.depotMinFcfa)} — retrait max. ${brouillonEp.retraitMaxMois} % du solde/mois`} accent="#2F6B45" />
-            <KpiCard icon={<PiggyBank className="h-3.5 w-3.5" />} label="Type d’épargne" value={typeEpargne?.nom ?? "Aucun"} sub={typeEpargne?.description ?? "Sans type, le membre voit « à fixer par le bureau »."} accent="#C89F62" />
+            <KpiCard icon={<Coins className="h-3.5 w-3.5" />} label="Dépôt minimum" value={fcfa(brouillonEp.depotMinFcfa)} sub="Somme minimale d’un versement d’épargne — fixée par le bureau" accent="#2F6B45" />
           </div>
 
           <NumField
@@ -2160,59 +2661,14 @@ export function SecEpargnes(p: {
             <Btn small tone="neutre" onClick={() => majEp({ tauxMensuel: TAUX_DEFAUT, tauxFixe: false })}><RotateCcw className="h-3.5 w-3.5" /> Rétablir le défaut ({TAUX_DEFAUT} %/mois)</Btn>
           </div>
 
-          <Seg
-            legende="Manière de collecter les intérêts — décidée par le bureau"
-            value={brouillonEp.collecteInterets}
-            onChange={(v) => majEp({ collecteInterets: v as Reglement["epargne"]["collecteInterets"] })}
-            options={(Object.keys(COLLECTE_INTERETS_LABELS) as Reglement["epargne"]["collecteInterets"][]).map((k) => ({ v: k, label: COLLECTE_INTERETS_LABELS[k] }))}
+          <NumField
+            label="Dépôt minimum"
+            note="Somme minimale d’un versement d’épargne — appliquée au registre et vue par les membres"
+            value={brouillonEp.depotMinFcfa}
+            fcfaPreview
+            step={1_000}
+            onChange={(n) => majEp({ depotMinFcfa: n })}
           />
-          <p className="rounded-xl bg-[#2A4A3A]/5 px-3 py-2 text-[11px] leading-relaxed text-[#5C6B60]">
-            {COLLECTE_INTERETS_NOTES[brouillonEp.collecteInterets]}
-          </p>
-
-          <div className="grid gap-2 sm:grid-cols-2">
-            <NumField label="Préavis de retrait" note="Jours de préavis avant tout retrait" unite="jours" value={brouillonEp.preavisJours}
-              onChange={(n) => majEp({ preavisJours: n })} />
-            <NumField label="Dépôt minimum" value={brouillonEp.depotMinFcfa} fcfaPreview step={1_000}
-              onChange={(n) => majEp({ depotMinFcfa: n })} />
-            <NumField label="Retrait maximal par mois" note="En pourcentage du solde" unite="% du solde" value={brouillonEp.retraitMaxMois}
-              onChange={(n) => majEp({ retraitMaxMois: n })} />
-          </div>
-
-          <label className="block rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] px-3 py-2.5">
-            <span className="block text-[11.5px] font-bold text-[#2B3530]">Type d’épargne proposé par la Tontine</span>
-            <span className="mt-0.5 block text-[10.5px] text-[#8A9288]">Choisissez dans la liste : le type d’intérêt et les champs propres à ce type apparaissent ensuite.</span>
-            <select
-              value={brouillonEp.typeChoisi ?? ""}
-              onChange={(e) => majEp({ typeChoisi: e.target.value || null })}
-              className="mt-1.5 w-full rounded-lg border-2 border-[#E5DCC0] bg-white px-2.5 py-2 text-[13px] font-bold text-[#2B3530] outline-none focus:border-[#6E4B71]"
-            >
-              <option value="">— Aucun type choisi pour l’instant —</option>
-              {TYPES_EPARGNE_CATALOGUE.map((t) => <option key={t.id} value={t.id}>{t.nom}</option>)}
-            </select>
-          </label>
-          {typeEpargne && brouillonEp.types[typeEpargne.id] && (
-            <div className="rounded-2xl border-2 border-[#6E4B71]/40 bg-[#6E4B71]/8 p-3">
-              <p className="flex items-center gap-1.5 text-[12px] font-black text-[#6E4B71]"><Sparkles className="h-3.5 w-3.5" /> Épargne choisie : {typeEpargne.nom}</p>
-              <p className="mt-0.5 text-[10.5px] leading-snug text-[#6E4B71]/85">{typeEpargne.description}</p>
-              <div className="mt-2 space-y-2">
-                <Seg
-                  legende="Type d’intérêt de cette épargne"
-                  value={brouillonEp.types[typeEpargne.id].interet}
-                  onChange={(v) => majTypeEpargne(typeEpargne.id, { interet: v as TypeEpargneConfig["interet"] })}
-                  options={(Object.keys(INTERETS_EPARGNE_LABELS) as TypeEpargneConfig["interet"][]).map((k) => ({ v: k, label: INTERETS_EPARGNE_LABELS[k] }))}
-                />
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <NumField label="Taux de cette épargne" unite="% / mois" step={0.5} value={brouillonEp.types[typeEpargne.id].tauxMensuel}
-                    onChange={(n) => majTypeEpargne(typeEpargne.id, { tauxMensuel: n })} />
-                  <NumField label="Durée de blocage" note="0 = pas de blocage" unite="mois" value={brouillonEp.types[typeEpargne.id].blocageMois}
-                    onChange={(n) => majTypeEpargne(typeEpargne.id, { blocageMois: n })} />
-                  <NumField label="Dépôt minimum de cette épargne" value={brouillonEp.types[typeEpargne.id].depotMinFcfa} fcfaPreview step={1_000}
-                    onChange={(n) => majTypeEpargne(typeEpargne.id, { depotMinFcfa: n })} />
-                </div>
-              </div>
-            </div>
-          )}
 
           <div className="flex flex-col gap-2 border-t border-[#E5DCC0] bg-[#FBF7EA] p-3.5 sm:flex-row sm:items-center sm:justify-between">
             <Btn tone="violet" onClick={enregistrerParamEpargne}><CheckCircle2 className="h-4 w-4" /> Enregistrer le paramétrage des épargnes</Btn>

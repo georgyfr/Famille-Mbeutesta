@@ -522,8 +522,14 @@ export function MenuHamburger<T extends string>({ ariaLabel, libelle, couleurPoi
                 couleur={couleurPoint}
                 segments={[
                   { label: filRacine.label, onClick: filRacine.onClick },
+                  /* v39 — CORRECTION DE L'ADMINISTRATEUR : « mes onglets de la
+                   * réunion renvoient au menu hamburger, ce qui ne devrait pas
+                   * être — le fil d'Ariane, c'était pas pour faire n'importe
+                   * quoi. » Cliquer la SECTION du fil d'Ariane NAVIGUE vers la
+                   * première page de cette section (une vraie page, jamais le
+                   * tiroir). */
                   ...(groupeCourant
-                    ? [{ label: groupeCourant.label, onClick: () => setOuvert(true) }]
+                    ? [{ label: groupeCourant.label, onClick: () => choisir(groupeCourant.onglets[0].key) }]
                     : []),
                   { label: courant?.label ?? "—" },
                 ]}

@@ -38,7 +38,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Menu } from "lucide-react";
+import { Menu, Type } from "lucide-react";
 import { MainApp } from "./main-app";
 import { MaquettePresident } from "./maquette-president";
 import { MaquetteSecretaire } from "./maquette-secretaire";
@@ -82,11 +82,61 @@ function ouvrirMenuConsole(): void {
   } catch { /* rien */ }
 }
 
+/* ─── v39 — RÉGLAGE DE LA TAILLE DU TEXTE (accessibilité, POUR TOUS) ───
+ * Demande de l'administrateur : « la possibilité de régler les tailles des
+ * pages pour celui qui a des difficultés visuelles. Cela doit être fait pour
+ * tout le monde, que ce soit les membres du bureau ou les membres simples. »
+ * Un bouton « Aa » dans la barre du haut (visible sur TOUTES les pages) fait
+ * défiler trois tailles : normale → grande → très grande. Le choix est
+ * mémorisé par appareil (localStorage) et s'applique à TOUTE l'interface via
+ * le zoom du document — boutons, tableaux et cartes suivent. */
+const TAILLES_TEXTE = [1, 1.15, 1.3] as const;
+const CLE_TAILLE_TEXTE = "fc_text_scale_v1";
+
+function lireTailleTexte(): number {
+  try {
+    const v = Number(window.localStorage.getItem(CLE_TAILLE_TEXTE));
+    return (TAILLES_TEXTE as readonly number[]).includes(v) ? v : 1;
+  } catch {
+    return 1;
+  }
+}
+
+function appliquerTailleTexte(v: number): void {
+  try {
+    document.documentElement.style.zoom = String(v);
+  } catch { /* navigateur sans zoom — rien */ }
+  try {
+    window.localStorage.setItem(CLE_TAILLE_TEXTE, String(v));
+  } catch { /* rien */ }
+}
+
 /** v36 — BARRE DU HAUT : le logo de la famille + son nom écrit EN DESSOUS
  *  (demande de l'administrateur), et — quand une console est affichée — le
  *  menu hamburger à droite. Fini les pastilles « Membres » / « App » et
  *  l'icône d'IA. */
 function BarreHaute({ avecMenu }: { avecMenu: boolean }) {
+  /* v39 — taille du texte : état lu APRÈS montage (hydratation sûre) puis
+   *    appliqué au document ; le bouton « Aa » fait défiler les 3 tailles. */
+  const [taille, setTaille] = useState<number>(1);
+  useEffect(() => {
+    const t0 = setTimeout(() => {
+      const v = lireTailleTexte();
+      setTaille(v);
+      appliquerTailleTexte(v);
+    }, 0);
+    return () => clearTimeout(t0);
+  }, []);
+  const defilerTaille = () => {
+    const idx = (TAILLES_TEXTE as readonly number[]).indexOf(taille);
+    const suivant = TAILLES_TEXTE[(idx + 1) % TAILLES_TEXTE.length];
+    setTaille(suivant);
+    appliquerTailleTexte(suivant);
+    toast.success(
+      suivant === 1 ? "Taille du texte : normale" : suivant === 1.15 ? "Taille du texte : grande" : "Taille du texte : très grande",
+      { description: "Le réglage est mémorisé pour cet appareil — touchez « Aa » à nouveau pour changer." },
+    );
+  };
   return (
     <div
       className="sticky top-0 z-30 flex items-center justify-between gap-2 bg-[#2A4A3A] px-3 py-1.5 text-white"
@@ -104,17 +154,30 @@ function BarreHaute({ avecMenu }: { avecMenu: boolean }) {
           </p>
         </div>
       </div>
-      {avecMenu && (
+      <div className="flex shrink-0 items-center gap-1.5">
+        {/* v39 — ACCESSIBILITÉ : réglage de la taille du texte, pour tous. */}
         <button
           type="button"
-          onClick={ouvrirMenuConsole}
-          aria-label="Ouvrir le menu de la page"
-          aria-haspopup="dialog"
-          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 border-[#C89F62]/70 bg-white/10 text-[#FBF7EA] transition-all hover:bg-white/20 active:scale-95"
+          onClick={defilerTaille}
+          aria-label="Régler la taille du texte"
+          title="Taille du texte"
+          className="inline-flex h-10 min-w-[40px] items-center justify-center gap-0.5 rounded-xl border-2 border-[#C89F62]/70 bg-white/10 px-1.5 text-[13px] font-black text-[#FBF7EA] transition-all hover:bg-white/20 active:scale-95"
         >
-          <Menu aria-hidden className="h-5 w-5" />
+          <Type aria-hidden className="h-4 w-4" />
+          Aa
         </button>
-      )}
+        {avecMenu && (
+          <button
+            type="button"
+            onClick={ouvrirMenuConsole}
+            aria-label="Ouvrir le menu de la page"
+            aria-haspopup="dialog"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 border-[#C89F62]/70 bg-white/10 text-[#FBF7EA] transition-all hover:bg-white/20 active:scale-95"
+          >
+            <Menu aria-hidden className="h-5 w-5" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }

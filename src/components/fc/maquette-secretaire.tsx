@@ -60,8 +60,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { api } from "@/lib/fc-client";
 import {
-  Archive, Ban, BarChart3, Bell, BookOpen, CalendarCheck, CalendarClock, CheckCircle2, ChevronDown, ChevronUp,
-  ClipboardList, Coins, Copy, Download, FileEdit, HandCoins, HeartHandshake, Mail, PenLine,
+  Archive, Ban, BarChart3, Bell, BookOpen, CalendarCheck, CalendarClock, CheckCircle2, ChevronDown,
+  ClipboardList, Coins, Copy, Download, HandCoins, HeartHandshake, Mail, PenLine,
   Percent, PiggyBank, Play, Plus, RefreshCw, ScrollText, Send, Settings, ShieldCheck, Stamp,
   Ticket, Trash2, UserCheck, Users, Wallet, X,
 } from "lucide-react";
@@ -83,11 +83,17 @@ import { ReglageNotifications } from "./reglage-notifications";
 import { exportRegistreEpargnesExcel } from "./secretaire-excel";
 import { CodesMembresSection } from "./codes-membres-section";
 import { SecMesCotisations, SecMesEpargnes, SecMesPrets } from "./secretaire-membre";
+import { SeancesSectionV2 } from "./secretaire-seances-v2";
+import { loadTypesCotisation, typeDuMembre, type TypeCotisation } from "./cotisations-types";
+import {
+  chargerDemandesPresence, demanderPresences, joursAvantReunion,
+  telechargerPDF, telechargerWord, type DemandePresence,
+} from "./partage-bureau";
 import {
   MOTIFS_LABELS, PARAMS_DEFAUT,
   derniersMoisKeys, labelMoisKey, loadAmendes, loadConvocations, loadDecisions,
   loadNotifs, loadParamsSecretaire, loadPresences, loadPVs, loadSeances, loadVisas,
-  moisKeyOf, pushNotif, reinitialiserDonneesSecretariat, reinitialiserParams,
+  moisKeyOf, moisKeyPrecedent, pushNotif, reinitialiserDonneesSecretariat, reinitialiserParams,
   sanctionnerConvocationManquee, saveAmendes, saveConvocations, saveDecisions, saveNotifs,
   saveParamsSecretaire, savePresences, savePVs, saveSeances, saveVisas, statsPresence, syncMembre,
 } from "./secretaire-bureau";
@@ -455,37 +461,21 @@ export function MaquetteSecretaire() {
     setPvs(next);
     savePVs(next);
   };
+  /* v39 — CRÉATION D'UN NOUVEAU PROCÈS-VERBAL : « il faut bien qu'il y ait une
+   * section qui permet de créer un nouveau procès-verbal et une autre section
+   * essentiellement basée sur les archives du procès-verbal. » */
+  const creerPV = (titre: string, contenu: string) => {
+    const next: PV[] = [{ id: nid(), titre, le: "—", statut: "brouillon", contenu }, ...pvs];
+    setPvs(next);
+    savePVs(next);
+    toast.success("Procès-verbal créé (brouillon)", { description: "Complétez-le, finalisez-le, puis archivez-le après la réunion." });
+  };
 
-  /* — séances : ordre du jour du mois courant — */
+  /* — séances : ordre du jour du mois courant (v39 : la page Séances v2 gère
+   *    elle-même la création, les points, la confirmation et l'envoi — la
+   *    console ne garde que la RÉDACTION du PV, qui vit avec les PV). — */
   const seanceCourante = useMemo(() => seances.find((s) => s.moisKey === moisKey) ?? null, [seances, moisKey]);
   const majSeances = (next: Seance[]) => { setSeances(next); saveSeances(next); };
-  const ajouterPoint = (titre: string, detail: string, responsable: string) => {
-    if (!seanceCourante) {
-      if (!moisKey) return;
-      majSeances([...seances, { id: nid(), moisKey, points: [{ id: nid(), titre, detail, responsable: responsable || "Bureau", statut: "en_attente" }] }]);
-      return;
-    }
-    majSeances(seances.map((s) => (s.id === seanceCourante.id
-      ? { ...s, points: [...s.points, { id: nid(), titre, detail, responsable: responsable || "Bureau", statut: "en_attente" as const }] }
-      : s)));
-  };
-  const majPoint = (pointId: string, patch: Partial<Seance["points"][number]>) => {
-    if (!seanceCourante) return;
-    majSeances(seances.map((s) => (s.id === seanceCourante.id ? { ...s, points: s.points.map((pt) => (pt.id === pointId ? { ...pt, ...patch } : pt)) } : s)));
-  };
-  const bougerPoint = (pointId: string, dir: -1 | 1) => {
-    if (!seanceCourante) return;
-    const pts = [...seanceCourante.points];
-    const i = pts.findIndex((pt) => pt.id === pointId);
-    const j = i + dir;
-    if (i < 0 || j < 0 || j >= pts.length) return;
-    [pts[i], pts[j]] = [pts[j], pts[i]];
-    majSeances(seances.map((s) => (s.id === seanceCourante.id ? { ...s, points: pts } : s)));
-  };
-  const supprimerPoint = (pointId: string) => {
-    if (!seanceCourante) return;
-    majSeances(seances.map((s) => (s.id === seanceCourante.id ? { ...s, points: s.points.filter((pt) => pt.id !== pointId) } : s)));
-  };
   const cloturerSeance = () => {
     if (!seanceCourante || seanceCourante.points.length === 0) {
       toast.error("Aucun ordre du jour à clôturer"); return;
@@ -673,10 +663,20 @@ export function MaquetteSecretaire() {
       {/* ── contenu ── */}
       <div className="mt-3 space-y-3.5">
         {tab === "pv" && (
-          <PvSection pvs={pvs} onMajContenu={majContenuPV} onFinaliser={finaliserPV} onArchiver={archiverPV} typesArchives={params.decisions.typesArchives} />
+          <PvSection pvs={pvs} moisLabel={moisLabel} onMajContenu={majContenuPV} onFinaliser={finaliserPV} onArchiver={archiverPV} onCreer={creerPV} typesArchives={params.decisions.typesArchives} />
         )}
         {tab === "seances" && (
-          <SeancesSection seance={seanceCourante} moisLabel={moisLabel} jourReunion={jourReunion} onAjouter={ajouterPoint} onMajPoint={majPoint} onBouger={bougerPoint} onSupprimer={supprimerPoint} onCloturer={cloturerSeance} />
+          <SeancesSectionV2
+            seances={seances}
+            majSeances={majSeances}
+            moisKey={moisKey}
+            moisLabel={moisLabel}
+            jourReunion={jourReunion}
+            annee={annee ?? new Date().getFullYear()}
+            roster={roster}
+            moiNom={moi?.name ?? "Secrétaire"}
+            onCloturer={cloturerSeance}
+          />
         )}
         {tab === "presences" && (
           <PresencesSection
@@ -686,6 +686,7 @@ export function MaquetteSecretaire() {
             amendesMois={amendesMois} notifsMois={notifsMois} dernierEnregistrement={derniereSauvegarde}
             parMembre={parMembre} onMarquerAmende={marquerAmende} onSupprimerAmende={supprimerAmende}
             historique={presHisto} moisKey={moisKey} rachatAuto={params.presences.rachatAuto}
+            jourReunion={jourReunion} moiNom={moi?.name ?? "Secrétaire"}
           />
         )}
         {tab === "decisions" && (
@@ -789,136 +790,154 @@ function ToggleRow(p: { label: string; note?: string; actif: boolean; onToggle: 
 
 /* ══════════════════════════ sections ══════════════════════════ */
 
-function PvSection(p: { pvs: PV[]; onMajContenu: (id: string, contenu: string) => void; onFinaliser: (id: string) => void; onArchiver: (id: string, type: string) => void; typesArchives: string[] }) {
+/* v39 — PAGE PV EN DEUX SECTIONS (demande de l'administrateur) :
+ *   · « Rédiger un nouveau procès-verbal » : la création + les brouillons ;
+ *   · « Archives des procès-verbaux » : PV finalisés (à lire en réunion) et
+ *     PV archivés, dépliables pour la lecture. */
+function PvSection(p: {
+  pvs: PV[];
+  moisLabel: string | null;
+  onMajContenu: (id: string, contenu: string) => void;
+  onFinaliser: (id: string) => void;
+  onArchiver: (id: string, type: string) => void;
+  onCreer: (titre: string, contenu: string) => void;
+  typesArchives: string[];
+}) {
   const [types, setTypes] = useState<Record<string, string>>({});
+  const [form, setForm] = useState<{ titre: string; contenu: string } | null>(null);
+  const [ouvert, setOuvert] = useState<string | null>(null);
   const STATUT: Record<PV["statut"], { label: string; cls: string }> = {
     brouillon: { label: "Brouillon", cls: OR_CLS },
     finalise: { label: "Finalisé — à lire en réunion", cls: VI_CLS },
     archive: { label: "Archivé", cls: "bg-[#2A4A3A]/8 text-[#5C6B60] border-[#E5DCC0]" },
   };
-  return (
-    <Block
-      title="Les procès-verbaux de la famille"
-      icon={<BookOpen className="h-4 w-4" />}
-      accent="#6E4B71"
-      note="Rédigez le PV, finalisez-le, puis archivez-le après la réunion."
-    >
-      <div className="space-y-3 p-4">
-        {p.pvs.map((pv) => (
-          <div key={pv.id} className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3.5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-[13.5px] font-bold text-[#2B3530]">{pv.titre}</p>
-              <P cls={STATUT[pv.statut].cls}>{STATUT[pv.statut].label}</P>
-            </div>
-            {pv.statut === "brouillon" ? (
-              <>
-                <textarea
-                  value={pv.contenu}
-                  onChange={(e) => p.onMajContenu(pv.id, e.target.value)}
-                  rows={7}
-                  aria-label={`Contenu du ${pv.titre}`}
-                  className="mt-2 w-full rounded-xl border border-[#C7A9CA] bg-white px-3 py-2.5 text-[12.5px] leading-relaxed text-[#2B3530] focus:outline-none focus:ring-2 focus:ring-[#6E4B71]/25"
-                />
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <Btn tone="violet" onClick={() => p.onFinaliser(pv.id)}><CheckCircle2 className="h-4 w-4" /> Finaliser le procès-verbal</Btn>
-                  <p className="text-[10.5px] font-semibold text-[#8A9288]">Écriture sauvegardée automatiquement au fil de la saisie.</p>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="mt-2 whitespace-pre-wrap rounded-xl border border-[#E5DCC0] bg-white px-3 py-2.5 text-[12.5px] leading-relaxed text-[#2B3530]">{pv.contenu}</p>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  {pv.statut === "finalise" && (
-                    <>
-                      <div className="flex flex-wrap gap-1.5">
-                        {p.typesArchives.map((t) => (
-                          <button key={t} type="button" onClick={() => setTypes((prev) => ({ ...prev, [pv.id]: t }))}
-                            aria-pressed={(types[pv.id] ?? p.typesArchives[0]) === t}
-                            className={`rounded-full border px-2.5 py-1 text-[10.5px] font-bold transition ${(types[pv.id] ?? p.typesArchives[0]) === t ? "border-[#6E4B71] bg-[#6E4B71] text-white" : "border-[#C7A9CA] bg-white text-[#5A3E5D] hover:border-[#6E4B71]"}`}>
-                            {t}
-                          </button>
-                        ))}
-                      </div>
-                      <BtnConfirme tone="violet" onConfirmer={() => p.onArchiver(pv.id, types[pv.id] ?? p.typesArchives[0] ?? "Procès-verbal")} labelConfirmer="Confirmer l'archive ?">
-                        <Archive className="h-4 w-4" /> Archiver ce procès-verbal
-                      </BtnConfirme>
-                    </>
-                  )}
-                  {pv.statut === "archive" && <p className="text-[10.5px] font-semibold text-[#8A9288]">Archivé le {pv.le} — type : {pv.archiveType ?? "Procès-verbal"} — consultable par toute la famille, à jamais.</p>}
-                </div>
-              </>
-            )}
-          </div>
-        ))}
-      </div>
-    </Block>
-  );
-}
-
-function SeancesSection(p: {
-  seance: Seance | null; moisLabel: string | null; jourReunion: number;
-  onAjouter: (titre: string, detail: string, responsable: string) => void;
-  onMajPoint: (id: string, patch: Partial<{ statut: "en_attente" | "traite" }>) => void;
-  onBouger: (id: string, dir: -1 | 1) => void;
-  onSupprimer: (id: string) => void;
-  onCloturer: () => void;
-}) {
-  const [form, setForm] = useState<{ titre: string; detail: string; resp: string } | null>(null);
+  const brouillons = p.pvs.filter((x) => x.statut === "brouillon");
+  const finalises = p.pvs.filter((x) => x.statut === "finalise");
+  const archives = p.pvs.filter((x) => x.statut === "archive");
   return (
     <>
-      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-        <KpiCard icon={<CalendarClock className="h-4 w-4" />} label="Prochaine séance" value={p.jourReunion ? `${p.jourReunion} ${p.moisLabel?.split(" ")[0] ?? ""}` : "—"} sub={`2ᵉ dimanche · ${p.moisLabel ?? "…"}`} accent="#6E4B71" />
-        <KpiCard icon={<ClipboardList className="h-4 w-4" />} label="Points à l'ordre du jour" value={String(p.seance?.points.length ?? 0)} sub="séance du mois courant" accent="#2F6B45" />
-        <KpiCard icon={<CheckCircle2 className="h-4 w-4" />} label="Points traités" value={String(p.seance?.points.filter((pt) => pt.statut === "traite").length ?? 0)} sub="à reprendre au PV" accent="#8A6420" />
-        <KpiCard icon={<FileEdit className="h-4 w-4" />} label="PV de séance" value="Brouillon auto" sub="clôture → onglet Procès-verbaux" accent="#3D6B72" />
-      </div>
+      {/* — SECTION 1 : RÉDIGER UN NOUVEAU PROCÈS-VERBAL — */}
       <Block
-        title={`Ordre du jour — séance de ${p.moisLabel ?? "…"}`}
-        icon={<CalendarClock className="h-4 w-4" />}
+        title="Rédiger un nouveau procès-verbal"
+        icon={<PenLine className="h-4 w-4" />}
         accent="#6E4B71"
-        note="Fixez l'ordre du jour, cochez les points traités, puis clôturez la séance."
+        note="Écrivez le procès-verbal de la réunion, finalisez-le pour sa lecture en séance, puis archivez-le dans les archives."
       >
-        <div className="divide-y divide-[#E5DCC0]">
-          {(p.seance?.points ?? []).map((pt, i) => (
-            <div key={pt.id} className="flex flex-wrap items-center gap-2 px-4 py-2.5">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#6E4B71] text-[11px] font-black text-white">{i + 1}</span>
-              <span className="min-w-0 flex-1">
-                <span className={`block text-[13px] font-bold ${pt.statut === "traite" ? "text-[#8A9288] line-through" : "text-[#2B3530]"}`}>{pt.titre}</span>
-                <span className="block text-[11px] leading-snug text-[#8A9288]">{pt.detail} · {pt.responsable}</span>
-              </span>
-              <div className="flex shrink-0 items-center gap-1">
-                <button type="button" onClick={() => p.onBouger(pt.id, -1)} aria-label={`Monter « ${pt.titre} »`} className="rounded-lg border border-[#E5DCC0] bg-white p-1.5 text-[#5A3E5D] hover:border-[#6E4B71]"><ChevronUp className="h-3.5 w-3.5" /></button>
-                <button type="button" onClick={() => p.onBouger(pt.id, 1)} aria-label={`Descendre « ${pt.titre} »`} className="rounded-lg border border-[#E5DCC0] bg-white p-1.5 text-[#5A3E5D] hover:border-[#6E4B71]"><ChevronDown className="h-3.5 w-3.5" /></button>
-                <button type="button" onClick={() => p.onMajPoint(pt.id, { statut: pt.statut === "traite" ? "en_attente" : "traite" })} aria-pressed={pt.statut === "traite"}
-                  className={`rounded-lg border px-2 py-1.5 text-[10.5px] font-bold transition ${pt.statut === "traite" ? OK_CLS + " ring-1 ring-current" : "border-[#E5DCC0] bg-white text-[#8A9288] hover:border-[#6E4B71]/40"}`}>
-                  {pt.statut === "traite" ? "Traité" : "À traiter"}
-                </button>
-                <BtnConfirme tone="rouge" onConfirmer={() => p.onSupprimer(pt.id)} labelConfirmer="Retirer ?">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </BtnConfirme>
+        <div className="space-y-3 p-4">
+          {!form ? (
+            <Btn tone="violet" onClick={() => setForm({
+              titre: `Procès-verbal — réunion de ${p.moisLabel ?? "ce mois"}`,
+              contenu: `Réunion tenue le 2ᵉ dimanche de ${p.moisLabel ?? "ce mois"}.\n\nMembres présents :\n\nOrdre du jour traité :\n\nDécisions inscrites au journal :\n\nDivers :\n`,
+            })}>
+              <PenLine className="h-4 w-4" /> Rédiger un nouveau procès-verbal
+            </Btn>
+          ) : (
+            <div className="space-y-2 rounded-2xl border-2 border-[#6E4B71]/40 bg-[#F7F1F8] p-3.5">
+              <p className="text-[12px] font-black uppercase tracking-wide text-[#6E4B71]">Nouveau procès-verbal</p>
+              <input
+                value={form.titre}
+                onChange={(e) => setForm({ ...form, titre: e.target.value })}
+                aria-label="Titre du procès-verbal"
+                placeholder="Titre du procès-verbal"
+                className="w-full rounded-lg border border-[#C7A9CA] bg-white px-3 py-2 text-[13px] font-bold text-[#2B3530] focus:outline-none"
+              />
+              <textarea
+                value={form.contenu}
+                onChange={(e) => setForm({ ...form, contenu: e.target.value })}
+                rows={8}
+                aria-label="Contenu du nouveau procès-verbal"
+                className="w-full rounded-xl border border-[#C7A9CA] bg-white px-3 py-2.5 text-[12.5px] leading-relaxed text-[#2B3530] focus:outline-none focus:ring-2 focus:ring-[#6E4B71]/25"
+              />
+              <div className="flex gap-2">
+                <Btn tone="violet" onClick={() => {
+                  if (!form.titre.trim()) { toast.error("Le titre du procès-verbal est obligatoire"); return; }
+                  p.onCreer(form.titre.trim(), form.contenu);
+                  setForm(null);
+                }}><CheckCircle2 className="h-4 w-4" /> Créer le procès-verbal</Btn>
+                <Btn tone="neutre" onClick={() => setForm(null)}>Annuler</Btn>
               </div>
             </div>
-          ))}
-          {p.seance && p.seance.points.length === 0 && (
-            <p className="px-4 py-3 text-[12px] font-semibold text-[#8A9288]">Ordre du jour vide — ajoutez le premier point.</p>
+          )}
+
+          {/* — brouillons en cours d'écriture — */}
+          {brouillons.length > 0 && (
+            <div className="space-y-2.5 border-t border-[#E5DCC0] pt-3">
+              <p className="text-[12px] font-black uppercase tracking-wide text-[#8A6420]">Brouillons en cours d&apos;écriture ({brouillons.length})</p>
+              {brouillons.map((pv) => (
+                <div key={pv.id} className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-[13.5px] font-bold text-[#2B3530]">{pv.titre}</p>
+                    <P cls={STATUT[pv.statut].cls}>{STATUT[pv.statut].label}</P>
+                  </div>
+                  <textarea
+                    value={pv.contenu}
+                    onChange={(e) => p.onMajContenu(pv.id, e.target.value)}
+                    rows={7}
+                    aria-label={`Contenu du ${pv.titre}`}
+                    className="mt-2 w-full rounded-xl border border-[#C7A9CA] bg-white px-3 py-2.5 text-[12.5px] leading-relaxed text-[#2B3530] focus:outline-none focus:ring-2 focus:ring-[#6E4B71]/25"
+                  />
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Btn tone="violet" onClick={() => p.onFinaliser(pv.id)}><CheckCircle2 className="h-4 w-4" /> Finaliser le procès-verbal</Btn>
+                    <p className="text-[10.5px] font-semibold text-[#8A9288]">Écriture sauvegardée automatiquement au fil de la saisie.</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
-        {form ? (
-          <div className="space-y-2 border-t border-[#E5DCC0] bg-[#F7F1F8] p-4">
-            <input value={form.titre} onChange={(e) => setForm({ ...form, titre: e.target.value })} placeholder="Titre du point (ex. : Remise au bénéficiaire du mois)" aria-label="Titre du point" className="w-full rounded-lg border border-[#C7A9CA] bg-white px-3 py-2 text-[13px] placeholder:text-[#8A9288] focus:outline-none" />
-            <input value={form.detail} onChange={(e) => setForm({ ...form, detail: e.target.value })} placeholder="Détail (facultatif)" aria-label="Détail du point" className="w-full rounded-lg border border-[#C7A9CA] bg-white px-3 py-2 text-[13px] placeholder:text-[#8A9288] focus:outline-none" />
-            <input value={form.resp} onChange={(e) => setForm({ ...form, resp: e.target.value })} placeholder="Responsable (défaut : Bureau)" aria-label="Responsable du point" className="w-full rounded-lg border border-[#C7A9CA] bg-white px-3 py-2 text-[13px] placeholder:text-[#8A9288] focus:outline-none" />
-            <div className="flex gap-2">
-              <Btn tone="violet" onClick={() => { if (!form.titre.trim()) { toast.error("Le titre du point est obligatoire"); return; } p.onAjouter(form.titre.trim(), form.detail.trim(), form.resp.trim()); setForm(null); toast.success("Point ajouté à l'ordre du jour"); }}><Plus className="h-4 w-4" /> Ajouter le point</Btn>
-              <Btn tone="neutre" onClick={() => setForm(null)}>Annuler</Btn>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2 border-t border-[#E5DCC0] bg-[#FBF7EA] p-3.5 sm:flex-row">
-            <Btn tone="violet" onClick={() => setForm({ titre: "", detail: "", resp: "" })}><Plus className="h-4 w-4" /> Ajouter un point</Btn>
-            <Btn tone="or" onClick={p.onCloturer}><FileEdit className="h-4 w-4" /> Clôturer la séance → rédiger le PV</Btn>
-          </div>
-        )}
+      </Block>
+
+      {/* — SECTION 2 : ARCHIVES DES PROCÈS-VERBAUX — */}
+      <Block
+        title="Archives des procès-verbaux"
+        icon={<Archive className="h-4 w-4" />}
+        accent="#6E4B71"
+        note="PV finalisés (à lire en réunion) et PV archivés — la mémoire de la famille, consultable à jamais."
+      >
+        <div className="space-y-2.5 p-4">
+          {finalises.length === 0 && archives.length === 0 && (
+            <p className="text-[12px] font-semibold text-[#8A9288]">Aucun procès-verbal finalisé ou archivé pour le moment.</p>
+          )}
+          {[...finalises, ...archives].map((pv) => {
+            const estOuvert = ouvert === pv.id;
+            return (
+              <div key={pv.id} className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] p-3.5">
+                <button type="button" onClick={() => setOuvert(estOuvert ? null : pv.id)} aria-expanded={estOuvert}
+                  className="flex w-full flex-wrap items-center justify-between gap-2 text-left">
+                  <p className="text-[13.5px] font-bold text-[#2B3530]">{pv.titre}</p>
+                  <span className="flex items-center gap-1.5">
+                    <P cls={STATUT[pv.statut].cls}>{STATUT[pv.statut].label}</P>
+                    <ChevronDown className={`h-4 w-4 shrink-0 text-[#8A9288] transition-transform ${estOuvert ? "rotate-180" : ""}`} />
+                  </span>
+                </button>
+                {estOuvert && (
+                  <>
+                    <p className="mt-2 whitespace-pre-wrap rounded-xl border border-[#E5DCC0] bg-white px-3 py-2.5 text-[12.5px] leading-relaxed text-[#2B3530]">{pv.contenu}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {pv.statut === "finalise" && (
+                        <>
+                          <div className="flex flex-wrap gap-1.5">
+                            {p.typesArchives.map((t) => (
+                              <button key={t} type="button" onClick={() => setTypes((prev) => ({ ...prev, [pv.id]: t }))}
+                                aria-pressed={(types[pv.id] ?? p.typesArchives[0]) === t}
+                                className={`rounded-full border px-2.5 py-1 text-[10.5px] font-bold transition ${(types[pv.id] ?? p.typesArchives[0]) === t ? "border-[#6E4B71] bg-[#6E4B71] text-white" : "border-[#C7A9CA] bg-white text-[#5A3E5D] hover:border-[#6E4B71]"}`}>
+                                {t}
+                              </button>
+                            ))}
+                          </div>
+                          <BtnConfirme tone="violet" onConfirmer={() => p.onArchiver(pv.id, types[pv.id] ?? p.typesArchives[0] ?? "Procès-verbal")} labelConfirmer="Confirmer l'archive ?">
+                            <Archive className="h-4 w-4" /> Archiver ce procès-verbal
+                          </BtnConfirme>
+                        </>
+                      )}
+                      {pv.statut === "archive" && <p className="text-[10.5px] font-semibold text-[#8A9288]">Archivé le {pv.le} — type : {pv.archiveType ?? "Procès-verbal"} — consultable par toute la famille, à jamais.</p>}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </Block>
     </>
   );
@@ -936,6 +955,7 @@ function PresencesSection(p: {
   onMarquerAmende: (id: string, statut: "transmise" | "payee") => void;
   onSupprimerAmende: (id: string) => void;
   historique: HistoriquePresences; moisKey: string | null; rachatAuto: boolean;
+  jourReunion: number; moiNom: string;
 }) {
   const ETATS: { cle: PresenceEtat; label: string; cls: string }[] = [
     { cle: "present", label: "Présent", cls: OK_CLS },
@@ -944,6 +964,81 @@ function PresencesSection(p: {
     { cle: "attente", label: "Attente", cls: "bg-[#2A4A3A]/8 text-[#5C6B60] border-[#E5DCC0]" },
   ];
   const totalDues = p.amendesMois.filter((a) => a.statut === "due").reduce((s, a) => s + a.montant, 0);
+
+  /* — v39 — CONFIRMATION DE PRÉSENCE + SOMMES À COTISER (demandes de
+   *    l'administrateur) : la demande part AUTOMATIQUEMENT 4 jours avant la
+   *    réunion ; chaque membre répond (présent / excusé / absent) et annonce
+   *    ses boissons ; la liste affiche ce que chacun doit cotiser. — */
+  const [typesCotis, setTypesCotis] = useState<TypeCotisation[]>([]);
+  const [demande, setDemande] = useState<DemandePresence | null>(null);
+
+  const envoyerDemande = (auto: boolean) => {
+    if (!p.moisKey) return;
+    const [an, mi1] = p.moisKey.split("-").map(Number);
+    const mi = Math.max(0, Math.min(11, (mi1 || 1) - 1));
+    const le = `${dateCourte()} ${heure()}`;
+    const d = demanderPresences(p.moisKey, p.jourReunion, p.moiNom || "Secrétaire", auto, le);
+    setDemande(d);
+    for (const m of p.roster) {
+      pushNotif({
+        id: `dem-presence:${p.moisKey}:${m.id}`, le,
+        destinataire: m.id, destinataireNom: m.name, type: "convocation",
+        titre: `Confirmation de présence — réunion du ${p.jourReunion} ${MOIS_FR[mi]}`,
+        message: `${p.moiNom || "La secrétaire"} vous demande de confirmer votre présence pour la réunion du ${p.jourReunion} ${MOIS_FR[mi]} : je serai présent · j'aurai du retard (excuse) · je serai absent — et notez vos boissons. Répondez dans « Réunions & mon tour ».${auto ? " (envoi automatique, 4 jours avant la réunion)" : ""}`,
+      });
+    }
+    toast.success("Demande de confirmation de présence envoyée", { description: `${p.roster.length} membre(s) notifié(s)${auto ? " — envoi automatique à 4 jours de la réunion" : ""}. Les réponses et les choix de boissons apparaissent dans la liste.` });
+  };
+
+  useEffect(() => {
+    const t0 = setTimeout(() => {
+      setTypesCotis(loadTypesCotisation());
+      const d0 = p.moisKey ? chargerDemandesPresence().find((x) => x.moisKey === p.moisKey) ?? null : null;
+      setDemande(d0);
+      /* MOTEUR J-4 : « la liste des présences devrait toujours être envoyée
+       * quatre jours avant le jeudi de la réunion, de façon automatique, à
+       * tous les membres. » */
+      if (!d0 && p.moisKey && p.jourReunion > 0) {
+        const [an, mi1] = p.moisKey.split("-").map(Number);
+        const reste = joursAvantReunion(p.jourReunion, Math.max(0, Math.min(11, (mi1 || 1) - 1)), an || new Date().getFullYear());
+        if (reste >= 0 && reste <= 4) envoyerDemande(true);
+      }
+    }, 0);
+    return () => clearTimeout(t0);
+  }, [p.moisKey, p.jourReunion]);
+
+  const moisPasseKey = p.moisKey ? moisKeyPrecedent(p.moisKey) : null;
+
+  /* — v39 : RAPPORT DES PRÉSENCES AU COMMISSAIRE AUX COMPTES — « la secrétaire
+   *    envoie le rapport des présences au commissaire aux comptes et celui-ci,
+   *    selon les règlements liés aux absences, pourra envoyer des
+   *    notifications… les amendes qu'ils devront avoir. » — */
+  const envoyerRapportCommissaire = () => {
+    const commissaire = p.roster.find((m) => m.role === "commissaire");
+    const le = `${dateCourte()} ${heure()}`;
+    const absents = p.roster.filter((m) => (p.presences[m.id] ?? "attente") === "absent");
+    const dues = p.amendesMois.filter((a) => a.statut === "due");
+    const message = `Rapport des présences de ${p.mois} : ${p.nbPresent} présent(s), ${p.nbExcuse} excusé(s), ${p.nbAbsent} absent(s) — ${dues.length} amende(s) due(s) (${fcfa(totalDues)}). ${absents.length > 0 ? `Absents confirmés : ${absents.map((m) => m.name).join(", ")}.` : ""}`;
+    pushNotif({
+      id: `rapport-presence:${p.moisKey ?? "—"}`, le,
+      destinataire: commissaire?.id ?? "president", destinataireNom: commissaire?.name ?? "Président", type: "courrier",
+      titre: `Rapport des présences — ${p.mois}`,
+      message,
+    });
+    toast.success("Rapport envoyé au commissaire aux comptes", { description: `${commissaire?.name ?? "Président"} est notifié — selon le règlement, il notifie les absents des amendes à régler.` });
+  };
+
+  const corpsRapportHTML = () => {
+    const lignes = p.roster.map((m) => {
+      const etat = p.presences[m.id] ?? "attente";
+      const rep = demande?.reponses[m.id];
+      const t = typeDuMembre(m.id, typesCotis);
+      const aCotiser = t ? t.montant : TONTINE.montantCotisation;
+      const sesAmendes = p.amendesMois.filter((a) => a.membreId === m.id && a.statut === "due");
+      return `<tr><td>${m.name}</td><td>${ETATS.find((e) => e.cle === etat)?.label ?? "?"}${rep ? ` (confirmé : ${rep.etat === "present" ? "présent" : rep.etat === "excuse" ? "excusé (retard)" : "absent"})` : ""}</td><td>${fcfa(aCotiser)}</td><td>${rep?.boissons || "—"}</td><td>${sesAmendes.map((a) => `${fcfa(a.montant)} — ${MOTIFS_LABELS[a.motif]}`).join("<br />") || "—"}</td></tr>`;
+    }).join("");
+    return `<h2>Récapitulatif — ${p.mois}</h2><p class="meta">Présents ${p.nbPresent} · Excusés ${p.nbExcuse} · Absents ${p.nbAbsent} · En attente ${p.nbAttente}</p><table><tr><th>Membre</th><th>Présence</th><th>À cotiser</th><th>Boissons annoncées</th><th>Amendes dues</th></tr>${lignes}</table><p class="meta">Absences du mois passé : voir le bloc « Présence du mois passé ». Amendes applicables selon le règlement du bureau.</p>`;
+  };
   return (
     <>
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
@@ -952,11 +1047,59 @@ function PresencesSection(p: {
         <KpiCard icon={<Ban className="h-4 w-4" />} label="Absents" value={String(p.nbAbsent)} sub="moteur d'amendes actif" accent="#A5473D" />
         <KpiCard icon={<ClipboardList className="h-4 w-4" />} label="Attente" value={String(p.nbAttente)} sub="pas encore appelé(s)" accent="#6E4B71" />
       </div>
+      {/* — v39 : CONFIRMATION DE PRÉSENCE ENVOYÉE AUX MEMBRES — */}
+      <Block
+        title={`Confirmation de présence — réunion du ${p.jourReunion} du mois`}
+        icon={<Mail className="h-4 w-4" />}
+        accent="#6E4B71"
+        note="La demande part AUTOMATIQUEMENT 4 jours avant la réunion, à tous les membres : chacun confirme sa présence, propose son excuse (retard) ou manifeste son absence — et annonce ses boissons."
+      >
+        <div className="space-y-2.5 p-4">
+          {demande ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] px-3.5 py-3">
+              <div className="min-w-0">
+                <p className="text-[12.5px] font-bold text-[#2B3530]">
+                  Envoyée le {demande.envoyeeLe}{demande.auto ? " — automatique (4 jours avant la réunion)" : ""}
+                </p>
+                <p className="mt-0.5 text-[11px] font-semibold text-[#8A9288]">
+                  Réponses : {Object.values(demande.reponses).filter((r) => r.etat === "present").length} présent(s) · {Object.values(demande.reponses).filter((r) => r.etat === "excuse").length} excusé(s) · {Object.values(demande.reponses).filter((r) => r.etat === "absent").length} absent(s) — sur {p.roster.length} membres
+                </p>
+              </div>
+              <Btn small tone="teal" onClick={() => envoyerDemande(false)}><Send className="h-3.5 w-3.5" /> Renvoyer la demande</Btn>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] px-3.5 py-3">
+              <p className="text-[12.5px] font-semibold text-[#8A9288]">Pas encore envoyée — l'envoi automatique part à 4 jours de la réunion.</p>
+              <Btn small tone="teal" onClick={() => envoyerDemande(false)}><Send className="h-3.5 w-3.5" /> Envoyer la demande maintenant</Btn>
+            </div>
+          )}
+          {demande && Object.entries(demande.reponses).length > 0 && (
+            <div className="rounded-2xl border border-[#E5DCC0] bg-white px-3.5 py-3">
+              <p className="text-[11px] font-black uppercase tracking-wide text-[#8A6420]">Boissons annoncées par les membres</p>
+              <ul className="mt-1.5 space-y-1">
+                {Object.entries(demande.reponses).map(([id, r]) => {
+                  const m = p.parMembre.get(id);
+                  if (!r.boissons.trim()) return null;
+                  return (
+                    <li key={id} className="text-[12px] leading-snug text-[#2B3530]">
+                      <strong>{m?.name ?? id}</strong> — {r.boissons} <span className="text-[10px] font-bold text-[#8A9288]">({r.etat === "present" ? "présent" : r.etat === "excuse" ? "excusé" : "absent"}, le {r.le})</span>
+                    </li>
+                  );
+                })}
+                {Object.values(demande.reponses).every((r) => !r.boissons.trim()) && (
+                  <li className="text-[11.5px] text-[#8A9288]">Aucune boisson annoncée pour l'instant.</li>
+                )}
+              </ul>
+            </div>
+          )}
+        </div>
+      </Block>
+
       <Block
         title={`Liste de présence — ${p.mois}`}
         icon={<ClipboardList className="h-4 w-4" />}
         accent="#6E4B71"
-        note="Chaque clic est enregistré et applique les règles du bureau."
+        note="Chaque clic est enregistré et applique les règles du bureau. La somme à cotiser (fixée par le bureau pour chaque membre) est affichée sous chaque nom."
       >
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E5DCC0] bg-[#F7F1F8] px-4 py-2">
           <P cls={VI_CLS}><CheckCircle2 className="h-3 w-3" /> Sauvegarde automatique active</P>
@@ -966,6 +1109,9 @@ function PresencesSection(p: {
           {p.roster.map((m) => {
             const etat = p.presences[m.id] ?? "attente";
             const stats = p.moisKey ? statsPresence(p.historique, m.id, p.moisKey, p.rachatAuto) : null;
+            const tCotis = typeDuMembre(m.id, typesCotis);
+            const aCotiser = tCotis ? tCotis.montant : TONTINE.montantCotisation;
+            const rep = demande?.reponses[m.id];
             return (
               <div key={m.id} className="px-4 py-2.5">
                 <div className="flex flex-wrap items-center gap-2">
@@ -973,6 +1119,9 @@ function PresencesSection(p: {
                     {m.name}{m.id === p.moiId ? " (vous)" : ""}
                     <span className="ml-1.5 text-[10.5px] font-semibold text-[#8A9288]">{m.city}</span>
                   </span>
+                  {/* v39 — « Dans la liste des présences, on devrait voir les sommes
+                   *        que chacun doit cotiser. » */}
+                  <span className="shrink-0 rounded-full border border-[#E5DCC0] bg-[#FBF7EA] px-1.5 py-0.5 text-[10px] font-black text-[#2B2416]">À cotiser : {fcfa(aCotiser)}</span>
                   <div className="flex gap-1">
                     {ETATS.map((e) => (
                       <button
@@ -987,6 +1136,14 @@ function PresencesSection(p: {
                     ))}
                   </div>
                 </div>
+                {rep && (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    <P cls={rep.etat === "present" ? OK_CLS : rep.etat === "excuse" ? OR_CLS : RJ_CLS}>
+                      <CheckCircle2 className="h-3 w-3" /> Confirmé : {rep.etat === "present" ? "présent" : rep.etat === "excuse" ? "excusé (retard)" : "absent"} — le {rep.le}
+                    </P>
+                    {rep.boissons.trim() && <P cls={TE_CLS}>Boissons : {rep.boissons}</P>}
+                  </div>
+                )}
                 {stats && (stats.absCons > 0 || stats.abs6 > 0 || stats.rachatApplique) && (
                   <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                     {stats.absCons > 0 && <P cls={RJ_CLS}>conséc. : {stats.absCons}</P>}
@@ -1041,6 +1198,44 @@ function PresencesSection(p: {
             </div>
           </div>
         )}
+      </Block>
+
+      {/* — v39 : PRÉSENCE DU MOIS PASSÉ — « on devra avoir une nouvelle section
+       *    qui est présence du mois passé. » — */}
+      {moisPasseKey && (
+        <Block
+          title={`Présence du mois passé — ${labelMoisKey(moisPasseKey)}`}
+          icon={<CalendarClock className="h-4 w-4" />}
+          accent="#6E4B71"
+          note="Lecture seule — les absences confirmées du mois passé alimentent le moteur d'amendes et le rapport au commissaire aux comptes."
+        >
+          <div className="divide-y divide-[#E5DCC0]">
+            {p.roster.map((m) => {
+              const etatPasse = p.historique[moisPasseKey]?.[m.id] ?? "attente";
+              const e = ETATS.find((x) => x.cle === etatPasse) ?? ETATS[3];
+              return (
+                <div key={m.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2">
+                  <span className="min-w-0 truncate text-[12.5px] font-bold text-[#2B3530]">{m.name}</span>
+                  <P cls={e.cls}>{e.label}</P>
+                </div>
+              );
+            })}
+          </div>
+        </Block>
+      )}
+
+      {/* — v39 : RAPPORT DES PRÉSENCES AU COMMISSAIRE AUX COMPTES — */}
+      <Block
+        title="Rapport des présences — commissaire aux comptes"
+        icon={<Send className="h-4 w-4" />}
+        accent="#6E4B71"
+        note="Envoyez le rapport des présences au commissaire aux comptes : selon le règlement, il notifie les absents des amendes qu'ils devront régler. Le rapport est aussi téléchargeable en PDF ou Word."
+      >
+        <div className="flex flex-col gap-2 p-4 sm:flex-row sm:flex-wrap">
+          <Btn tone="teal" onClick={envoyerRapportCommissaire}><Send className="h-4 w-4" /> Envoyer le rapport au commissaire aux comptes</Btn>
+          <Btn small tone="neutre" onClick={() => telechargerPDF(`Rapport des présences — ${p.mois}`, corpsRapportHTML())}><Download className="h-3.5 w-3.5" /> PDF</Btn>
+          <Btn small tone="neutre" onClick={() => telechargerWord(`rapport-presences-${p.moisKey ?? "tontine"}`, `Rapport des présences — ${p.mois}`, corpsRapportHTML())}><Download className="h-3.5 w-3.5" /> Word</Btn>
+        </div>
       </Block>
 
       {p.notifsMois.length > 0 && (

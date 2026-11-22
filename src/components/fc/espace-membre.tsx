@@ -44,7 +44,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   Bell, CalendarCheck, CalendarClock, CalendarDays, CheckCircle2, ChevronDown, ClipboardList, Coins, Coffee,
-  Crown, FileText, Gavel, HandCoins, HandHeart, Landmark, Lock, LogOut, Mail, MapPinned, MessageSquarePlus, Mic,
+  Crown, Download, Eye, FileText, Gavel, HandCoins, HandHeart, Landmark, Lock, LogOut, Mail, MapPinned,
+  MessageCircle, MessageSquarePlus, Mic,
   Navigation, PiggyBank, ReceiptText, ScrollText, Send, Square, Trash2, TrendingUp, User, UserCheck, Users,
   Wallet, X,
 } from "lucide-react";
@@ -89,6 +90,11 @@ import { chargerRosterReel, loadMembresApplication } from "./membres-app";
 import { futursMembres } from "./premembres";
 import { loadPostes, posteDeMembre, POSTES_BUREAU, type PostesMap } from "./postes-bureau";
 import { loadTypesSolidarite, loadVisitesSolidarite, type TypeSolidarite, type VisiteSolidarite } from "./solidarite-bureau";
+import {
+  chargerPartages, commenterPartage, demandeDeMois, ecrireMessagePartage, marquerVuePartage,
+  partageMeConcerner, repondrePresence, telechargerPDF, telechargerWord,
+  type DemandePresence, type EtatReponsePresence, type PartageSeance,
+} from "./partage-bureau";
 
 /* ══════════════════════════════ identité & utilitaires ══════════════════════════════ */
 
@@ -564,7 +570,7 @@ function MembreAccueil(p: { ctx: CtxMembre; aller: (t: TabKey) => void }): React
 
 /* ══════════════════════════════ MES COTISATIONS & COLLATIONS ══════════════════════════════ */
 
-function MesCotisationsTab(p: { ctx: CtxMembre }): ReactNode {
+export function MesCotisationsTab(p: { ctx: CtxMembre }): ReactNode {
   const { moi, roster, cotisMois, majCotisMois, annee, moisCourantIdx } = p.ctx;
   const [typesCotis, setTypesCotis] = useState<TypeCotisation[]>([]);
   const [collations, setCollations] = useState<Collation[]>([]);
@@ -791,7 +797,7 @@ function MesCotisationsTab(p: { ctx: CtxMembre }): ReactNode {
 
 /* ══════════════════════════════ MES ÉPARGNES ══════════════════════════════ */
 
-function MesEpargnesTab(p: { ctx: CtxMembre }): ReactNode {
+export function MesEpargnesTab(p: { ctx: CtxMembre }): ReactNode {
   const { moi, regl, moisCourantIdx } = p.ctx;
   const [epargnes, setEpargnes] = useState<AttributionReunion[]>([]);
 
@@ -919,7 +925,7 @@ function COLLECTE_COURTE(regl: Reglement): string {
 
 /* ══════════════════════════════ MES PRÊTS & DETTES ══════════════════════════════ */
 
-function MesPretsTab(p: { ctx: CtxMembre }): ReactNode {
+export function MesPretsTab(p: { ctx: CtxMembre }): ReactNode {
   const { moi, regl, moisCourantIdx, roster, annee } = p.ctx;
   const [dossiers, setDossiers] = useState<DossierPret[]>([]);
   const [pretsReunion, setPretsReunion] = useState<AttributionReunion[]>([]);
@@ -1331,20 +1337,222 @@ function MesConvocationsTab(p: { ctx: CtxMembre }): ReactNode {
   );
 }
 
+/* ══════════════════════════════ SÉANCE PARTAGÉE & PRÉSENCE (v40) ══════════════════════════════ */
+
+/** Libellé du public destinataire d'une séance partagée. */
+const CIBLE_PARTAGE: Record<PartageSeance["cible"], string> = {
+  tous: "Toute l'association",
+  bureau: "Membres du bureau",
+  specifiques: "Personnes spécifiques",
+};
+
+/** Les trois réponses attendues par la secrétaire — libellés des boutons. */
+const CHOIX_PRESENCE: [EtatReponsePresence, string, string][] = [
+  ["present", "Je serai présent", "je confirme ma présence à la réunion"],
+  ["excuse", "J'aurai du retard (excuse)", "j'arrive après le début — je préviens"],
+  ["absent", "Je serai absent", "impossible pour moi cette fois-ci"],
+];
+
+/** Version courte d'un état de présence — pour les pastilles et notifications. */
+const ETAT_COURT: Record<EtatReponsePresence, string> = {
+  present: "présent",
+  excuse: "excusé (retard)",
+  absent: "absent",
+};
+
+/** LA SÉANCE QU'ON M'A ENVOYÉE — carte à bordure violette : ordre du jour
+ *  numéroté, téléchargement PDF/Word, commentaires et discussion privée avec
+ *  la secrétaire. Au montage, ma vue est comptée (une seule fois par partage —
+ *  garde locale), et toute écriture relit le registre via onRafraichi. */
+function CarteSeancePartagee(p: { part: PartageSeance; moi: Moi; onRafraichi: () => void }): ReactNode {
+  const { moi } = p;
+  const [txtCmt, setTxtCmt] = useState("");
+  const [txtChat, setTxtChat] = useState("");
+  const vuesMarquees = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const t0 = setTimeout(() => {
+      if (!vuesMarquees.current.has(p.part.id)) {
+        vuesMarquees.current.add(p.part.id);
+        marquerVuePartage(p.part.id, moi.id);
+        p.onRafraichi(); // le compteur de vues se met à jour (la garde évite toute boucle)
+      }
+    }, 0);
+    return () => clearTimeout(t0);
+  }, [p.part.id, moi.id, p.onRafraichi]);
+
+  const moisLabel = labelMoisKey(p.part.moisKey);
+  const titreDoc = `Séance de ${moisLabel} — le ${p.part.jourReunion} du mois`;
+  const corpsHTML = `<h2>Ordre du jour</h2><ol>${
+    p.part.points.map((pt) => `<li><strong>${pt.titre}</strong>${pt.detail ? ` — ${pt.detail}` : ""} (responsable : ${pt.responsable})</li>`).join("")
+  }</ol><p class="meta">Partagée le ${p.part.envoyeLe} par ${p.part.parNom} — réunion le ${p.part.jourReunion} du mois.</p>`;
+
+  const envoyerCommentaire = () => {
+    const texte = txtCmt.trim();
+    if (!texte) { toast.error("Écrivez votre commentaire avant d'envoyer"); return; }
+    commenterPartage(p.part.id, { auteurId: moi.id, auteurNom: moi.nom, texte, le: `${dateCourte()} ${heure()}` });
+    pushNotif({
+      id: `seance-cmt:${p.part.id}:${Date.now()}`, le: `${dateCourte()} ${heure()}`,
+      destinataire: "secretariat", destinataireNom: "Secrétariat", type: "courrier",
+      titre: `Nouveau commentaire de ${moi.nom}`,
+      message: `Séance de ${moisLabel} : « ${texte.slice(0, 90)} »`,
+    });
+    setTxtCmt("");
+    toast.success("Commentaire envoyé", { description: "Le secrétariat est prévenu." });
+    p.onRafraichi();
+  };
+
+  const envoyerMessage = () => {
+    const texte = txtChat.trim();
+    if (!texte) { toast.error("Écrivez votre message avant d'envoyer"); return; }
+    ecrireMessagePartage(p.part.id, { auteurId: moi.id, auteurNom: moi.nom, texte, le: `${dateCourte()} ${heure()}`, deSecretariat: false });
+    pushNotif({
+      id: `seance-chat:${p.part.id}:${Date.now()}`, le: `${dateCourte()} ${heure()}`,
+      destinataire: "secretariat", destinataireNom: "Secrétariat", type: "courrier",
+      titre: `Nouveau message de ${moi.nom}`,
+      message: `Séance de ${moisLabel} : « ${texte.slice(0, 90)} »`,
+    });
+    setTxtChat("");
+    toast.success("Message envoyé à la secrétaire");
+    p.onRafraichi();
+  };
+
+  return (
+    <section className="overflow-hidden rounded-3xl border border-[#E5DCC0] bg-[#FFFDF6] shadow-[0_8px_30px_rgba(42,74,58,0.10)]">
+      <div className="h-1.5 w-full bg-[#6E4B71]" aria-hidden />
+      <div className="flex items-start gap-2.5 bg-[#6E4B71]/8 px-4 py-3.5">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#6E4B71]/15 text-[#6E4B71]"><ScrollText className="h-4.5 w-4.5" /></span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#6E4B71]">Séance partagée par le secrétariat</p>
+          <p className="fc-serif text-[15.5px] font-bold text-[#2B3530]">{p.part.titre}</p>
+          <p className="mt-0.5 text-[11.5px] text-[#5C6B60]">Partagée le {p.part.envoyeLe} par {p.part.parNom} — réunion le {p.part.jourReunion} du mois.</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <P cls={VI_CLS}><Users className="h-3 w-3" /> {CIBLE_PARTAGE[p.part.cible]}</P>
+            <P cls={TE_CLS}><Eye className="h-3 w-3" /> {p.part.vues.length} vue(s)</P>
+          </div>
+        </div>
+      </div>
+
+      <div className="px-4 py-3.5">
+        {/* — l'ordre du jour, chaque point numéroté avec son responsable — */}
+        <p className="text-[11.5px] font-black uppercase tracking-wide text-[#6E4B71]">Ordre du jour — {p.part.points.length} point(s)</p>
+        <ol className="mt-2 space-y-2">
+          {p.part.points.map((pt, i) => (
+            <li key={pt.id} className="flex items-start gap-2.5 rounded-2xl border border-[#E5DCC0] bg-white px-3 py-2.5">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#6E4B71] text-[11px] font-black text-white">{i + 1}</span>
+              <span className="min-w-0">
+                <span className="block text-[12.5px] font-bold text-[#2B3530]">{pt.titre}</span>
+                {pt.detail && <span className="block text-[11.5px] leading-snug text-[#5C6B60]">{pt.detail}</span>}
+                {pt.responsable && <span className="mt-1 inline-flex"><P cls={VI_CLS}>Responsable : {pt.responsable}</P></span>}
+              </span>
+            </li>
+          ))}
+        </ol>
+
+        {/* — téléchargements : le même document que celui du secrétariat — */}
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Btn small tone="violet" onClick={() => telechargerPDF(titreDoc, corpsHTML)}>
+            <Download className="h-3.5 w-3.5" /> Télécharger en PDF
+          </Btn>
+          <Btn small tone="neutre" onClick={() => telechargerWord(`seance-${p.part.moisKey}`, titreDoc, corpsHTML)}>
+            <Download className="h-3.5 w-3.5" /> Télécharger en Word
+          </Btn>
+        </div>
+
+        {/* — mes commentaires sur la séance — */}
+        <div className="mt-4 border-t border-[#E5DCC0] pt-3.5">
+          <p className="text-[11.5px] font-black uppercase tracking-wide text-[#8A6420]">Commentaires — {p.part.commentaires.length}</p>
+          {p.part.commentaires.length > 0 && (
+            <ul className="mt-2 space-y-2">
+              {p.part.commentaires.map((c) => (
+                <li key={c.id} className="rounded-2xl border border-[#E5DCC0] bg-[#FBF7EA] px-3 py-2.5">
+                  <p className="text-[10.5px] font-black uppercase tracking-wide text-[#8A6420]">{c.auteurNom} · {c.le}</p>
+                  <p className="mt-0.5 text-[12.5px] leading-relaxed text-[#2B3530]">{c.texte}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+          <textarea
+            value={txtCmt} onChange={(e) => setTxtCmt(e.target.value)} rows={2}
+            placeholder="Écrire un commentaire sur la séance…" aria-label="Mon commentaire sur la séance"
+            className="mt-2 w-full rounded-lg border border-[#C9B98A] bg-white px-3 py-2 text-[12.5px] text-[#2B3530] outline-none placeholder:text-[#8A9288] focus:ring-2 focus:ring-[#6E4B71]/25"
+          />
+          <div className="mt-2">
+            <Btn small tone="violet" onClick={envoyerCommentaire}><Send className="h-3.5 w-3.5" /> Commenter</Btn>
+          </div>
+        </div>
+
+        {/* — discussion privée avec la secrétaire — */}
+        <div className="mt-4 border-t border-[#E5DCC0] pt-3.5">
+          <p className="flex items-center gap-1.5 text-[11.5px] font-black uppercase tracking-wide text-[#6E4B71]"><MessageCircle className="h-3.5 w-3.5" /> Discuter avec la secrétaire</p>
+          <div className="mt-2 space-y-1.5">
+            {p.part.messages.length === 0 ? (
+              <p className="text-[11.5px] italic text-[#8A9288]">Aucun message — posez votre question à la secrétaire.</p>
+            ) : (
+              p.part.messages.map((m) => (
+                <div key={m.id} className={`flex ${m.deSecretariat ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[85%] rounded-2xl px-3 py-2 ${m.deSecretariat ? "bg-[#6E4B71] text-white" : "border border-[#E5DCC0] bg-white text-[#2B3530]"}`}>
+                    <p className={`text-[10px] font-black uppercase tracking-wide ${m.deSecretariat ? "text-white/80" : "text-[#8A9288]"}`}>{m.auteurNom} · {m.le}</p>
+                    <p className="mt-0.5 text-[12.5px] leading-relaxed">{m.texte}</p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="mt-2 flex gap-2">
+            <input
+              value={txtChat} onChange={(e) => setTxtChat(e.target.value)}
+              placeholder="Votre message à la secrétaire…" aria-label="Mon message à la secrétaire"
+              className="min-w-0 flex-1 rounded-lg border border-[#C9B98A] bg-white px-3 py-2 text-[12.5px] font-semibold text-[#2B3530] outline-none placeholder:text-[#8A9288] focus:ring-2 focus:ring-[#6E4B71]/25"
+            />
+            <Btn small tone="violet" onClick={envoyerMessage}><Send className="h-3.5 w-3.5" /> Envoyer</Btn>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ══════════════════════════════ RÉUNIONS & MON TOUR ══════════════════════════════ */
 
 function ReunionsTab(p: { ctx: CtxMembre }): ReactNode {
   const { moi, roster, moisCourantIdx, annee, moisKey } = p.ctx;
   const [seances, setSeances] = useState<Seance[]>([]);
   const [presences, setPresences] = useState<HistoriquePresences>({});
+  // v40 — la séance partagée qu'on m'a envoyée, la demande de confirmation de
+  // présence du mois et les types de cotisation (« qui cotise quoi »).
+  const [partages, setPartages] = useState<PartageSeance[]>([]);
+  const [demPres, setDemPres] = useState<DemandePresence | null>(null);
+  const [typesCotis, setTypesCotis] = useState<TypeCotisation[]>([]);
+  const [formPres, setFormPres] = useState<{ etat: EtatReponsePresence; boissons: string } | null>(null);
 
   useEffect(() => {
     const t0 = setTimeout(() => {
       setSeances(loadSeances());
       setPresences(loadPresences());
+      // v40 — les séances partagées qui me concernent, les plus récentes d'abord.
+      setPartages(chargerPartages()
+        .filter((pt) => partageMeConcerner(pt, moi.id, moi.role))
+        .sort((a, b) => (a.envoyeLe < b.envoyeLe ? 1 : -1)));
+      // v40 — la demande de présence du mois ; si je n'ai pas encore répondu,
+      // le formulaire s'ouvre prêt à l'emploi (présent par défaut).
+      const dem = demandeDeMois(moisKey);
+      setDemPres(dem);
+      setFormPres(dem && !dem.reponses[moi.id] ? { etat: "present", boissons: "" } : null);
+      setTypesCotis(loadTypesCotisation());
     }, 0);
     return () => clearTimeout(t0);
   }, [p.ctx.tick]);
+
+  /** Relit les séances partagées après un commentaire, un message ou ma vue —
+   *  toujours dans un setTimeout(0), jamais au premier rendu. */
+  const rafraichirPartages = () => {
+    setTimeout(() => {
+      setPartages(chargerPartages()
+        .filter((pt) => partageMeConcerner(pt, moi.id, moi.role))
+        .sort((a, b) => (a.envoyeLe < b.envoyeLe ? 1 : -1)));
+    }, 0);
+  };
 
   const jour = secondSunday(annee, moisCourantIdx);
   const seance = seances.find((s) => s.moisKey === moisKey);
@@ -1353,6 +1561,39 @@ function ReunionsTab(p: { ctx: CtxMembre }): ReactNode {
   // mois courant (demande : « quand on clique sur « 2ᵉ dimanche du mois », il
   // devra voir la personne qui est supposée recevoir la réunion »).
   const benefMois = roster.find((m) => moisDuTour(m.tour) === MOIS_FR[moisCourantIdx]);
+  // v40 — ma cotisation du mois suit le bénéficiaire (règle v37, comme aux
+  // autres onglets : chacun verse au plus le taux du bénéficiaire du mois).
+  const tauxDe = (id: string) => typeDuMembre(id, typesCotis)?.montant ?? TONTINE.montantCotisation;
+  const maCotisDuMois = benefMois ? Math.min(tauxDe(moi.id), tauxDe(benefMois.id)) : tauxDe(moi.id);
+  // v40 — la séance partagée du mois courant, sinon la plus récente qui me concerne.
+  const partMois = partages.find((pt) => pt.moisKey === moisKey) ?? partages[0] ?? null;
+  // v40 — confirmation de présence : la demande du mois et ma réponse éventuelle.
+  const maReponsePres = demPres?.reponses[moi.id] ?? null;
+
+  /** Envoie (ou modifie) ma réponse de présence et mes boissons — la secrétaire
+   *  reçoit une notification immédiatement. */
+  const envoyerPresence = () => {
+    if (!demPres || !formPres) return;
+    const boissons = formPres.boissons.trim();
+    repondrePresence(moisKey, moi.id, { etat: formPres.etat, boissons, le: `${dateCourte()} ${heure()}` });
+    pushNotif({
+      id: `rep-presence:${moisKey}:${moi.id}`, le: `${dateCourte()} ${heure()}`,
+      destinataire: "secretariat", destinataireNom: "Secrétariat", type: "courrier",
+      titre: `Réponse de ${moi.nom} — réunion du ${demPres.jourReunion}`,
+      message: `${ETAT_COURT[formPres.etat]}${boissons ? ` — boissons : ${boissons}` : ""}`,
+    });
+    setFormPres(null);
+    setTimeout(() => setDemPres(demandeDeMois(moisKey)), 0);
+    toast.success("Votre réponse est enregistrée", { description: "Le secrétariat reçoit votre confirmation et vos boissons." });
+  };
+
+  // v40 — « qui cotise quoi » : le bénéficiaire de la réunion voit tout ; les
+  // autres membres ne voient que les personnes qui cotisent la même somme qu'eux.
+  const benefCotis = roster.find((m) => m.tour === moisCourantIdx + 1) ?? null;
+  const jeSuisBenef = benefCotis?.id === moi.id;
+  const maCotisNormale = tauxDe(moi.id);
+  const lignesCotis = (jeSuisBenef ? roster : roster.filter((m) => tauxDe(m.id) === maCotisNormale))
+    .slice().sort((a, b) => a.tour - b.tour);
 
   return (
     <>
@@ -1371,6 +1612,7 @@ function ReunionsTab(p: { ctx: CtxMembre }): ReactNode {
                   <Crown className="h-3 w-3" /> Reçoit le pot : {benefMois.name} (tour n°{benefMois.tour}){benefMois.id === moi.id ? " — MON tour" : ""}
                 </P>
               )}
+              <P cls={OR_CLS}><Wallet className="h-3 w-3" /> Ma cotisation du mois : {fcfa(maCotisDuMois)}</P>
             </div>
           </div>
         </div>
@@ -1391,6 +1633,70 @@ function ReunionsTab(p: { ctx: CtxMembre }): ReactNode {
           </div>
         )}
       </FcCard>
+
+      {/* v40 — LA SÉANCE PARTAGÉE QU'ON M'A ENVOYÉE : ordre du jour numéroté,
+       *    téléchargement PDF/Word, commentaires et discussion avec la secrétaire.
+       *    Rien ne s'affiche si aucune séance partagée ne me concerne. */}
+      {partMois && <CarteSeancePartagee part={partMois} moi={moi} onRafraichi={rafraichirPartages} />}
+
+      {/* v40 — CONFIRMATION DE PRÉSENCE + BOISSONS : la secrétaire attend ma
+       *    réponse (présent / retard excusé / absent) avant la réunion du mois.
+       *    Rien ne s'affiche si aucune demande n'a été envoyée ce mois-ci. */}
+      {demPres && (
+        <Block
+          title={formPres
+            ? `La secrétaire attend votre confirmation — réunion du ${demPres.jourReunion} ${MOIS_FR[moisCourantIdx]}`
+            : `Ma réponse — réunion du ${demPres.jourReunion} ${MOIS_FR[moisCourantIdx]}`}
+          icon={<CalendarCheck className="h-4.5 w-4.5" />} accent="#3D6B72"
+          note={demPres.auto
+            ? "La liste de présence part automatiquement quatre jours avant la réunion — chacun confirme et choisit ses boissons."
+            : `Demande envoyée le ${demPres.envoyeeLe} par ${demPres.parNom}.`}
+        >
+          <div className="space-y-3 p-4">
+            {formPres ? (
+              <>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {CHOIX_PRESENCE.map(([cle, libelle, note]) => (
+                    <button key={cle} type="button" aria-pressed={formPres.etat === cle}
+                      onClick={() => setFormPres({ ...formPres, etat: cle })}
+                      className={`rounded-2xl border-2 px-3 py-2.5 text-left transition ${formPres.etat === cle ? "border-[#3D6B72] bg-[#3D6B72]/10" : "border-[#E5DCC0] bg-white hover:border-[#3D6B72]/50"}`}>
+                      <span className="block text-[12.5px] font-bold text-[#2B3530]">{libelle}</span>
+                      <span className="block text-[10.5px] text-[#8A9288]">{note}</span>
+                    </button>
+                  ))}
+                </div>
+                <label className="block">
+                  <span className="text-[11.5px] font-black uppercase tracking-wide text-[#8A9288]">Mes boissons pour la réunion (ce que je veux consommer) — facultatif</span>
+                  <input
+                    value={formPres.boissons} onChange={(e) => setFormPres({ ...formPres, boissons: e.target.value })}
+                    placeholder="Ex. : Fanta, jus de gingembre…" aria-label="Mes boissons pour la réunion"
+                    className="mt-1.5 w-full rounded-lg border border-[#C9B98A] bg-white px-3 py-2.5 text-[13px] font-bold text-[#2B3530] outline-none placeholder:text-[#8A9288] focus:ring-2 focus:ring-[#3D6B72]/25"
+                  />
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <Btn tone="teal" onClick={envoyerPresence}><Send className="h-4 w-4" /> Envoyer ma réponse</Btn>
+                  {maReponsePres && <Btn tone="neutre" small onClick={() => setFormPres(null)}>Annuler</Btn>}
+                </div>
+              </>
+            ) : maReponsePres ? (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <P cls={maReponsePres.etat === "present" ? OK_CLS : maReponsePres.etat === "excuse" ? OR_CLS : RJ_CLS}>
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Ma réponse : {ETAT_COURT[maReponsePres.etat]} — le {maReponsePres.le}
+                  </P>
+                  {maReponsePres.boissons && <P cls={TE_CLS}><Coffee className="h-3 w-3" /> Boissons : {maReponsePres.boissons}</P>}
+                </div>
+                <p className="text-[11.5px] text-[#8A9288]">Le secrétariat a reçu votre réponse — vous pouvez la modifier jusqu'à la réunion.</p>
+                <Btn small tone="neutre" onClick={() => setFormPres({ etat: maReponsePres.etat, boissons: maReponsePres.boissons })}>
+                  <CalendarClock className="h-3.5 w-3.5" /> Modifier ma réponse
+                </Btn>
+              </>
+            ) : (
+              <p className="text-[12px] font-semibold text-[#8A9288]">Choisissez votre réponse ci-dessus — la secrétaire attend.</p>
+            )}
+          </div>
+        </Block>
+      )}
 
       <Block title="Le calendrier des tours — qui reçoit quoi" icon={<Crown className="h-4.5 w-4.5" />} accent="#8A6420"
         note="Mon tour est surligné — le mois venu, je reçois le pot.">
@@ -1420,6 +1726,50 @@ function ReunionsTab(p: { ctx: CtxMembre }): ReactNode {
             </tbody>
           </table>
         </div>
+      </Block>
+
+      {/* v40 — « QUI COTISE QUOI » CE MOIS-CI : le bénéficiaire de la réunion
+       *    voit TOUTES les personnes et TOUTES les sommes ; les autres membres
+       *    ne voient que les personnes qui cotisent la MÊME somme qu'eux. */}
+      <Block
+        title={jeSuisBenef
+          ? "Qui cotise quoi ce mois-ci — toutes les sommes"
+          : `Personnes qui cotisent comme moi — ${fcfa(maCotisNormale)}`}
+        icon={<Wallet className="h-4.5 w-4.5" />} accent="#8A6420"
+        note={jeSuisBenef
+          ? "Bénéficiaire de la réunion : je vois toutes les personnes et toutes les sommes du mois."
+          : "Seul le bénéficiaire du mois voit toutes les sommes — voici les membres qui cotisent la même somme que moi."}
+      >
+        {lignesCotis.length === 0 ? (
+          <p className="px-4 py-3 text-[12px] font-semibold text-[#8A9288]">Aucune ligne à afficher pour le moment.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[380px] border-collapse text-[12px]">
+              <thead>
+                <tr className="bg-[#8A6420] text-white">
+                  <th className="px-2.5 py-2 text-left font-black">Membre</th>
+                  <th className="px-2.5 py-2 text-left font-black">Somme à cotiser</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lignesCotis.map((m) => {
+                  const moiLigne = m.id === moi.id;
+                  const estBenef = m.id === benefCotis?.id;
+                  return (
+                    <tr key={m.id} className={`border-b border-[#E5DCC0] ${moiLigne ? "bg-[#C89F62]/20 font-bold" : "bg-[#FFFDF6]"}`}>
+                      <td className="px-2.5 py-2">
+                        {m.name}
+                        {moiLigne && <span className="ml-1.5 rounded-full bg-[#C89F62] px-1.5 py-0.5 text-[9px] font-black text-[#2B2416]">MOI</span>}
+                        {estBenef && <span className="ml-1.5 inline-flex"><P cls={OR_CLS}><Crown className="h-3 w-3" /> Bénéficiaire</P></span>}
+                      </td>
+                      <td className="px-2.5 py-2 font-black text-[#2B3530]">{fcfa(tauxDe(m.id))}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Block>
     </>
   );

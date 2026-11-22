@@ -1901,3 +1901,55 @@ Stage Summary:
 - 4. E2E (agent-browser, 390 px, DEV + PRODUCTION) : ?code=FCM-SAND2R → champ « 6 19 05 11 20 » + indicatif +237 affichés dès l'ouverture, note verte « Numéro du bureau » ; modification « 6 55 44 33 22 » → « ⚠️ Numéro modifié » ; restauration → note verte ; FCM-C7QKPT (injecté « utilisé ») → carte « a déjà servi » → « Se reconnecter avec mon numéro » → +237 6 99 87 21 56 prérempli ET vérification envoyée automatiquement ; production famille-mbeutetsa.pages.dev/?code=FCM-SAND2R → même rendu ; 0 erreur console/page.
 - DÉPLOIEMENT : Pages v39 (déploiement cadeff50) — production famille-mbeutetsa.pages.dev vérifiée (HTTP 200). .env.cloudflare recréé (workspace renouvelé entre-temps — le token cfut reste valide, compte « Famille mbeutetsa » ead74f172a86c9debb937c356976260f).
 - GIT : commit local — PUSH GitHub TOUJOURS EN ATTENTE (token GitHub perdu ; le redonner pour pousser sur georgyfr/Famille-Mbeutesta).
+
+## Task 83 — v39 : Séances façon association, présences automatiques, cotisations lisibles, pages membres de la secrétaire (déploiement 26969f21)
+
+**Date : 22 nov. 2026 — statut : déployé en production (v39)**
+
+### Fil d'Ariane (correction demandée par l'administrateur)
+- `maquette-ui.tsx` : cliquer la SECTION du fil d'Ariane (« Mémoire de la réunion »…) navigue vers la première page de la section — plus JAMAIS d'ouverture du menu hamburger (l'administrateur : « mes onglets de la réunion renvoient au menu hamburger… c'était pas pour que tu fasses n'importe quoi »). Vérifié E2E : épargnes → clic « Gestion de la tontine » → #secretaire/cotisations.
+
+### Page PV (#secretaire/pv) — 2 sections
+- « Rédiger un nouveau procès-verbal » (formulaire titre+contenu prérempli, brouillons en cours, finaliser) et « Archives des procès-verbaux » (finalisés + archivés, dépliables).
+
+### Page Séances (#secretaire/seances) — v2 complète (`secretaire-seances-v2.tsx`)
+- Créer la séance (ordre du jour habituel d'association/cantine ou vide) ; points : ajout/modification/suppression/déplacement/statut ; boutons dans l'ordre demandé : Confirmer la séance → Rédiger le PV de la séance → Ajouter un point.
+- Envoyer la séance : Toute l'association / Membres du bureau / Personnes spécifiques (recherche + multi-sélection) — chaque destinataire notifié (pushNotif `seance-partagee:*`).
+- Réactions des membres : commentaires + discussion avec la secrétaire (bulles) ; la secrétaire répond et notifie.
+- `Seance.confirmeeLe` ajouté (secretaire-bureau.ts).
+
+### Nouveau module partagé `partage-bureau.ts`
+- Séances partagées (fc_seances_partagees_v1 : vues, commentaires, chat) ; demandes de confirmation de présence (fc_demandes_presence_v1) ; moteur J-4 (joursAvantReunion) ; exports documentHTML/telechargerWord (.doc) /telechargerPDF (impression).
+
+### Page Présences (#secretaire/presences)
+- Bloc « Confirmation de présence » : envoi manuel + AUTOMATIQUE 4 jours avant la réunion (moteur au montage) ; compteur de réponses ; boissons annoncées listées.
+- Liste de présence : « À cotiser : X » par membre (types du bureau / base TONTINE) + chips réponse (présent/excusé-retard/absent + boissons).
+- Nouveau bloc « Présence du mois passé » (lecture seule) et « Rapport des présences — commissaire aux comptes » (envoi notifié + PDF/Word).
+
+### Page Cotisations (#secretaire/cotisations)
+- Fonds violacés remplacés par le crème maison (lisibilité) ; collation 2000 FCFA PAR DÉFAUT (TONTINE.montantCollation=2000, fallback attenduColl → bouton « Reçue » actif).
+- Modale « Notifier le trésorier » en 2 étapes : recherche dynamique du membre + montant → choix « Uniquement au trésorier / Au trésorier et à tout le monde / À des personnes spécifiques » (multi-sélection, radios toujours visibles) → pushNotif par destinataire.
+- Rapport de la collecte : PDF / Word / Excel + « Notifier le bénéficiaire du mois ».
+
+### Page Épargnes (#secretaire/epargnes)
+- SUPPRIMÉS : préavis de retrait, retrait maximal, type d'épargne proposé, manière de collecter les intérêts (+ imports/constantes nettoyés).
+- NOUVEAU « Calendrier des épargnes de l'année — janvier → décembre » : personnes (noms), versements, total du mois, % d'évolution, cumul, total annuel ; dépliage par mois + MODIFICATION d'une épargne (correction) et retrait confirmé.
+- Note explicite : l'attribution rejoint AUTOMATIQUEMENT le registre de la réunion.
+
+### Pages membres de la secrétaire (m-cotis / m-epargne / m-prets)
+- `espace-membre.tsx` : MesCotisationsTab / MesEpargnesTab / MesPretsTab EXPORTÉS.
+- `secretaire-membre.tsx` réécrit : rend les MÊMES onglets que les membres simples (même ctx CtxMembre, identité réelle app-<uid>, aperçu f06 sinon) + CARTE DE RÉCEPTION (mon tour → mois/date, montant à percevoir = pot + collations, activer ma géolocalisation via /api/me/location).
+
+### Côté membre (espace-membre.tsx, ReunionsTab)
+- Carte « Séance partagée » (bordure violette, ordre du jour numéroté, cible, vues) + téléchargement PDF/Word + commentaires + chat avec la secrétaire (bulles) ; vue comptée.
+- Confirmation de présence : présent / excuse (retard) / absent + champ boissons → réponse persistée + notification au secrétariat ; modification possible.
+- « Qui cotise quoi » : le bénéficiaire voit TOUTES les sommes ; les autres ne voient que les personnes cotisant comme eux ; chip « Ma cotisation du mois ».
+
+### Accessibilité (pour tous)
+- Bouton « Aa » dans la barre du haut : 3 tailles (100/115/130 %) via zoom document, mémorisé (fc_text_scale_v1).
+
+### Vérifications
+- ESLint : 0 erreur/warning sur tous les fichiers touchés ; tsc : 0 erreur sur les fichiers touchés (erreurs préexistantes ailleurs inchangées).
+- E2E navigateur (dev + production) : fil d'Ariane, PV, séance (créer/modifier/ajouter/confirmer/envoyer), modale trésorier 2 étapes (notification écrite), collation 2000 + boutons actifs, demande de présence → réponse membre → « Réponses : 1 présent(s) » + boissons, calendrier épargnes, m-cotis (tour juin, géoloc), Aa zoom 1.15.
+- `.env.cloudflare` recréé (token cfut…, compte ead74f172a86c9debb937c356976260f), chmod 600.
+- Déploiement : https://famille-mbeutetsa.pages.dev (v39, déploiement 26969f21). Commit local + push GitHub en attente.
