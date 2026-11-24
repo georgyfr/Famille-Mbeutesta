@@ -155,13 +155,13 @@ function scrubTypesCotisations(): void {
   }
 }
 
-/** Réinitialise les CODES SEMÉS de l'application (FCM-SAND2R — la secrétaire
- *  Sandrine Abessolo, v38 ; FCM-A3V29V — le président Albert Fotsos ;
+/** Réinitialise les CODES SEMÉS de l'application (FCM-JS2ALE — la secrétaire
+ *  Josiale, v41 ; FCM-A3V29V — le président Albert Fotsos ;
  *  FCM-C7QKPT — le Coach, v34-quinquies) : si une machine avait marqué l'un
  *  d'eux « utilisé » lors d'un essai, la purge efface la trace locale — les
  *  codes redeviennent VIERGES et utilisables sur tous les appareils
- *  (chargerCodes() retombe sur la version semée dans l'app ; l'ancien
- *  FCM-K7M2PV et l'ancien FCM-PL82US sont écartés à la lecture par
+ *  (chargerCodes() retombe sur la version semée dans l'app ; les anciens
+ *  FCM-K7M2PV, FCM-SAND2R et FCM-PL82US sont écartés à la lecture par
  *  chargerCodes). */
 function scrubCodeSeed(): void {
   try {
@@ -173,6 +173,7 @@ function scrubCodeSeed(): void {
       (c) =>
         c?.id !== "cm-seed-premier" &&
         c?.id !== "cm-seed-secretaire" &&
+        c?.id !== "cm-seed-josiale" &&
         c?.id !== "cm-seed-president" &&
         c?.id !== "cm-seed-coach",
     );
@@ -212,7 +213,7 @@ export function purgerAppUneFois(): void {
     scrubListe("fc_prets_demandes_v1");
     scrubObjet("fc_secretaire_cotis_mois_v1");
     scrubTypesCotisations();
-    scrubCodeSeed(); // FCM-SAND2R redevient vierge (secrétaire Sandrine Abessolo)
+    scrubCodeSeed(); // FCM-JS2ALE redevient vierge (secrétaire Josiale)
     // 5. Drapeau de session : CETTE page ne doit restaurer aucun snapshot.
     try {
       window.sessionStorage.setItem(DRAPEAU_PURGE, new Date().toISOString());

@@ -196,8 +196,9 @@ export function remapperAllocationsApresActivation(code: CodeMembre, idUid: stri
  *  compte ont bien été remappées — filet de sécurité si l'activation avait été
  *  interrompue. Sans effet si tout était déjà en place.
  *  v38 — la cible est le code SEMÉ de la SECRÉTAIRE du bureau (quelle que soit
- *  sa génération : FCM-K7M2PV hier, FCM-SAND2R — Sandrine Abessolo —
- *  aujourd'hui) : la recherche se fait par POSTE, plus par identifiant. */
+ *  sa génération : FCM-K7M2PV, FCM-SAND2R — Sandrine Abessolo, puis
+ *  FCM-JS2ALE — Josiale — aujourd'hui) : la recherche se fait par POSTE,
+ *  plus par identifiant. */
 export function assuranceRemappage(): void {
   try {
     const uid = window.localStorage.getItem("fc_uid");

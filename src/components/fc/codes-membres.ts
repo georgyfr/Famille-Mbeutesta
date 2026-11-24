@@ -78,34 +78,35 @@ export function nouveauCodeMembre(): string {
   return `FCM-${corps}`;
 }
 
-/* ═══ CODE SEMÉ — LA SECRÉTAIRE DU BUREAU (v38) ═══
- * Demande de l'administrateur : « je souhaiterais que tu me proposes de
- * nouveau une clé de connexion pour la secrétaire. Génère-moi donc une
- * nouvelle clé avec un nouvel utilisateur. Elle s'appellera Sandrine
- * Abessolo avec une épargne de 50 000 francs et résidant à Yaoundé au
- * numéro +237619051120. »
- * v38 — REMPLACEMENT de l'ancien code du premier secrétaire (FCM-K7M2PV,
- * sans nom, +237 699 61 32 26) : le bureau a désigné SANDRINE ABESSOLO —
- * le code porte désormais SON identité complète :
- *   · nom : « Sandrine Abessolo » (prérempli à la page « Vos renseignements ») ;
- *   · téléphone : +237 619 05 11 20 (prérempli, vérifié et modifiable) ;
+/* ═══ CODE SEMÉ — LA SECRÉTAIRE DU BUREAU (v41) ═══
+ * Demande de l'administrateur : « Je veux que tu me génères un nouveau code.
+ * Ce que tu vas faire, c'est générer un code de secrétaire avec les noms
+ * suivants : Nom : Josiale, Ville : Yaoundé, Cotisation : 50 000 francs,
+ * Téléphone : +237699613226. »
+ * v41 — REMPLACEMENT de l'ancien code de la secrétaire (FCM-SAND2R — Sandrine
+ * Abessolo, v38 ; lui-même avait remplacé FCM-K7M2PV, +237 699 61 32 26) : le
+ * bureau a désigné JOSIALE — le code porte désormais SON identité complète :
+ *   · nom : « Josiale » (prérempli à la page « Vos renseignements ») ;
+ *   · téléphone : +237 699 61 32 26 (prérempli, vérifié et modifiable) ;
  *   · poste : Secrétaire ;  · ville : Yaoundé (tontine de Yaoundé) ;
- *   · épargne/cotisation : 50 000 FCFA/mois (type « tc-seed-50000 » créé
+ *   · cotisation : 50 000 FCFA/mois (type « tc-seed-50000 » créé
  *     automatiquement à l'activation s'il n'existe pas encore).
  * Comme tous les codes semés, il est EMBARQUÉ dans l'application : il
  * fonctionne sur N'IMPORTE QUEL appareil, N'EXPIRE JAMAIS et est
  * consommable une seule fois (ensuite reconnexion par le numéro).
+ * NOUVEL id « cm-seed-josiale » : l'ancien FCM-SAND2R (id « cm-seed-secretaire »)
+ * est écarté SILENCIEUSEMENT à la lecture par chargerCodes — il ne fonctionne
+ * plus nulle part (même mécanique que FCM-K7M2PV et FCM-PL82US).
  * AUCUNE notification ne part à la génération du code — elles ne partent
  * qu'à l'inscription (nom + confirmation du numéro) : aux AUTRES membres
- * « Sandrine Abessolo a rejoint le groupe », à ELLE « Bienvenue Sandrine
- * Abessolo » avec le lien vers la suite (géolocalisation puis sa page de
- * Secrétaire).
- * Lien cliquable : https://famille-mbeutetsa.pages.dev/?code=FCM-SAND2R */
+ * « Josiale a rejoint le groupe », à ELLE « Bienvenue Josiale » avec le lien
+ * vers la suite (géolocalisation puis sa page de Secrétaire).
+ * Lien cliquable : https://famille-mbeutetsa.pages.dev/?code=FCM-JS2ALE */
 export const CODE_SEED_SECRETAIRE: CodeMembre = {
-  id: "cm-seed-secretaire",
-  code: "FCM-SAND2R",
-  telephone: "+237619051120",
-  nomOptionnel: "Sandrine Abessolo",
+  id: "cm-seed-josiale",
+  code: "FCM-JS2ALE",
+  telephone: "+237699613226",
+  nomOptionnel: "Josiale",
   cotisationTypeId: "tc-seed-50000",
   cotisationNom: "Cotisation mensuelle — 50 000 FCFA",
   cotisationMontant: 50000,
@@ -114,7 +115,7 @@ export const CODE_SEED_SECRETAIRE: CodeMembre = {
   ville: VILLE_DEFAUT,
   creePar: "president",
   creeParNom: "Bureau de la Tontine",
-  creeLe: "2026-11-19T00:00:00.000Z",
+  creeLe: "2026-11-22T00:00:00.000Z",
   utiliseLe: null,
   utiliseNom: null,
 };
@@ -204,8 +205,8 @@ function completeVille(c: CodeMembre): CodeMembre {
 }
 
 /** Lit tous les codes : ceux générés par le bureau (stockage local) PLUS les
- *  codes semés dans l'application (v38 — la secrétaire Sandrine Abessolo ;
- *  v34 — le président Albert Fotsos ; v34-quinquies — le Coach). Le plus récent
+ *  codes semés dans l'application (v41 — la secrétaire Josiale ; v34 — le
+ *  président Albert Fotsos ; v34-quinquies — le Coach). Le plus récent
  *  d'abord ; les semés n'y figurent qu'une fois (jamais en double).
  *  v34 — RETRAIT SILENCIEUX des ANCIENTS codes semés : un appareil qui aurait
  *  stocké une version remplacée d'un seed (ex. FCM-PL82US, l'ancien code du

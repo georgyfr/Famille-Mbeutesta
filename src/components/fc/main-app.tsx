@@ -183,7 +183,9 @@ export function MainApp() {
       // prêts, géolocalisations). La maquette garde TOUS ses utilisateurs. Une
       // seule fois : ensuite le premier utilisateur réel (secrétaire — code
       // FCM-SAND2R, Sandrine Abessolo, v38) s'inscrit sur une base vide qui
-      // ne se vide plus jamais.
+      // ne se vide plus jamais. (Le code du secrétariat, lui, a changé de
+      // génération : FCM-K7M2PV, puis FCM-SAND2R — v38 — et aujourd'hui
+      // FCM-JS2ALE — Josiale, v41.)
       purgerAppUneFois();
       if (process.env.NEXT_PUBLIC_DEMO_MODE === "1") {
         try {
